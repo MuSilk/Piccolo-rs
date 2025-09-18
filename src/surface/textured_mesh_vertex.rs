@@ -1,9 +1,9 @@
 use std::hash::{Hash, Hasher};
 
-use cgmath::{vec2, vec3};
+use nalgebra_glm::{Vec2, Vec3};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{surface::VertexLayout, utils::{Vec2, Vec3}};
+use crate::{surface::VertexLayout};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -15,7 +15,11 @@ pub struct TexturedMeshVertex{
 
 impl Default for TexturedMeshVertex {
     fn default() -> Self {
-        Self { pos: vec3(0.0,0.0,0.0), color: vec3(0.0,0.0,0.0), tex_coord: vec2(0.0,0.0) }
+        Self { 
+            pos: Vec3::new(0.0,0.0,0.0), 
+            color: Vec3::new(0.0,0.0,0.0), 
+            tex_coord: Vec2::new(0.0,0.0) 
+        }
     }
 }
 

@@ -1,8 +1,9 @@
 use std::{ptr::copy_nonoverlapping as memcpy};
 use anyhow::{Result};
+use nalgebra_glm::Mat4;
 use vulkanalia::{bytecode::Bytecode, prelude::v1_0::*};
 
-use crate::{surface::VertexLayout, utils::Mat4, vulkan::{create_buffer, resource_manager::ResourceManager, Destroy, VulkanData}};
+use crate::{surface::VertexLayout, vulkan::{create_buffer, resource_manager::ResourceManager, Destroy, VulkanData}};
 
 #[derive(Clone, Debug, Default)]
 pub struct Pipeline{

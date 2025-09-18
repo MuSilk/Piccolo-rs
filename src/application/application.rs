@@ -1,17 +1,15 @@
 use anyhow::{Result};
-use winit::{application::ApplicationHandler, 
-    dpi::LogicalSize, event::WindowEvent, 
-    event_loop::ActiveEventLoop, 
-    window::{Window, WindowId}
+use winit::{application::ApplicationHandler, dpi::{LogicalSize}, event::{DeviceEvent, DeviceId, ElementState, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{CursorGrabMode, Window, WindowId}
 };
 use log::*;
 
-use crate::{ vulkan::{ VulkanContext}};
+use crate::vulkan::{VulkanContext};
 
 pub struct App {
     window: Option<Window>,
     vulkan_context: Option<VulkanContext>,
     minimized: bool,
+    mouse_visible: bool,
 }
 
 impl ApplicationHandler for App {
@@ -41,8 +39,62 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::CloseRequested => {
-                self.vulkan_context.as_mut().unwrap().destroy();
+                let vulkan_context = match self.vulkan_context.as_mut() {
+                    Some(ctx) => ctx,
+                    None => return,
+                };
+                vulkan_context.destroy();
                 event_loop.exit();
+            }
+            WindowEvent::KeyboardInput { 
+                device_id:_, event, is_synthetic:_ 
+            } => {
+                let vulkan_context = match self.vulkan_context.as_mut() {
+                    Some(ctx) => ctx,
+                    None => return,
+                };
+                let keycode = match event.physical_key {
+                    PhysicalKey::Code(keycode) => keycode,
+                    _ => return,
+                };
+                match event.state {
+                    ElementState::Pressed => {
+                        vulkan_context.handle_key_press(keycode);
+                        let window = match self.window.as_ref() {
+                            Some(window) => window,
+                            None => return,
+                        };
+
+                        if let KeyCode::Space = keycode {
+                            self.mouse_visible = !self.mouse_visible;
+                            window.set_cursor_visible(self.mouse_visible);
+                            let _ = window.set_cursor_grab(if self.mouse_visible {
+                                CursorGrabMode::None
+                            } else {
+                                CursorGrabMode::Confined
+                            });
+                        }
+                    }
+                    ElementState::Released => {
+                        vulkan_context.handle_key_release(keycode);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn device_event(&mut self,_event_loop: &ActiveEventLoop,_device_id: DeviceId,event: DeviceEvent) {
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                let vulkan_context = match self.vulkan_context.as_mut() {
+                    Some(ctx) => ctx,
+                    None => return,
+                };
+                if self.mouse_visible {
+                    return;
+                }
+                vulkan_context.handle_cursor_movement(delta.0, -delta.1);
             }
             _ => {}
         }
@@ -63,6 +115,7 @@ impl App {
             window: None,
             vulkan_context: None,
             minimized: false,
+            mouse_visible: true,
         }
     }
 

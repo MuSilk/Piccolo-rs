@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.99"
-cgmath = "0.18.0"
 log = "0.4.27"
 nalgebra-glm = "0.20.0"
 png = "0.18.0"

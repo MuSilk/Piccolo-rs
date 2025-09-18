@@ -1,3 +1,3 @@
-pub mod type_alias;
+pub mod camera;
 
-pub use type_alias::*;
+pub use camera::*;

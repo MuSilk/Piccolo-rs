@@ -1,15 +1,15 @@
-use std::{collections::{HashMap, HashSet}, ffi::CStr, os::raw::c_void, time::Instant, u64, usize};
+use std::{cell::RefCell, collections::{HashMap, HashSet}, ffi::CStr, os::raw::c_void, rc::Rc, time::Instant, u64, usize};
 
 use anyhow::{anyhow, Result};
-use cgmath::{point3, vec3, Deg};
 use log::*;
+use nalgebra_glm::{Vec3};
 use thiserror::Error;
 use vulkanalia::{
     loader::{LibloadingLoader, LIBRARY}, prelude::v1_0::*, vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension}, window as vk_window, Version
 };
-use winit::window::{Window};
+use winit::{keyboard::KeyCode, window::Window};
 
-use crate::{surface::{Mesh, MeshManager, TexturedMeshVertex}, utils::Mat4, vulkan::{create_image, create_image_view, pipeline::{PipelineManager, UniformBufferObject}, Destroy, Image, Pipeline, Texture, TextureManager, VulkanData}};
+use crate::{surface::{InstanceManager, Mesh, MeshManager, RenderInstance, TexturedMeshVertex}, utils::{Camera, CameraMovement}, vulkan::{create_image, create_image_view, pipeline::{PipelineManager, UniformBufferObject}, Destroy, Image, Pipeline, Texture, TextureManager, VulkanData}};
 
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 
@@ -25,16 +25,20 @@ const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_L
 pub struct VulkanContext {
     _entry: Entry,
     instance: Instance,
-    pub data: VulkanData,
+    data: VulkanData,
     device: Device,
     frame: usize,
     image_index: usize,
     pub resized: bool,
-    start: Instant,
 
+    last: Instant,
+
+    camera: Camera,
     texture_manager: TextureManager,
     mesh_manager: MeshManager,
     pipeline_manager: PipelineManager,
+    instance_manager: InstanceManager,
+    key_pressed: HashSet<KeyCode>,
 }
 
 impl VulkanContext {
@@ -42,27 +46,38 @@ impl VulkanContext {
     pub fn create(window: &Window) -> Result<Self> {
         let (entry, instance, mut data, device) = create_environment(window)?;
         let mut pipeline_manager = PipelineManager::new();
-        let mut pipeline = Pipeline::create_pipeline::<TexturedMeshVertex>(&device,&instance, &data)?;
+        let pipeline = Pipeline::create_pipeline::<TexturedMeshVertex>(&device,&instance, &data)?;
         
         let mut texture_manager = HashMap::new();
         let texture = Texture::new(&instance, &device, &mut data, "resources/viking_room.png")?;
         
+        pipeline.update_descriptor_sets(&device, texture.image_view, data.texture_sampler)?;
+
         let mut mesh_manager = HashMap::new();
         let mut model = Mesh::<TexturedMeshVertex>::eval_model("resources/viking_room.obj")?;
         model.build(&instance, &device, &data)?;
-        
-        pipeline.update_descriptor_sets(&device, texture.image_view, data.texture_sampler)?;
-        create_command_buffers(&device, &mut data, &mut pipeline, &model)?;
+
+        let mut instance_manager = HashMap::new();
+
+        let model = Rc::new(RefCell::new(model));
+
+        let object = RenderInstance::new(&model);
 
         texture_manager.insert("viking_room", texture);
         pipeline_manager.insert("test_pipeline", pipeline);
         mesh_manager.insert("viking_room", model);
+        instance_manager.insert("viking_room", object);
+
+        let mut camera = Camera::new(&Vec3::new(2.0, 2.0, 2.0));
+        camera.set_target(&Vec3::new(0.0, 0.0, 0.0));
 
         Ok(Self {
-            start: Instant::now(),
+            last: Instant::now(),
             _entry: entry, instance, data, device, 
             frame: 0, image_index: 0, resized: false, 
-            texture_manager, pipeline_manager, mesh_manager
+            camera: camera,
+            texture_manager, pipeline_manager, mesh_manager, instance_manager,
+            key_pressed: HashSet::new(),
         })
     }
 
@@ -71,6 +86,7 @@ impl VulkanContext {
             return Ok(());
         }
         self.update(window)?;
+        self.update_render_resources()?;
 
         let wait_semaphores = &[self.data.image_available_semaphores[self.frame]];
         let wait_stages = &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -163,52 +179,107 @@ impl VulkanContext {
         Ok(())
     }
 
-    pub fn update(&mut self, _window: &Window) -> Result<()> {
-        self.update_uniform_buffer()?;
-        Ok(())
-    }
+    fn update_render_resources(&mut self) -> Result<()>{ 
+        self.reset_command_pool()?;
 
-    fn update_uniform_buffer(&self) -> Result<()> {
-        let time = self.start.elapsed().as_secs_f32() as f32;
-
-        let model = Mat4::from_axis_angle(
-            vec3(0.0, 0.0, 1.0), 
-            Deg(90.0)*time
-        );
-
-        let view = Mat4::look_at_rh(
-            point3(2.0, 2.0, 2.0),
-            point3(0.0, 0.0, 0.0),
-            vec3(0.0, 0.0, 1.0),
-        );
-
-        let correction = Mat4::new(
-            1.0, 0.0, 0.0, 0.0,
-            0.0,-1.0, 0.0, 0.0,
-            0.0, 0.0, 0.5, 0.0,
-            0.0, 0.0, 0.5, 1.0
-        );
-
-        let proj =  correction * cgmath::perspective(
-            Deg(45.0),
-            self.data.swapchain_extent.width as f32 / self.data.swapchain_extent.height as f32,
-            0.1,
-            10.0
-        );
-
-        let ubo = UniformBufferObject { model, view, proj };
-
-        self.update_pipeline_uniform(&ubo)?;
-
-        Ok(())
-    }
-
-    pub fn update_pipeline_uniform<T>(&self, data:  *const T) -> Result<()>{
+        let instance = self.instance_manager.get("viking_room").ok_or(anyhow!("Instance not found"))?;
         let pipeline = self.pipeline_manager.get("test_pipeline").ok_or(anyhow!("Pipeline not found"))?;
-        pipeline.set_uniform(&self.device, self.image_index, data)?;
+
+        let model = instance.get_model_matrix();
+        let view = self.camera.get_view_matrix();
+        let proj = self.camera.get_projection_matrix(self.get_width(), self.get_height());
+        let ubo = UniformBufferObject { model, view, proj };
+        pipeline.set_uniform(&self.device, self.image_index, &ubo)?;
+
+        let instance = self.instance_manager.get_mut("viking_room").ok_or(anyhow!("Instance not found"))?;
+
+        let command_buffer = instance.update_command_buffer(&self.device, &self.data, pipeline, self.image_index)?;
+        self.data.secondary_command_buffers = vec![command_buffer];
+
+        self.update_command_buffer()?;
         Ok(())
     }
 
+    fn reset_command_pool(&self) -> Result<()> {
+        let command_pool = self.data.command_pools[self.image_index];
+        unsafe{self.device.reset_command_pool(command_pool, vk::CommandPoolResetFlags::empty())?;}
+        Ok(())
+    }
+
+    fn update_command_buffer(&self) -> Result<()> {
+        let image_index = self.image_index as usize;
+        let command_buffer = self.data.command_buffers[image_index];
+
+        let inheritance = vk::CommandBufferInheritanceInfo::builder();
+
+        let info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+            .inheritance_info(&inheritance);
+        unsafe {
+            self.device.begin_command_buffer(command_buffer, &info)?;
+        }
+
+        let render_area = vk::Rect2D::builder()
+            .offset(vk::Offset2D { x: 0, y: 0 })
+            .extent(self.data.swapchain_extent);
+
+        let color_clear_value = vk::ClearValue{
+            color: vk::ClearColorValue{float32 : [0.0, 0.0, 0.0, 1.0]}
+        };
+
+        let depth_clear_value = vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue {depth:1.0, stencil: 0,}
+        };
+
+        let clear_values = &[color_clear_value, depth_clear_value];
+        let info = vk::RenderPassBeginInfo::builder()
+            .render_pass(self.data.render_pass)
+            .framebuffer(self.data.framebuffers[image_index])
+            .render_area(render_area)
+            .clear_values(clear_values);
+        unsafe {
+            self.device.cmd_begin_render_pass(command_buffer, &info, vk::SubpassContents::SECONDARY_COMMAND_BUFFERS);
+            self.device.cmd_execute_commands(command_buffer, &self.data.secondary_command_buffers);
+            self.device.cmd_end_render_pass(command_buffer);
+            self.device.end_command_buffer(command_buffer)?;
+        }
+
+        Ok(())
+    }
+        
+    pub fn handle_key_press(&mut self, key: KeyCode){
+        self.key_pressed.insert(key);
+    }
+
+    pub fn handle_key_release(&mut self, key: KeyCode){
+        self.key_pressed.remove(&key);
+    }
+
+    pub fn handle_cursor_movement(&mut self, xoffset: f64, yoffset: f64){
+        self.camera.process_mouse_movement(xoffset as f32, yoffset as f32, true);
+    }
+    pub fn update(&mut self, _window: &Window) -> Result<()> {
+
+        let now = Instant::now();
+        let delta_time = now.duration_since(self.last).as_secs_f32();
+        self.last = now;
+
+        let key_mapping = [
+            (KeyCode::KeyW, CameraMovement::FORWARD),
+            (KeyCode::KeyS, CameraMovement::BACKWARD),
+            (KeyCode::KeyA, CameraMovement::LEFT),
+            (KeyCode::KeyD, CameraMovement::RIGHT),
+            (KeyCode::KeyQ, CameraMovement::DOWN),
+            (KeyCode::KeyE, CameraMovement::UP),
+        ];
+
+        for (key, movement) in &key_mapping {
+            if self.key_pressed.contains(key) {
+                self.camera.process_keyboard(movement, delta_time);
+            }
+        }
+        Ok(())
+    }
     pub fn destroy(&mut self) {
         unsafe {
             self.device.device_wait_idle().unwrap();
@@ -222,6 +293,7 @@ impl VulkanContext {
             self.data.render_finished_semaphores.iter().for_each(|s| self.device.destroy_semaphore(*s, None));
             self.data.image_available_semaphores.iter().for_each(|s| self.device.destroy_semaphore(*s, None));
             self.device.destroy_command_pool(self.data.command_pool, None);
+            self.data.command_pools.iter().for_each(|p| self.device.destroy_command_pool(*p, None));
             self.device.destroy_device(None);
             self.instance.destroy_surface_khr(self.data.surface, None);
 
@@ -249,26 +321,32 @@ impl VulkanContext {
         self.pipeline_manager.values_mut().for_each(|pipeline| {
             let _ = pipeline.recreate::<TexturedMeshVertex>(&self.device, &self.instance,&self.data);
         });
-        let mut pipeline = self.pipeline_manager.get_mut("test_pipeline").ok_or(anyhow!("Pipeline not found"))?;
-        let model = self.mesh_manager.get("viking_room").ok_or(anyhow!("Mesh not found"))?;
-        create_command_buffers(&self.device, &mut self.data, &mut pipeline, &model)?;
+        create_command_buffers(&self.device, &mut self.data)?;
         Ok(())
     }
 
-    fn destroy_swapchain(&mut self){
+    fn destroy_swapchain(&self){
         unsafe {
             self.data.color_image.destroy(&self.device);
             self.device.free_memory(self.data.color_image_memory, None);
             self.device.destroy_image_view(self.data.depth_image_view, None);
             self.device.free_memory(self.data.depth_image_memory, None);
             self.device.destroy_image(self.data.depth_image, None);
-            self.device.free_command_buffers(self.data.command_pool, &self.data.command_buffers);
             self.data.framebuffers.iter().for_each(|f| self.device.destroy_framebuffer(*f, None));
             self.device.destroy_render_pass(self.data.render_pass, None);
             self.data.swapchain_image_views.iter().for_each(|v| self.device.destroy_image_view(*v, None));
             self.device.destroy_swapchain_khr(self.data.swapchain, None);
         }
     }
+
+    fn get_width(&self) -> u32{
+        self.data.swapchain_extent.width
+    }
+
+    fn get_height(&self) -> u32{
+        self.data.swapchain_extent.height
+    }
+
 }
 
 fn create_environment(window: &Window) -> Result<(Entry,Instance,VulkanData,Device)> {
@@ -289,7 +367,8 @@ fn create_environment(window: &Window) -> Result<(Entry,Instance,VulkanData,Devi
     create_color_objects(&instance, &device, &mut data)?;
     create_depth_objects(&instance, &device, &mut data)?;
     create_framebuffers(&device, &mut data)?;
-    create_command_pool(&instance, &device, &mut data)?;
+    create_command_pools(&instance, &device, &mut data)?;
+    create_command_buffers(&device, &mut data)?;
     create_texture_sampler(&device, &mut data)?;
     create_sync_objects(&device, &mut data)?;
     Ok((entry, instance, data, device))
@@ -783,70 +862,37 @@ fn create_framebuffers(device: &Device, data: &mut VulkanData) -> Result<()> {
     Ok(())
 }
 
-fn create_command_pool(instance: &Instance, device: &Device, data: &mut VulkanData) -> Result<()> {
-    let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
-
-    let info = vk::CommandPoolCreateInfo::builder()
-        .flags(vk::CommandPoolCreateFlags::empty())
-        .queue_family_index(indices.graphics);
-
-    data.command_pool = unsafe { device.create_command_pool(&info, None)? };
-
+fn create_command_pools(instance: &Instance, device: &Device, data: &mut VulkanData) -> Result<()> {
+    data.command_pool = create_command_pool(instance, device, data)?;
+    for _ in 0..data.framebuffers.len() {
+        let command_pool = create_command_pool(instance, device, data)?;
+        data.command_pools.push(command_pool);
+    }
     Ok(())
 }
 
-fn create_command_buffers(device: &Device, data: &mut VulkanData, pipeline: &mut Pipeline, model: &Mesh<TexturedMeshVertex>) -> Result<()> {
-    let allocate_info = vk::CommandBufferAllocateInfo::builder()
-        .command_pool(data.command_pool)
-        .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(data.framebuffers.len() as u32);
+fn create_command_pool(instance: &Instance, device: &Device, data: &mut VulkanData) -> Result<vk::CommandPool> {
+    let indices = QueueFamilyIndices::get(instance, data, data.physical_device)?;
 
-    data.command_buffers = unsafe { device.allocate_command_buffers(&allocate_info)? };
-
-    for (i, command_buffer) in data.command_buffers.iter().enumerate() {
-        let inheritance = vk::CommandBufferInheritanceInfo::builder();
-
-        let info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::empty())
-            .inheritance_info(&inheritance);
-        unsafe {
-            device.begin_command_buffer(*command_buffer, &info)?;
-        }
-
-        let render_area = vk::Rect2D::builder()
-            .offset(vk::Offset2D { x: 0, y: 0 })
-            .extent(data.swapchain_extent);
-
-        let color_clear_value = vk::ClearValue{
-            color: vk::ClearColorValue{float32 : [0.0, 0.0, 0.0, 1.0]}
-        };
-
-        let depth_clear_value = vk::ClearValue {
-            depth_stencil: vk::ClearDepthStencilValue {
-                depth:1.0,
-                stencil: 0,
-            }
-        };
-
-        let clear_values = &[color_clear_value, depth_clear_value];
-        let info = vk::RenderPassBeginInfo::builder()
-            .render_pass(data.render_pass)
-            .framebuffer(data.framebuffers[i])
-            .render_area(render_area)
-            .clear_values(clear_values);
-        unsafe {
-            device.cmd_begin_render_pass(*command_buffer, &info, vk::SubpassContents::INLINE);
-            device.cmd_bind_pipeline(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-            device.cmd_bind_vertex_buffers(*command_buffer, 0, &[model.vertex_object.vertex_buffer], &[0]);
-            device.cmd_bind_index_buffer(*command_buffer, model.vertex_object.index_buffer, 0, vk::IndexType::UINT32);
-            device.cmd_bind_descriptor_sets(*command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline_layout, 0, &[pipeline.descriptor_sets[i]], &[]);
-            device.cmd_draw_indexed(*command_buffer, model.indices.len() as u32, 1, 0, 0, 0);
-            device.cmd_end_render_pass(*command_buffer);
-            device.end_command_buffer(*command_buffer)?;
-        }
-       
+    let info = vk::CommandPoolCreateInfo::builder()
+        .flags(vk::CommandPoolCreateFlags::TRANSIENT)
+        .queue_family_index(indices.graphics);
+    unsafe {
+        Ok(device.create_command_pool(&info, None)?) 
     }
+}
 
+fn create_command_buffers(device: &Device, data: &mut VulkanData) -> Result<()> {
+    let num_images = data.swapchain_images.len();
+    for image_index in 0..num_images {
+        let allocate_info = vk::CommandBufferAllocateInfo::builder()
+            .command_pool(data.command_pools[image_index])
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+
+        let command_buffer = unsafe { device.allocate_command_buffers(&allocate_info)?[0] };
+        data.command_buffers.push(command_buffer);
+    }
     Ok(())
 }
 

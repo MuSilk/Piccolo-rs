@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::{cell::RefCell, collections::HashMap, fs::File, io::BufReader, rc::Rc};
 use anyhow::{Result};
-use cgmath::{vec2, vec3};
+use nalgebra_glm::{Vec2, Vec3};
 use vulkanalia::{Instance, prelude::v1_0::*};
 
 use crate::{surface::TexturedMeshVertex, vulkan::{resource_manager::ResourceManager, Destroy, VertexObject, VulkanData}};
@@ -39,13 +39,13 @@ impl Mesh<TexturedMeshVertex> {
             let tex_coord_offset = (index * 2) as usize;
 
             let vertex = TexturedMeshVertex {
-                pos: vec3(
+                pos: Vec3::new(
                     model.mesh.positions[pos_offset],
                     model.mesh.positions[pos_offset + 1],
                     model.mesh.positions[pos_offset + 2],
                 ),
-                color: vec3(1.0, 1.0, 1.0),
-                tex_coord: vec2(
+                color: Vec3::new(1.0, 1.0, 1.0),
+                tex_coord: Vec2::new(
                     model.mesh.texcoords[tex_coord_offset],
                     1.0 - model.mesh.texcoords[tex_coord_offset + 1],
                 )
@@ -66,12 +66,13 @@ impl Mesh<TexturedMeshVertex> {
     }
 }
 
-pub type MeshManager = ResourceManager<Mesh<TexturedMeshVertex>>;
+pub type MeshManager = ResourceManager<Rc<RefCell<Mesh<TexturedMeshVertex>>>>;
 
 impl Destroy for MeshManager {
     fn destroy(&mut self, device: &Device) {
         for mesh in self.values_mut() {
-            mesh.destroy(device);
+            mesh.borrow_mut().destroy(device);
         }
+        self.clear();
     }
 }
