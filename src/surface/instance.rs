@@ -21,7 +21,7 @@ impl RenderInstance {
         Self {
             position: Vec3::new(0.0, 0.0, 0.0),
             scale: Vec3::new(1.0, 1.0, 1.0),
-            rotation: Quat::new(1.0, 0.0, 0.0, 0.0),
+            rotation: Quat::new(1.0, 0.0, 0.0, 1.0),
             mesh: Weak::from(Rc::downgrade(mesh)),
             command_buffer: vec![],
         }
