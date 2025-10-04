@@ -1,9 +1,8 @@
 use nalgebra_glm::{Quat, Vec2, Vec3, Vec4};
+use vulkanalia::{prelude::v1_0::*};
 
-use crate::runtime::function::render::{interface::rhi_struct::{RHIVertexInputAttributeDescription, RHIVertexInputBindingDescription}, render_type::{RHIFormat, RHIVertexInputRate}};
-
-const K_DEBUG_DRAW_INFINITY_LIFE_TIME: f32 = -2.0;
-const K_DEBUG_DRAW_ONE_FRAME: f32 = 0.0;
+pub const K_DEBUG_DRAW_INFINITY_LIFE_TIME: f32 = -2.0;
+pub const K_DEBUG_DRAW_ONE_FRAME: f32 = 0.0;
 
 #[derive(Clone)]
 pub enum DebugDrawTimeType {
@@ -13,7 +12,7 @@ pub enum DebugDrawTimeType {
 }
 
 #[derive(Clone)]
-enum DebugDrawPrimitiveType {
+enum _DebugDrawPrimitiveType {
     Point,
     Line,
     Triangle,
@@ -34,7 +33,7 @@ pub enum FillMode {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct DebugDrawVertex {
     pub pos: Vec3,
     pub color: Vec4,
@@ -42,37 +41,39 @@ pub struct DebugDrawVertex {
 }
 
 impl DebugDrawVertex {
-    pub fn get_binding_descriptions() -> [RHIVertexInputBindingDescription; 1] {
-        [RHIVertexInputBindingDescription {
-            binding: 0,
-            stride: std::mem::size_of::<DebugDrawVertex>() as u32,
-            input_rate: RHIVertexInputRate::VERTEX,
-        }]
+    pub const fn new(pos: Vec3, color: Vec4, texcoord: Vec2) -> Self {
+        Self { pos, color, texcoord }
     }
 
-    pub fn get_attribute_descriptions() -> [RHIVertexInputAttributeDescription; 3] {
-        [
-            RHIVertexInputAttributeDescription {
-                location: 0,
-                binding: 0,
-                format: RHIFormat::R32G32B32_SFLOAT,
-                offset: 0,
-            },
-            RHIVertexInputAttributeDescription {
-                location: 1,
-                binding: 0,
-                format: RHIFormat::R32G32B32A32_SFLOAT,
-                offset: std::mem::size_of::<Vec3>() as u32,
-            },
-            RHIVertexInputAttributeDescription {
-                location: 2,
-                binding: 0,
-                format: RHIFormat::R32G32_SFLOAT,
-                offset: (std::mem::size_of::<Vec3>() + std::mem::size_of::<Vec4>()) as u32,
-            },
-        ]
+    pub fn get_binding_descriptions() -> vk::VertexInputBindingDescription {
+        vk::VertexInputBindingDescription::builder()
+            .binding(0)
+            .stride(size_of::<DebugDrawVertex>() as u32)
+            .input_rate(vk::VertexInputRate::VERTEX)
+            .build()
     }
 
+    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
+        let pos = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(0)
+            .format(vk::Format::R32G32B32_SFLOAT)
+            .offset(0)
+            .build();
+        let color = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(1)
+            .format(vk::Format::R32G32B32A32_SFLOAT)
+            .offset(size_of::<Vec3>() as u32)
+            .build();
+        let texcoord = vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(2)
+            .format(vk::Format::R32G32_SFLOAT)
+            .offset((size_of::<Vec3>() + size_of::<Vec4>()) as u32)
+            .build();
+        [pos, color, texcoord]
+    }
 }
 
 #[derive(Clone)]

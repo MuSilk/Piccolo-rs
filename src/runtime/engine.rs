@@ -1,4 +1,6 @@
-use std::{path::Path, time::Instant};
+use std::{time::Instant};
+
+use anyhow::Result;
 
 use crate::runtime::function::global::global_context::RuntimeGlobalContext;
 
@@ -15,8 +17,8 @@ impl Default for Engine {
 }
 
 impl Engine {
-    pub fn initialize(&self, config_file_path: &Path){
-        RuntimeGlobalContext::global().start_systems(config_file_path);
+    pub fn initialize(&mut self){
+        self.tick_time_point_last = Instant::now();
     }
 
     pub fn shutdown(&self){
@@ -30,8 +32,18 @@ impl Engine {
         delta_time
     }
 
-    pub fn tick_one_frame(&mut self, delta_time: f32) -> bool {
-        let ctx = RuntimeGlobalContext::global();
-        return !ctx.m_window_system.lock().unwrap().should_close();
+    pub fn tick_one_frame(&mut self, delta_time: f32) -> Result<bool> {
+        self.renderer_tick(delta_time)?;
+        let ctx = RuntimeGlobalContext::global().borrow();
+        Ok(!ctx.m_window_system.borrow().should_close())
+    }
+}
+
+impl Engine {
+    fn renderer_tick(&mut self, delta_time: f32) -> Result<()>{
+        let ctx = RuntimeGlobalContext::global().borrow();
+        let mut render_system = ctx.m_render_system.borrow_mut();
+        render_system.tick(delta_time)?;
+        Ok(())
     }
 }

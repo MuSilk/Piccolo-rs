@@ -1,30 +1,57 @@
-use std::{path::Path, sync::{Arc, Mutex, MutexGuard, OnceLock}};
+use std::{cell::{RefCell}, path::Path, rc::Rc};
 
-use crate::runtime::function::render::{debugdraw::debug_draw_manager::DebugDrawManager, render_system::RenderSystem, window_system::WindowSystem};
+use anyhow::Result;
+use winit::event_loop::ActiveEventLoop;
+
+use crate::runtime::function::render::{debugdraw::debug_draw_manager::DebugDrawManager, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}};
 
 pub struct RuntimeGlobalContext {
-    pub m_window_system: Arc<Mutex<WindowSystem>>,
-    pub m_render_system: Arc<Mutex<RenderSystem>>,
-    pub m_debugdraw_manager: Arc<Mutex<DebugDrawManager>>,
+    pub m_window_system: Rc<RefCell<WindowSystem>>,
+    pub m_render_system: Rc<RefCell<RenderSystem>>,
+    pub m_debugdraw_manager: Rc<RefCell<DebugDrawManager>>,
 }
 
-static RUNTIME_GLOBAL_CONTEXT: OnceLock<Mutex<RuntimeGlobalContext>> = OnceLock::new();
+static mut RUNTIME_GLOBAL_CONTEXT: Option<RefCell<RuntimeGlobalContext>> = None;
+
+unsafe impl Send for RuntimeGlobalContext {}
+unsafe impl Sync for RuntimeGlobalContext {}
 
 impl RuntimeGlobalContext {
 
-    pub fn global() -> MutexGuard<'static, Self> {
-        let ctx = RUNTIME_GLOBAL_CONTEXT.get().unwrap();
-        ctx.lock().unwrap()
+    pub fn isinitialized() -> bool {
+        unsafe{
+            #[allow(static_mut_refs)]
+            RUNTIME_GLOBAL_CONTEXT.is_some()
+        }
     }
-    pub fn start_systems(&mut self, config_file_path: &Path){
-        RUNTIME_GLOBAL_CONTEXT.get_or_init(|| Mutex::new(RuntimeGlobalContext {
-            m_window_system: Arc::new(Mutex::new(WindowSystem::default())),
-            m_render_system: Arc::new(Mutex::new(RenderSystem::default())),
-            m_debugdraw_manager: Arc::new(Mutex::new(DebugDrawManager::default())),
-        }));
+
+    pub fn global() -> &'static RefCell<Self> {
+        unsafe{
+            #[allow(static_mut_refs)]
+            RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap()
+        }   
+    }
+    pub fn start_systems(event_loop: &ActiveEventLoop, _config_file_path: &Path) -> Result<()> {
+        let mut window_system = WindowSystem::default();
+        window_system.initialize(event_loop, WindowCreateInfo::default())?;
+        let create_info = RenderSystemCreateInfo {
+            window_system: &window_system
+        };
+        let render_system = RenderSystem::create(create_info)?;
+        let rhi = render_system.get_rhi();
+        let debugdraw_manager = DebugDrawManager::create(rhi)?;
+        unsafe{
+            RUNTIME_GLOBAL_CONTEXT = Some(RefCell::new(RuntimeGlobalContext {
+                m_window_system: Rc::new(RefCell::new(window_system)),
+                m_render_system: Rc::new(RefCell::new(render_system)),
+                m_debugdraw_manager: Rc::new(RefCell::new(debugdraw_manager))
+            }));
+        }
+        Ok(())
     }
 
 
-    fn shutdown_systems(&mut self){
+    pub fn shutdown_systems(&mut self){
+        self.m_render_system.borrow_mut().get_rhi().borrow_mut().destroy(); 
     }
 }

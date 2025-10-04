@@ -1,0 +1,17 @@
+use std::{cell::RefCell, rc::{Rc, Weak}};
+
+use crate::runtime::function::{global::global_context::RuntimeGlobalContext, render::interface::vulkan::vulkan_rhi::VulkanRHI};
+
+pub struct RenderPipelineCreateInfo<'a>{
+    pub rhi : &'a Rc<RefCell<VulkanRHI>>
+}
+
+pub struct RenderPipelineBase{
+    pub m_rhi : Weak<RefCell<VulkanRHI>>,
+}
+
+impl RenderPipelineBase{
+    // pub fn prepare_pass_data(&self, render_resource : &RenderResource){
+    //     RuntimeGlobalContext::global().borrow().m_debugdraw_manager.borrow_mut().prepare_pass_data(render_resource);
+    // }   
+}

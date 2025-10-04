@@ -1,13 +1,13 @@
 use std::sync::Mutex;
 
-use nalgebra_glm::{quat_to_mat4, Mat4, Quat, Vec2, Vec3, Vec4};
+use nalgebra_glm::{quat_to_mat4, Mat4, Quat, Vec3, Vec4};
 
-use crate::runtime::function::{global::global_context::RuntimeGlobalContext, render::debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::{DebugDrawBox, DebugDrawCapsule, DebugDrawCylinder, DebugDrawLine, DebugDrawPoint, DebugDrawQuad, DebugDrawSphere, DebugDrawText, DebugDrawTriangle, DebugDrawVertex, FillMode}}};
+use crate::runtime::function::render::debugdraw::debug_draw_primitive::{DebugDrawBox, DebugDrawCapsule, DebugDrawCylinder, DebugDrawLine, DebugDrawPoint, DebugDrawQuad, DebugDrawSphere, DebugDrawTriangle, DebugDrawVertex, FillMode};
 
 #[derive(Default)]
 pub struct DebugDrawGroup {
     m_mutex: Mutex<()>,
-    pub m_name: String,
+    m_name: String,
 
     m_points: Vec<DebugDrawPoint>,
     m_lines: Vec<DebugDrawLine>,
@@ -17,11 +17,15 @@ pub struct DebugDrawGroup {
     m_cylinders: Vec<DebugDrawCylinder>,
     m_spheres: Vec<DebugDrawSphere>,
     m_capsules: Vec<DebugDrawCapsule>,
-    m_texts: Vec<DebugDrawText>,
+//     m_texts: Vec<DebugDrawText>,
 }
 
 impl DebugDrawGroup {
-    pub fn initialize(&self) { }
+    pub fn create() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
 
     pub fn clear(&mut self) {
         let _guard = self.m_mutex.lock();
@@ -33,7 +37,7 @@ impl DebugDrawGroup {
         self.m_cylinders.clear();
         self.m_spheres.clear();
         self.m_capsules.clear();
-        self.m_texts.clear();
+//         self.m_texts.clear();
     }
 
     pub fn set_name(&mut self, name: &str) {
@@ -41,7 +45,7 @@ impl DebugDrawGroup {
         self.m_name = name.to_string();
     }
 
-    pub fn get_name(&self) -> &String {
+    pub fn get_name(&self) -> &str {
         let _guard = self.m_mutex.lock();
         &self.m_name
     }
@@ -214,19 +218,19 @@ impl DebugDrawGroup {
         self.m_capsules.push(debug_capsule);
     }
 
-    pub fn add_text(&mut self, content: &str, color: &Vec4, coordinate: &Vec3, size: i32, is_screen_text: bool, life_time: f32) {
-        let _guard = self.m_mutex.lock();
-        let mut text = DebugDrawText::default();
-        text.m_base.set_time(life_time);
+//     pub fn add_text(&mut self, content: &str, color: &Vec4, coordinate: &Vec3, size: i32, is_screen_text: bool, life_time: f32) {
+//         let _guard = self.m_mutex.lock();
+//         let mut text = DebugDrawText::default();
+//         text.m_base.set_time(life_time);
 
-        text.m_content = content.to_string();
-        text.m_color = *color;
-        text.m_coordinate = *coordinate;
-        text.m_size = size;
-        text.m_is_screen_text = is_screen_text;
+//         text.m_content = content.to_string();
+//         text.m_color = *color;
+//         text.m_coordinate = *coordinate;
+//         text.m_size = size;
+//         text.m_is_screen_text = is_screen_text;
 
-        self.m_texts.push(text);
-    }
+//         self.m_texts.push(text);
+//     }
 
     pub fn remove_dead_primitives(&mut self, delta_time: f32){
         self.m_points.retain_mut(|p: &mut DebugDrawPoint| {
@@ -253,9 +257,9 @@ impl DebugDrawGroup {
         self.m_capsules.retain_mut(|c: &mut DebugDrawCapsule| {
             !c.m_base.is_time_out(delta_time)
         });
-        self.m_texts.retain_mut(|t: &mut DebugDrawText| {
-            !t.m_base.is_time_out(delta_time)
-        });
+//         self.m_texts.retain_mut(|t: &mut DebugDrawText| {
+//             !t.m_base.is_time_out(delta_time)
+//         });
     }
 
     pub fn merge_from(&mut self, other: &DebugDrawGroup) {
@@ -269,7 +273,7 @@ impl DebugDrawGroup {
         self.m_cylinders.extend_from_slice(&other.m_cylinders);
         self.m_spheres.extend_from_slice(&other.m_spheres);
         self.m_capsules.extend_from_slice(&other.m_capsules);
-        self.m_texts.extend_from_slice(&other.m_texts);
+//         self.m_texts.extend_from_slice(&other.m_texts);
     }
 
     pub fn get_point_count(&self, no_depth_test: bool) -> usize {
@@ -364,65 +368,60 @@ impl DebugDrawGroup {
         }).collect()
     }
 
-    pub fn write_text_data(&self, _font: &DebugDrawFont, m_proj_view_matrix: &Mat4) -> Vec<DebugDrawVertex>{
-        let rhi = RuntimeGlobalContext::global().m_render_system.lock().unwrap().get_rhi();
-        let rhi = rhi.lock().unwrap();
-        let swap_chain_desc = rhi.get_swap_chain_info();
-        let screen_width = swap_chain_desc.viewport.width;
-        let screen_height = swap_chain_desc.viewport.height;
+//     pub fn write_text_data(&self, _font: &DebugDrawFont, m_proj_view_matrix: &Mat4, screen_width: f32, screen_height: f32) -> Vec<DebugDrawVertex>{
 
-        let mut vertices = Vec::with_capacity(self.get_text_character_count() * 6);
-        for text in &self.m_texts{
-            let absolute_w = text.m_size as f32;
-            let absolute_h = (text.m_size * 2) as f32;
-            let w = absolute_w  / (screen_width / 2.0);
-            let h = absolute_h / (screen_height / 2.0);
-            let mut coordinate = text.m_coordinate;
-            if ! text.m_is_screen_text {
-                let temp_coord = Vec4::new(coordinate.x,coordinate.y,coordinate.z,1.0);
-                let temp_coord = m_proj_view_matrix * temp_coord;
-                coordinate = Vec3::new(temp_coord.x / temp_coord.w, temp_coord.y / temp_coord.w,0.0);
-            }
-            let mut x = coordinate.x;
-            let mut y = coordinate.y;
-            for character in text.m_content.chars() {
-                if character == '\n' {
-                    y += h;
-                    x = coordinate.x;
-                }
-                else{
-                    let (x1,x2,y1,y2) = DebugDrawFont::get_character_texture_rect(character as u8);
-                    let (cx1, cx2,cy1,cy2) = (x, w+x, y, h+y);
+//         let mut vertices = Vec::with_capacity(self.get_text_character_count() * 6);
+//         for text in &self.m_texts{
+//             let absolute_w = text.m_size as f32;
+//             let absolute_h = (text.m_size * 2) as f32;
+//             let w = absolute_w  / (screen_width / 2.0);
+//             let h = absolute_h / (screen_height / 2.0);
+//             let mut coordinate = text.m_coordinate;
+//             if ! text.m_is_screen_text {
+//                 let temp_coord = Vec4::new(coordinate.x,coordinate.y,coordinate.z,1.0);
+//                 let temp_coord = m_proj_view_matrix * temp_coord;
+//                 coordinate = Vec3::new(temp_coord.x / temp_coord.w, temp_coord.y / temp_coord.w,0.0);
+//             }
+//             let mut x = coordinate.x;
+//             let mut y = coordinate.y;
+//             for character in text.m_content.chars() {
+//                 if character == '\n' {
+//                     y += h;
+//                     x = coordinate.x;
+//                 }
+//                 else{
+//                     let (x1,x2,y1,y2) = DebugDrawFont::get_character_texture_rect(character as u8);
+//                     let (cx1, cx2,cy1,cy2) = (x, w+x, y, h+y);
 
-                    let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx1, cy1, 0.0);
-                    vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x1,y1);
-                    vertices.push(vertex);
-                    let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx1, cy2, 0.0);
-                    vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x1,y2);
-                    vertices.push(vertex);
-                    let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx2, cy2, 0.0);
-                    vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x2,y2);
-                    vertices.push(vertex);
-                    let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx1, cx1, 0.0);
-                    vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x1,y1);
-                    vertices.push(vertex);
+//                     let mut vertex = DebugDrawVertex::default();
+//                     vertex.pos = Vec3::new(cx1, cy1, 0.0);
+//                     vertex.color = text.m_color;
+//                     vertex.texcoord = Vec2::new(x1,y1);
+//                     vertices.push(vertex);
+//                     let mut vertex = DebugDrawVertex::default();
+//                     vertex.pos = Vec3::new(cx1, cy2, 0.0);
+//                     vertex.color = text.m_color;
+//                     vertex.texcoord = Vec2::new(x1,y2);
+//                     vertices.push(vertex);
+//                     let mut vertex = DebugDrawVertex::default();
+//                     vertex.pos = Vec3::new(cx2, cy2, 0.0);
+//                     vertex.color = text.m_color;
+//                     vertex.texcoord = Vec2::new(x2,y2);
+//                     vertices.push(vertex);
+//                     let mut vertex = DebugDrawVertex::default();
+//                     vertex.pos = Vec3::new(cx1, cx1, 0.0);
+//                     vertex.color = text.m_color;
+//                     vertex.texcoord = Vec2::new(x1,y1);
+//                     vertices.push(vertex);
 
-                    x += w;
-                }
-            }
-        }
-        vertices
-    }
+//                     x += w;
+//                 }
+//             }
+//         }
+//         vertices
+//     }
 
-    pub fn write_unform_dynamic_data_to_cache(&self) -> Vec<(Mat4,Vec4)>{
+    pub fn write_uniform_dynamic_data_to_cache(&self) -> Vec<(Mat4,Vec4)>{
         let mut res = Vec::with_capacity(self.get_uniform_dynamic_data_count()*3);
         let no_depth_tests = [false,true];
         for i in 0..2 {
@@ -481,10 +480,10 @@ impl DebugDrawGroup {
         self.m_capsules.iter().filter(|c| c.m_base.m_no_depth_test == no_depth_test).count()
     }
 
-    pub fn get_text_character_count(&self) -> usize {
-        self.m_texts.iter().map(|t| {
-            t.m_content.chars().filter(|c| *c != '\n').count()
-        }).sum()
-    }
+//     pub fn get_text_character_count(&self) -> usize {
+//         self.m_texts.iter().map(|t| {
+//             t.m_content.chars().filter(|c| *c != '\n').count()
+//         }).sum()
+//     }
 
 }

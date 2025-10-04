@@ -1,13 +1,14 @@
-use std::{cell::RefCell, collections::VecDeque, f32::consts::TAU, ptr::copy_nonoverlapping, rc::Rc, sync::{Arc, Mutex, Weak}};
+use std::{cell::RefCell, collections::VecDeque, f32::consts::TAU, ptr::copy_nonoverlapping, rc::{Rc, Weak}};
 
 use anyhow::Result;
-use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
+use nalgebra_glm::{Mat4, Vec3, Vec4};
+use vulkanalia::{prelude::v1_0::*};
 
-use crate::runtime::function::{global::global_context::RuntimeGlobalContext, render::{debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::DebugDrawVertex}, interface::{rhi::{RHI}, rhi_struct::{RHIBuffer, RHIDescriptorBufferInfo, RHIDescriptorImageInfo, RHIDescriptorSet, RHIDescriptorSetAllocateInfo, RHIDescriptorSetLayout, RHIDescriptorSetLayoutBinding, RHIDescriptorSetLayoutCreateInfo, RHIDeviceMemory, RHIWriteDescriptorSet}}, render_type::{RHIBufferUsageFlags, RHIDefaultSamplerType, RHIDescriptorSetLayoutCreateFlags, RHIDescriptorType, RHIImageLayout, RHIMemoryMapFlags, RHIMemoryPropertyFlags, RHIShaderStageFlags}}};
+use crate::runtime::function::render::{debugdraw::debug_draw_primitive::DebugDrawVertex, interface::vulkan::vulkan_rhi::VulkanRHI};
 
 #[derive(Default)]
 struct UniformBufferObject{
-    proj_view_matrix: Mat4
+    proj_view_matrix: Mat4,
 }
 
 #[repr(align(256))]
@@ -17,37 +18,51 @@ struct UniformBufferDynamicObject{
     color: Vec4
 }
 
+#[derive(Default)]
 struct Resource{
-    buffer: Box<dyn RHIBuffer>,
-    memory: Box<dyn RHIDeviceMemory>,
+    buffer: vk::Buffer,
+    memory: vk::DeviceMemory,
 }
 
+impl Resource {
+    fn take(&mut self) -> Self {
+        let old = Resource {
+            buffer: self.buffer,
+            memory: self.memory,
+        };
+        self.buffer = vk::Buffer::null();
+        self.memory = vk::DeviceMemory::null();
+        old
+    }
+}
+
+#[derive(Default)]
 struct Descriptor{
-    layout : Box<dyn RHIDescriptorSetLayout>,
-    descriptor_set: Vec<Box<dyn RHIDescriptorSet>>,
+    layout : vk::DescriptorSetLayout,
+    descriptor_set: Vec<vk::DescriptorSet>,
 }
 
 
 #[derive(Default)]
 pub struct DebugDrawAllocator{
-    m_rhi: Weak<Mutex<Box<dyn RHI>>>,
+    m_rhi: Weak<RefCell<VulkanRHI>>,
 
-    m_descriptor: Option<Descriptor>,
+    m_descriptor: Descriptor,
 
-    m_vertex_resource: Option<Resource>,
+    m_vertex_resource: Resource,
     m_vertex_cache: Vec<DebugDrawVertex>,
 
-    m_uniform_resource: Option<Resource>,
+    m_uniform_resource: Resource,
     m_uniform_buffer_object: UniformBufferObject,
 
-    m_uniform_dynamic_resource: Option<Resource>,
+    m_uniform_dynamic_resource: Resource,
     m_uniform_buffer_dynamic_object_cache: Vec<UniformBufferDynamicObject>,
 
     m_sphere_resource: Option<Resource>,
     m_cylinder_resource: Option<Resource>,
     m_capsule_resource: Option<Resource>,
 
-    m_font: Rc<RefCell<DebugDrawFont>>,
+    // m_font: Rc<RefCell<DebugDrawFont>>,
 
     m_current_frame: u32,
     m_deffer_delete_queue: [VecDeque<Resource>;Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT],
@@ -59,11 +74,21 @@ impl DebugDrawAllocator {
 }
 
 impl DebugDrawAllocator {
-    pub fn initialize(&mut self,font: &Rc<RefCell<DebugDrawFont>>) -> Result<()>{
-        self.m_rhi = Arc::downgrade(&RuntimeGlobalContext::global().m_render_system.lock().unwrap().get_rhi());
-        self.m_font = font.clone();
-        self.setup_descriptor_set()?;
-        Ok(())
+
+    pub fn create(rhi: &Rc<RefCell<VulkanRHI>>) -> Result<Self> {
+
+        let m_rhi = Rc::downgrade(rhi);
+        let descriptor = Self::setup_descriptor_set(&rhi.borrow())?;
+
+        let mut buffer = Self {
+            m_rhi: m_rhi,
+            m_descriptor: descriptor,
+            ..Default::default()
+        };
+
+        buffer.prepare_descriptor_set()?;
+
+        Ok(buffer)
     }
 
     pub fn destroy(&mut self){
@@ -76,15 +101,12 @@ impl DebugDrawAllocator {
         self.m_current_frame = (self.m_current_frame + 1) % Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT as u32;
     }
 
-    pub fn get_vertex_buffer(&self) -> Option<&Box<dyn RHIBuffer>>{
-        if self.m_vertex_resource.is_none() {
-            return None;
-        }
-        return Some(&self.m_vertex_resource.as_ref().unwrap().buffer);
+    pub fn get_vertex_buffer(&self) -> vk::Buffer {
+        return self.m_vertex_resource.buffer;
     }
 
-    pub fn get_descriptor_set(&self) -> &Box<dyn RHIDescriptorSet>{
-        &self.m_descriptor.as_ref().unwrap().descriptor_set[self.m_rhi.upgrade().unwrap().lock().unwrap().get_current_frame_index() as usize]
+    pub fn get_descriptor_set(&self) -> &vk::DescriptorSet{
+        &self.m_descriptor.descriptor_set[self.m_rhi.upgrade().unwrap().borrow().get_current_frame_index() as usize]
     }
 
     pub fn cache_vertices(&mut self, vertices: &[DebugDrawVertex]) -> usize {
@@ -122,56 +144,59 @@ impl DebugDrawAllocator {
         let vertex_buffer_size = self.m_vertex_cache.len() * std::mem::size_of::<DebugDrawVertex>();
         if vertex_buffer_size > 0 {
             let rhi = self.m_rhi.upgrade().unwrap();
-            let (buffer,memory) = rhi.lock().unwrap().create_buffer(
+            let (buffer,memory) = rhi.borrow().create_buffer(
                 vertex_buffer_size as u64,
-                RHIBufferUsageFlags::VERTEX_BUFFER, 
-                RHIMemoryPropertyFlags::HOST_VISIBLE | RHIMemoryPropertyFlags::HOST_COHERENT,
+                vk::BufferUsageFlags::VERTEX_BUFFER, 
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            let data = rhi.lock().unwrap().map_memory(
-                &memory, 0, vertex_buffer_size as u64, RHIMemoryMapFlags::empty(),
+            let data = rhi.borrow().map_memory(
+                memory, 0, vertex_buffer_size as u64, vk::MemoryMapFlags::empty(),
             )?;
             unsafe{
-                copy_nonoverlapping(data, self.m_vertex_cache.as_mut_ptr().cast(), vertex_buffer_size);
+                copy_nonoverlapping(self.m_vertex_cache.as_mut_ptr().cast(), data, vertex_buffer_size);
             }
-            rhi.lock().unwrap().unmap_memory(&memory);
+            rhi.borrow().unmap_memory(memory);
             
-            self.m_vertex_resource = Some(Resource { buffer, memory});
+            self.m_vertex_resource = Resource { buffer, memory};
         }
         let uniform_buffer_size = std::mem::size_of::<UniformBufferObject>();
         if uniform_buffer_size > 0 {
             let rhi = self.m_rhi.upgrade().unwrap();
-            let (buffer,memory) = rhi.lock().unwrap().create_buffer(
+            let (buffer,memory) = rhi.borrow().create_buffer(
                 uniform_buffer_size as u64,
-                RHIBufferUsageFlags::UNIFORM_BUFFER, 
-                RHIMemoryPropertyFlags::HOST_VISIBLE | RHIMemoryPropertyFlags::HOST_COHERENT,
+                vk::BufferUsageFlags::UNIFORM_BUFFER, 
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            let data = rhi.lock().unwrap().map_memory(
-                &memory, 0, uniform_buffer_size as u64, RHIMemoryMapFlags::empty(),
+            let data = rhi.borrow().map_memory(
+                memory, 0, uniform_buffer_size as u64, vk::MemoryMapFlags::empty(),
             )?;
             unsafe{
-                copy_nonoverlapping(data, self.m_uniform_buffer_object.proj_view_matrix.as_mut_ptr().cast(), uniform_buffer_size);
+                copy_nonoverlapping(self.m_uniform_buffer_object.proj_view_matrix.as_mut_ptr().cast(), data, uniform_buffer_size);
             }
-            rhi.lock().unwrap().unmap_memory(&memory);
+            rhi.borrow().unmap_memory(memory);
 
-            self.m_uniform_resource = Some(Resource { buffer, memory});
+            self.m_uniform_resource = Resource { buffer, memory};
         }
         let uniform_dynamic_buffer_size = self.m_uniform_buffer_dynamic_object_cache.len() * std::mem::size_of::<UniformBufferDynamicObject>();
-        if uniform_dynamic_buffer_size > 0 {
+        {
             let rhi = self.m_rhi.upgrade().unwrap();
-            let (buffer,memory) = rhi.lock().unwrap().create_buffer(
-                uniform_dynamic_buffer_size as u64,
-                RHIBufferUsageFlags::UNIFORM_BUFFER, 
-                RHIMemoryPropertyFlags::HOST_VISIBLE | RHIMemoryPropertyFlags::HOST_COHERENT,
+            let (buffer,memory) = rhi.borrow().create_buffer(
+                (std::mem::size_of::<UniformBufferDynamicObject>() as u64).max(uniform_dynamic_buffer_size as u64),
+                vk::BufferUsageFlags::UNIFORM_BUFFER, 
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            let data = rhi.lock().unwrap().map_memory(
-                &memory, 0, uniform_buffer_size as u64, RHIMemoryMapFlags::empty(),
-            )?;
-            unsafe{
-                copy_nonoverlapping(data, self.m_uniform_buffer_dynamic_object_cache.as_mut_ptr().cast(), uniform_dynamic_buffer_size);
-            }
-            rhi.lock().unwrap().unmap_memory(&memory);
 
-            self.m_uniform_dynamic_resource = Some(Resource { buffer, memory});
+            if uniform_dynamic_buffer_size > 0 {
+                let data = rhi.borrow().map_memory(
+                    memory, 0, uniform_buffer_size as u64, vk::MemoryMapFlags::empty(),
+                )?;
+                unsafe{
+                    copy_nonoverlapping(self.m_uniform_buffer_dynamic_object_cache.as_mut_ptr().cast(), data, uniform_dynamic_buffer_size);
+                }
+                rhi.borrow().unmap_memory(memory);
+            }
+
+            self.m_uniform_dynamic_resource = Resource { buffer, memory};
         }
         self.update_descriptor_set()?;
         Ok(())
@@ -188,21 +213,21 @@ impl DebugDrawAllocator {
         std::mem::size_of::<UniformBufferObject>()
     }
 
-    pub fn get_sphere_vertex_buffer(&mut self) -> Result<&Box<dyn RHIBuffer>> {
+    pub fn get_sphere_vertex_buffer(&mut self) -> Result<vk::Buffer> {
         if self.m_sphere_resource.is_none() {
             self.load_sphere_mesh_buffer()?;
         }
-        Ok(&self.m_sphere_resource.as_ref().unwrap().buffer)
+        Ok(self.m_sphere_resource.as_ref().unwrap().buffer)
     }
 
-    pub fn get_cylinder_vertex_buffer(&mut self) -> Result<&Box<dyn RHIBuffer>> {
+    pub fn get_cylinder_vertex_buffer(&mut self) -> Result<&vk::Buffer> {
         if self.m_cylinder_resource.is_none() {
             self.load_cylinder_mesh_buffer()?;
         }
         Ok(&self.m_cylinder_resource.as_ref().unwrap().buffer)
     }
 
-    pub fn get_capsule_vertex_buffer(&mut self) -> Result<&Box<dyn RHIBuffer>> {
+    pub fn get_capsule_vertex_buffer(&mut self) -> Result<&vk::Buffer> {
         if self.m_capsule_resource.is_none() {
             self.load_capsule_mesh_buffer()?;
         }
@@ -234,148 +259,132 @@ impl DebugDrawAllocator {
     pub fn get_capsule_vertex_buffer_down_size() -> usize {
         Self::M_CIRCLE_SAMPLE_COUNT * 2 * Self::M_CIRCLE_SAMPLE_COUNT * 4
     }
+
 }
 
 impl DebugDrawAllocator {
 
     fn clear_buffer(&mut self){ 
-        if !self.m_vertex_resource.is_none() {
-            self.m_deffer_delete_queue[self.m_current_frame as usize].push_back(self.m_vertex_resource.take().unwrap());
+        if !self.m_vertex_resource.buffer.is_null() {
+            self.m_deffer_delete_queue[self.m_current_frame as usize].push_back(self.m_vertex_resource.take());
         }
-        if !self.m_uniform_resource.is_none() {
-            self.m_deffer_delete_queue[self.m_current_frame as usize].push_back(self.m_uniform_resource.take().unwrap());
+        if !self.m_uniform_resource.buffer.is_null() {
+            self.m_deffer_delete_queue[self.m_current_frame as usize].push_back(self.m_uniform_resource.take());
         }
-        if !self.m_uniform_dynamic_resource.is_none() {
-            self.m_deffer_delete_queue[self.m_current_frame as usize].push_back(self.m_uniform_dynamic_resource.take().unwrap());
+        if !self.m_uniform_dynamic_resource.buffer.is_null() {
+            self.m_deffer_delete_queue[self.m_current_frame as usize].push_back(self.m_uniform_dynamic_resource.take());
         }
     }
 
     fn flush_pending_delete(&mut self){
-        let current_frame_to_delete = ((self.m_current_frame + 1)% Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT as u32) as usize;
-        while !self.m_deffer_delete_queue.is_empty() {
-            let resource_to_delete = self.m_deffer_delete_queue[current_frame_to_delete].pop_front().unwrap();
-            self.m_rhi.upgrade().unwrap().lock().unwrap().free_memory(resource_to_delete.memory);
-            self.m_rhi.upgrade().unwrap().lock().unwrap().destroy_buffer(resource_to_delete.buffer);
+        let current_frame_to_delete = ((self.m_current_frame + 1) % Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT as u32) as usize;
+        while let Some(resource_to_delete) = self.m_deffer_delete_queue[current_frame_to_delete].pop_front() {
+            self.m_rhi.upgrade().unwrap().borrow().free_memory(resource_to_delete.memory);
+            self.m_rhi.upgrade().unwrap().borrow().destroy_buffer(resource_to_delete.buffer);
         }
     }
 
-    fn setup_descriptor_set(&mut self) -> Result<()>{
+    fn setup_descriptor_set(rhi: &VulkanRHI) -> Result<Descriptor>{
         let ubo_layout_binding = [
-            RHIDescriptorSetLayoutBinding{
-                binding: 0,
-                descriptor_type: RHIDescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                stage_flags: RHIShaderStageFlags::VERTEX.into(),
-                p_immutable_samplers: None,
-            },
-            RHIDescriptorSetLayoutBinding{
-                binding: 1,
-                descriptor_type: RHIDescriptorType::UNIFORM_BUFFER_DYNAMIC,
-                descriptor_count: 1,
-                stage_flags: RHIShaderStageFlags::VERTEX.into(),
-                p_immutable_samplers: None,
-            },
-            RHIDescriptorSetLayoutBinding{
-                binding: 2,
-                descriptor_type: RHIDescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 1,
-                stage_flags: RHIShaderStageFlags::FRAGMENT.into(),
-                p_immutable_samplers: None,
-            },
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            // vk::DescriptorSetLayoutBinding::builder()
+            //     .binding(2)
+            //     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            //     .descriptor_count(1)
+            //     .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+            //     .build(),
         ];
 
-        let create_info = RHIDescriptorSetLayoutCreateInfo{
-            flags: RHIDescriptorSetLayoutCreateFlags::empty(),
-            bindings: &ubo_layout_binding,
-        };
 
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.lock().unwrap();
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&ubo_layout_binding)
+            .build();
 
-        self.m_descriptor.as_mut().unwrap().layout = rhi.create_descriptor_set_layout(&create_info)?;
-
-        self.m_descriptor.as_mut().unwrap().descriptor_set = (0..rhi.get_max_frames_in_flight()).map(|_| {
-            let alloc_info = RHIDescriptorSetAllocateInfo {
-                descriptor_pool: rhi.get_descriptor_pool().unwrap(),
-                set_layouts: &[&self.m_descriptor.as_ref().unwrap().layout],
-            };
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        let descriptor_set = (0..VulkanRHI::get_max_frames_in_flight()).map(|_| {
+            let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&[layout])
+                .build();
             rhi.allocate_descriptor_sets(&alloc_info).unwrap()
         }).collect::<Vec<_>>().into_iter().flatten().collect::<Vec<_>>();
 
-        self.prepare_descriptor_set()?;
-
-        Ok(())
+        Ok(Descriptor { 
+            layout: layout, 
+            descriptor_set: descriptor_set 
+        })
     }
 
     fn prepare_descriptor_set(&mut self) -> Result<()> {
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let mut rhi = rhi.lock().unwrap();
-        let sampler = rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Linear)?;
-        let font = self.m_font.borrow();
-        let image_info = [
-            RHIDescriptorImageInfo{
-                image_view: font.get_image_view(),
-                sampler: sampler,
-                image_layout: RHIImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            }
-        ];
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.lock().unwrap();
-        for i in 0..rhi.get_max_frames_in_flight() {
-            let descriptor_write = RHIWriteDescriptorSet{
-                dst_set: &self.m_descriptor.as_ref().unwrap().descriptor_set[i as usize],
-                dst_binding: 2,
-                dst_array_element: 0,
-                descriptor_type: RHIDescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 1,
-                image_info: &image_info,
-                buffer_info: &[],
-                texel_buffer_view: &[],
-            };
+        // let rhi = self.m_rhi.upgrade().unwrap();
+        // let rhi = rhi.borrow();
+        // let sampler = rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Linear)?;
+        
+        // let font = self.m_font.borrow();
+        // let image_info = [
+        //     RHIDescriptorImageInfo{
+        //         image_view: font.get_image_view(),
+        //         sampler: sampler,
+        //         image_layout: RHIImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //     }
+        // ];
+        // for i in 0..rhi.get_max_frames_in_flight() {
+        //     let descriptor_write = RHIWriteDescriptorSet{
+        //         dst_set: &self.m_descriptor.as_ref().unwrap().descriptor_set[i as usize],
+        //         dst_binding: 2,
+        //         dst_array_element: 0,
+        //         descriptor_type: RHIDescriptorType::COMBINED_IMAGE_SAMPLER,
+        //         image_info: &image_info,
+        //         buffer_info: &[],
+        //         texel_buffer_view: &[],
+        //     };
 
-            rhi.update_descriptor_sets(&[descriptor_write])?;
-        }
+        //     rhi.update_descriptor_sets(&[descriptor_write])?;
+        // }
         Ok(())
     } 
 
     fn update_descriptor_set(&mut self) -> Result<()> {
         let buffer_info = [
-            RHIDescriptorBufferInfo{
-                buffer: &self.m_uniform_resource.as_ref().unwrap().buffer,
-                offset: 0,
-                range: std::mem::size_of::<UniformBufferObject>() as u64,
-            },
-            RHIDescriptorBufferInfo{
-                buffer: &self.m_uniform_dynamic_resource.as_ref().unwrap().buffer,
-                offset: 0,
-                range: std::mem::size_of::<UniformBufferDynamicObject>() as u64,
-            },
+            vk::DescriptorBufferInfo::builder()
+                .buffer(self.m_uniform_resource.buffer)
+                .offset(0)
+                .range(std::mem::size_of::<UniformBufferObject>() as u64)
+                .build(),
+            vk::DescriptorBufferInfo::builder()
+                .buffer(self.m_uniform_dynamic_resource.buffer)
+                .offset(0)
+                .range(std::mem::size_of::<UniformBufferDynamicObject>() as u64)
+                .build(),
         ];
         
         let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi  = rhi.lock().unwrap();
+        let rhi  = rhi.borrow();
 
         let descriptor_write = [
-            RHIWriteDescriptorSet{
-                dst_set: &self.m_descriptor.as_ref().unwrap().descriptor_set[rhi.get_current_frame_index() as usize],
-                dst_binding: 0,
-                dst_array_element: 0,
-                descriptor_type: RHIDescriptorType::UNIFORM_BUFFER,
-                descriptor_count: 1,
-                image_info: &[],
-                buffer_info: &buffer_info[0..1],
-                texel_buffer_view: &[],
-            },
-            RHIWriteDescriptorSet{
-                dst_set: &self.m_descriptor.as_ref().unwrap().descriptor_set[rhi.get_current_frame_index() as usize],
-                dst_binding: 1,
-                dst_array_element: 0,
-                descriptor_type: RHIDescriptorType::COMBINED_IMAGE_SAMPLER,
-                descriptor_count: 1,
-                image_info: &[],
-                buffer_info: &buffer_info[1..2],
-                texel_buffer_view: &[],
-            }
+            vk::WriteDescriptorSet::builder()
+                .dst_set(self.m_descriptor.descriptor_set[rhi.get_current_frame_index() as usize])
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&buffer_info[0..1])
+                .build(),
+            vk::WriteDescriptorSet::builder()
+                .dst_set(self.m_descriptor.descriptor_set[rhi.get_current_frame_index() as usize])
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
+                .buffer_info(&buffer_info[1..2])
+                .build(),
         ];
 
         rhi.update_descriptor_sets( &descriptor_write)?;
@@ -401,13 +410,13 @@ impl DebugDrawAllocator {
         let mut vertices = Vec::<DebugDrawVertex>::new();
         vertices.reserve(vertex_count as usize);
 
-        for i in -param-1..param+1 {
+        for i in (-param-1)..(param+1) {
             let k = (param + 1) as f32;
             let h = (TAU /4.0 * (i as f32) / k).sin();
             let h1 = (TAU /4.0 * ((i + 1) as f32) / k).sin();
             let r = (1.0 - h * h).sqrt();
             let r1 = (1.0 - h1 * h1).sqrt();
-            for j in 0..2 * param {
+            for j in 0..(2 * param) {
                 let p = Vec3::new(
                     r * (TAU / (2.0 * param as f32) * j as f32).cos() * r,
                     r * (TAU / (2.0 * param as f32) * j as f32).sin() * r,
@@ -420,17 +429,15 @@ impl DebugDrawAllocator {
                 );
                 vertices.push(DebugDrawVertex{
                     pos: p,
-                    color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 0.0),
+                    ..Default::default()
                 });
                 vertices.push(DebugDrawVertex{
                     pos: p1,
-                    color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 0.0),
+                    ..Default::default()
                 });
             }
             if i != -param - 1 {
-                for j in 0..2 * param {
+                for j in 0..(2 * param) {
                     let p = Vec3::new(
                         r * (TAU / (2.0 * param as f32) * j as f32).cos() * r,
                         r * (TAU / (2.0 * param as f32) * j as f32).sin() * r,
@@ -444,13 +451,11 @@ impl DebugDrawAllocator {
 
                     vertices.push(DebugDrawVertex {
                         pos: p,
-                        color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                        texcoord: Vec2::new(0.0, 0.0),
+                        ..Default::default()
                     });
                     vertices.push(DebugDrawVertex {
                         pos: p1,
-                        color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                        texcoord: Vec2::new(0.0, 0.0),
+                        ..Default::default()
                     });
                 }
             }
@@ -459,23 +464,22 @@ impl DebugDrawAllocator {
         let buffer_size = vertices.len() * std::mem::size_of::<DebugDrawVertex>();
 
         let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.lock().unwrap();
+        let rhi = rhi.borrow();
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64, 
-            RHIBufferUsageFlags::VERTEX_BUFFER | RHIBufferUsageFlags::TRANSFER_DST,
-            RHIMemoryPropertyFlags::DEVICE_LOCAL,
+            vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
         self.m_sphere_resource = Some(Resource{buffer, memory});
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64, 
-            RHIBufferUsageFlags::TRANSFER_SRC,
-            RHIMemoryPropertyFlags::HOST_VISIBLE | RHIMemoryPropertyFlags::HOST_COHERENT,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
-        let data = rhi.map_memory(&memory, 0, buffer_size as u64, RHIMemoryMapFlags::empty())?;
-        unsafe{copy_nonoverlapping(vertices.as_ptr(), data.cast(), buffer_size);}
-        rhi.unmap_memory(&memory);
-
-        rhi.copy_buffer(&buffer, &self.m_sphere_resource.as_ref().unwrap().buffer, 0, 0, buffer_size as u64)?;
+        let data = rhi.map_memory(memory, 0, buffer_size as u64, vk::MemoryMapFlags::empty())?;
+        unsafe{copy_nonoverlapping(vertices.as_ptr().cast(), data, buffer_size);}
+        rhi.unmap_memory(memory);
+        rhi.copy_buffer(buffer, self.m_sphere_resource.as_ref().unwrap().buffer, 0, 0, buffer_size as u64)?;
         rhi.destroy_buffer(buffer);
         rhi.free_memory(memory);
         Ok(())
@@ -512,29 +516,25 @@ impl DebugDrawAllocator {
             vertices.push(
                 DebugDrawVertex {
                     pos: p,
-                    color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 0.0),
+                    ..Default::default()
                 }
             );
             vertices.push(
                 DebugDrawVertex {
                     pos: p_,
-                    color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 0.0),
+                    ..Default::default()
                 }
             );
             vertices.push(
                 DebugDrawVertex {
                     pos: p1,
-                    color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 0.0),
+                    ..Default::default()
                 }
             );
             vertices.push(
                 DebugDrawVertex {
                     pos: p1_,
-                    color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                    texcoord: Vec2::new(0.0, 0.0),
+                    ..Default::default()
                 }
             );
         }
@@ -542,23 +542,23 @@ impl DebugDrawAllocator {
         let buffer_size = vertices.len() * std::mem::size_of::<DebugDrawVertex>();
 
         let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.lock().unwrap();
+        let rhi = rhi.borrow();
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64, 
-            RHIBufferUsageFlags::VERTEX_BUFFER | RHIBufferUsageFlags::TRANSFER_DST,
-            RHIMemoryPropertyFlags::DEVICE_LOCAL,
+            vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
         self.m_cylinder_resource = Some(Resource{buffer, memory});
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64, 
-            RHIBufferUsageFlags::TRANSFER_SRC,
-            RHIMemoryPropertyFlags::HOST_VISIBLE | RHIMemoryPropertyFlags::HOST_COHERENT,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
-        let data = rhi.map_memory(&memory, 0, buffer_size as u64, RHIMemoryMapFlags::empty())?;
-        unsafe{copy_nonoverlapping(vertices.as_ptr(), data.cast(), buffer_size);}
-        rhi.unmap_memory(&memory);
+        let data = rhi.map_memory(memory, 0, buffer_size as u64, vk::MemoryMapFlags::empty())?;
+        unsafe{copy_nonoverlapping(vertices.as_ptr().cast(), data, buffer_size);}
+        rhi.unmap_memory(memory);
 
-        rhi.copy_buffer(&buffer, &self.m_cylinder_resource.as_ref().unwrap().buffer, 0, 0, buffer_size as u64)?;
+        rhi.copy_buffer(buffer, self.m_cylinder_resource.as_ref().unwrap().buffer, 0, 0, buffer_size as u64)?;
         rhi.destroy_buffer(buffer);
         rhi.free_memory(memory);
         Ok(())
@@ -593,10 +593,10 @@ impl DebugDrawAllocator {
                     h1 + 1.0
                 );
 
-                vertices.push(DebugDrawVertex { pos: p, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-                vertices.push(DebugDrawVertex { pos: p1, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-                vertices.push(DebugDrawVertex { pos: p, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-                vertices.push(DebugDrawVertex { pos: p_, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
+                vertices.push(DebugDrawVertex { pos: p,  ..Default::default() });
+                vertices.push(DebugDrawVertex { pos: p1, ..Default::default() });
+                vertices.push(DebugDrawVertex { pos: p,  ..Default::default() });
+                vertices.push(DebugDrawVertex { pos: p_, ..Default::default() });
             }
         }
 
@@ -611,8 +611,8 @@ impl DebugDrawAllocator {
                 TAU / (2.0 * param as f32) * (j as f32).sin(),
                 -1.0
             );
-            vertices.push(DebugDrawVertex { pos: p, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-            vertices.push(DebugDrawVertex { pos: p1, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
+            vertices.push(DebugDrawVertex { pos: p, ..Default::default() });
+            vertices.push(DebugDrawVertex { pos: p1, ..Default::default() });
         }
 
         for i in (-param+1..=0).rev() {
@@ -636,33 +636,33 @@ impl DebugDrawAllocator {
                     TAU / (2.0 * param as f32) * (j as f32).sin() * r1,
                     h1 - 1.0
                 );
-                vertices.push(DebugDrawVertex { pos: p, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-                vertices.push(DebugDrawVertex { pos: p1, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-                vertices.push(DebugDrawVertex { pos: p, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
-                vertices.push(DebugDrawVertex { pos: p_, color: Vec4::new(1.0, 0.0, 0.0, 1.0), texcoord: Vec2::new(0.0, 0.0) });
+                vertices.push(DebugDrawVertex { pos: p,  ..Default::default() });
+                vertices.push(DebugDrawVertex { pos: p1, ..Default::default() });
+                vertices.push(DebugDrawVertex { pos: p,  ..Default::default() });
+                vertices.push(DebugDrawVertex { pos: p_, ..Default::default() });
             }
         }
 
         let buffer_size = vertices.len() * std::mem::size_of::<DebugDrawVertex>();
 
         let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.lock().unwrap();
+        let rhi = rhi.borrow();
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64, 
-            RHIBufferUsageFlags::VERTEX_BUFFER | RHIBufferUsageFlags::TRANSFER_DST,
-            RHIMemoryPropertyFlags::DEVICE_LOCAL,
+            vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
         self.m_capsule_resource = Some(Resource{buffer, memory});
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64, 
-            RHIBufferUsageFlags::TRANSFER_SRC,
-            RHIMemoryPropertyFlags::HOST_VISIBLE | RHIMemoryPropertyFlags::HOST_COHERENT,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
-        let data = rhi.map_memory(&memory, 0, buffer_size as u64, RHIMemoryMapFlags::empty())?;
+        let data = rhi.map_memory(memory, 0, buffer_size as u64, vk::MemoryMapFlags::empty())?;
         unsafe{copy_nonoverlapping(vertices.as_ptr(), data.cast(), buffer_size);}
-        rhi.unmap_memory(&memory);
+        rhi.unmap_memory(memory);
 
-        rhi.copy_buffer(&buffer, &self.m_capsule_resource.as_ref().unwrap().buffer, 0, 0, buffer_size as u64)?;
+        rhi.copy_buffer(buffer, self.m_capsule_resource.as_ref().unwrap().buffer, 0, 0, buffer_size as u64)?;
         rhi.destroy_buffer(buffer);
         rhi.free_memory(memory);
         Ok(())

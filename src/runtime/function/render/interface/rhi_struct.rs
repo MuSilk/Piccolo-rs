@@ -1,4 +1,4 @@
-use std::{any::Any, mem::MaybeUninit};
+use std::{any::Any};
 
 use vulkanalia::{prelude::v1_0::*};
 
@@ -107,7 +107,12 @@ impl dyn RHISampler {
         self
     }
 }
-pub trait  RHISemaphore { }
+pub trait  RHISemaphore: Any { }
+impl dyn RHISemaphore {
+    pub fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 pub trait  RHIShader: Any { }
 impl dyn RHIShader {
     pub fn as_any(&self) -> &dyn Any {
@@ -344,7 +349,6 @@ pub struct RHIWriteDescriptorSet<'a>{
     pub dst_set: &'a Box<dyn RHIDescriptorSet>,
     pub dst_binding: u32,
     pub dst_array_element: u32,
-    pub descriptor_count: u32,
     pub descriptor_type: RHIDescriptorType,
     pub image_info: &'a [RHIDescriptorImageInfo<'a>],
     pub buffer_info: &'a [RHIDescriptorBufferInfo<'a>],
@@ -418,7 +422,7 @@ pub struct RHIViewport {
     pub max_depth: f32,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct QueueFamilyIndices {
     pub graphics_family: Option<u32>,
     pub present_family: Option<u32>,
@@ -437,15 +441,15 @@ pub struct SwapChainSupportDetails {
 }
 
 pub struct RHISwapChainDesc<'a>{
-    pub extent: RHIExtent2D,
-    pub image_format: RHIFormat,
-    pub viewport: &'a RHIViewport,
-    pub scissor: &'a RHIRect2D,
-    pub image_views: &'a [Box<dyn RHIImageView>]
+    pub extent: vk::Extent2D,
+    pub image_format: vk::Format,
+    pub viewport: &'a vk::Viewport,
+    pub scissor: &'a vk::Rect2D,
+    pub image_views: &'a [vk::ImageView],
 }
 
 pub struct RHIDepthImageDesc<'a>{
-    pub image: &'a Box<dyn RHIImage>,
-    pub image_view: &'a Box<dyn RHIImageView>,
-    pub format: RHIFormat,
+    pub image: &'a vk::Image,
+    pub image_view: &'a vk::ImageView,
+    pub format: vk::Format,
 }

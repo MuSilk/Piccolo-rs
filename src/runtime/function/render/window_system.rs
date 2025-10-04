@@ -1,4 +1,4 @@
-use std::{sync::{Arc, Weak}};
+use std::rc::{Rc};
 
 use anyhow::Result;
 use winit::{dpi::LogicalSize, event_loop::{ActiveEventLoop}, window::Window};
@@ -23,7 +23,7 @@ impl Default for WindowCreateInfo{
 
 #[derive(Default)]
 pub struct WindowSystem{
-    pub window: Option<Arc<Window>>,
+    pub window: Option<Rc<Window>>,
     width: u32,
     height: u32,
 }
@@ -38,7 +38,7 @@ impl WindowSystem {
             .with_inner_size(LogicalSize::new(self.width,self.height));
 
         let window = event_loop.create_window(attr)?;
-        self.window = Some(Arc::new(window));
+        self.window = Some(Rc::new(window));
         Ok(())
     }
 
@@ -46,12 +46,13 @@ impl WindowSystem {
         self.window.as_ref().unwrap().set_title(title);
     }   
 
-    pub fn get_window(&self) -> Weak<Window> {
-        Arc::downgrade(&self.window.as_ref().unwrap())
+    pub fn get_window(&self) -> &Rc<Window> {
+        &self.window.as_ref().unwrap()
     }
 
     pub fn get_window_size(&self) -> (u32, u32) {
-        (self.width, self.height)
+        let physical_size = self.window.as_ref().unwrap().inner_size();
+        (physical_size.width, physical_size.height)
     }
     pub fn request_redraw(&self) {
         self.window.as_ref().unwrap().request_redraw();
