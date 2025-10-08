@@ -1,4 +1,6 @@
-use anyhow::{Result};
+use std::ptr::copy_nonoverlapping;
+
+use anyhow::{anyhow, Result};
 use vulkanalia::{bytecode::Bytecode, prelude::v1_0::*};
 
 use crate::runtime::function::render::interface::vulkan::vulkan_rhi::VulkanRHI;
@@ -86,356 +88,340 @@ pub fn copy_buffer(
     Ok(())
 }
 
-//     fn copy_buffer_to_image(
-//         rhi: &dyn RHI,
-//         buffer: vk::Buffer,
-//         image: vk::Image,
-//         width: u32,
-//         height: u32,
-//         layout_count: u32,
-//     ) -> Result<()> { 
-//         let vulkan_rhi = rhi.as_any().downcast_ref::<VulkanRHI>().unwrap();
-//         let command_buffer = vulkan_rhi.begin_single_time_commands()?;
-//         let vk_command_buffer = command_buffer.as_any().downcast_ref::<VulkanCommandBuffer>().unwrap().get_resource();
+fn copy_buffer_to_image(
+    rhi: &VulkanRHI,
+    buffer: vk::Buffer,
+    image: vk::Image,
+    width: u32,
+    height: u32,
+    layout_count: u32,
+) -> Result<()> { 
+    let command_buffer = rhi.begin_single_time_commands()?;
 
-//         let subresource = vk::ImageSubresourceLayers::builder()
-//             .aspect_mask(vk::ImageAspectFlags::COLOR)
-//             .mip_level(0)
-//             .base_array_layer(0)
-//             .layer_count(layout_count);
+    let subresource = vk::ImageSubresourceLayers::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .mip_level(0)
+        .base_array_layer(0)
+        .layer_count(layout_count);
 
-//         let region = vk::BufferImageCopy::builder()
-//             .buffer_offset(0)
-//             .buffer_row_length(0)
-//             .buffer_image_height(0)
-//             .image_subresource(subresource)
-//             .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-//             .image_extent(vk::Extent3D { width, height, depth: 1 });
+    let region = vk::BufferImageCopy::builder()
+        .buffer_offset(0)
+        .buffer_row_length(0)
+        .buffer_image_height(0)
+        .image_subresource(subresource)
+        .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+        .image_extent(vk::Extent3D { width, height, depth: 1 });
 
-//         let device = vulkan_rhi.m_device.as_ref().unwrap();
+    unsafe {
+        rhi.m_device.cmd_copy_buffer_to_image(
+            command_buffer,
+            buffer,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[region],
+        );
+    }
 
-//         unsafe {
-//             device.cmd_copy_buffer_to_image(
-//                 vk_command_buffer,
-//                 buffer,
-//                 image,
-//                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-//                 &[region],
-//             );
-//         }
+    rhi.end_single_time_commands(command_buffer)?;
+    Ok(())
+}
 
-//         rhi.end_single_time_commands(command_buffer)?;
-//         Ok(())
-//     }
+fn transition_image_layout(
+    rhi: &VulkanRHI,
+    image: vk::Image,
+    old_layout: vk::ImageLayout,
+    new_layout: vk::ImageLayout,
+    layer_count: u32,
+    mip_levels: u32,
+    aspect_mask_bits: vk::ImageAspectFlags,
+) -> Result<()> {
 
-//     fn transition_image_layout(
-//         rhi: &dyn RHI,
-//         image: vk::Image,
-//         old_layout: vk::ImageLayout,
-//         new_layout: vk::ImageLayout,
-//         layer_count: u32,
-//         mip_levels: u32,
-//         aspect_mask_bits: vk::ImageAspectFlags,
-//     ) -> Result<()> {
+    let (
+        src_access_mask,
+        dst_access_mask,
+        src_stage_mask,
+        dst_stage_mask,
+    ) = match (old_layout, new_layout) {
+        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
+            vk::AccessFlags::empty(),
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::TRANSFER,
+        ),
+        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+        ),
+        (vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
+            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            vk::AccessFlags::TRANSFER_READ,
+            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            vk::PipelineStageFlags::TRANSFER,
+        ),
+        (vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
+            vk::AccessFlags::TRANSFER_READ,
+            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        ),
+        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::AccessFlags::TRANSFER_READ,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::TRANSFER,
+        ),
+        _ => return Err(anyhow!("Unsupported image layout transition!")),
+    };
 
-//         let (
-//             src_access_mask,
-//             dst_access_mask,
-//             src_stage_mask,
-//             dst_stage_mask,
-//         ) = match (old_layout, new_layout) {
-//             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
-//                 vk::AccessFlags::empty(),
-//                 vk::AccessFlags::TRANSFER_WRITE,
-//                 vk::PipelineStageFlags::TOP_OF_PIPE,
-//                 vk::PipelineStageFlags::TRANSFER,
-//             ),
-//             (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
-//                 vk::AccessFlags::TRANSFER_WRITE,
-//                 vk::AccessFlags::SHADER_READ,
-//                 vk::PipelineStageFlags::TRANSFER,
-//                 vk::PipelineStageFlags::FRAGMENT_SHADER,
-//             ),
-//             (vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
-//                 vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-//                 vk::AccessFlags::TRANSFER_READ,
-//                 vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-//                 vk::PipelineStageFlags::TRANSFER,
-//             ),
-//             (vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
-//                 vk::AccessFlags::TRANSFER_READ,
-//                 vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-//                 vk::PipelineStageFlags::TRANSFER,
-//                 vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-//             ),
-//             (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
-//                 vk::AccessFlags::TRANSFER_WRITE,
-//                 vk::AccessFlags::TRANSFER_READ,
-//                 vk::PipelineStageFlags::TRANSFER,
-//                 vk::PipelineStageFlags::TRANSFER,
-//             ),
-//             _ => return Err(anyhow!("Unsupported image layout transition!")),
-//         };
+    let command_buffer = rhi.begin_single_time_commands()?;
 
-//         let vulkan_rhi = rhi.as_any().downcast_ref::<VulkanRHI>().unwrap();
-//         let command_buffer = vulkan_rhi.begin_single_time_commands()?;
-//         let vk_command_buffer = command_buffer.as_any().downcast_ref::<VulkanCommandBuffer>().unwrap().get_resource();
+    let subresource = vk::ImageSubresourceRange::builder()
+        .aspect_mask(aspect_mask_bits)
+        .base_mip_level(0)
+        .level_count(mip_levels)
+        .base_array_layer(0)
+        .layer_count(layer_count);
 
-//         let subresource = vk::ImageSubresourceRange::builder()
-//             .aspect_mask(aspect_mask_bits)
-//             .base_mip_level(0)
-//             .level_count(mip_levels)
-//             .base_array_layer(0)
-//             .layer_count(layer_count);
+    let barrier = vk::ImageMemoryBarrier::builder()
+        .old_layout(old_layout)
+        .new_layout(new_layout)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .image(image)
+        .subresource_range(subresource)
+        .src_access_mask(src_access_mask)
+        .dst_access_mask(dst_access_mask);
 
-//         let barrier = vk::ImageMemoryBarrier::builder()
-//             .old_layout(old_layout)
-//             .new_layout(new_layout)
-//             .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-//             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-//             .image(image)
-//             .subresource_range(subresource)
-//             .src_access_mask(src_access_mask)
-//             .dst_access_mask(dst_access_mask);
+    unsafe {
+        rhi.m_device.cmd_pipeline_barrier(
+            command_buffer,
+            src_stage_mask,
+            dst_stage_mask,
+            vk::DependencyFlags::empty(),
+            &[] as &[vk::MemoryBarrier],
+            &[] as &[vk::BufferMemoryBarrier],
+            &[barrier],
+        );
+    }
 
-//         let device = vulkan_rhi.m_device.as_ref().unwrap();
+    rhi.end_single_time_commands(command_buffer)?;
+    Ok(())
+}
 
-//         unsafe {
-//             device.cmd_pipeline_barrier(
-//                 vk_command_buffer,
-//                 src_stage_mask,
-//                 dst_stage_mask,
-//                 vk::DependencyFlags::empty(),
-//                 &[] as &[vk::MemoryBarrier],
-//                 &[] as &[vk::BufferMemoryBarrier],
-//                 &[barrier],
-//             );
-//         }
+fn generate_mipmaps(
+    rhi: &VulkanRHI,
+    image: vk::Image,
+    format: vk::Format,
+    width: u32,
+    height: u32,
+    layers: u32,
+    mip_levels: u32
+) -> Result<()> {
 
-//         rhi.end_single_time_commands(command_buffer)?;
-//         Ok(())
-//     }
+    unsafe {
+        if !rhi.m_instance
+            .get_physical_device_format_properties(rhi.m_data.m_physical_device, format)
+            .optimal_tiling_features
+            .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR)
+        {
+            return Err(anyhow!("Texture image format does not support linear blitting!"));
+        }
+    }
 
-//     fn generate_mipmaps(
-//         rhi: &dyn RHI,
-//         image: vk::Image,
-//         format: vk::Format,
-//         width: u32,
-//         height: u32,
-//         layers: u32,
-//         mip_levels: u32
-//     ) -> Result<()> {
+    let command_buffer = rhi.begin_single_time_commands()?;
 
-//         let vulkan_rhi = rhi.as_any().downcast_ref::<VulkanRHI>().unwrap();
+    let subresource = vk::ImageSubresourceRange::builder()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .base_array_layer(0)
+        .layer_count(layers)
+        .level_count(1);
 
-//         unsafe {
-//             if !vulkan_rhi.m_instance.as_ref().unwrap()
-//                 .get_physical_device_format_properties(vulkan_rhi.m_physical_device, format)
-//                 .optimal_tiling_features
-//                 .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR)
-//             {
-//                 return Err(anyhow!("Texture image format does not support linear blitting!"));
-//             }
-//         }
+    let mut barrier = vk::ImageMemoryBarrier::builder()
+        .image(image)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .subresource_range(subresource);
 
-//         let command_buffer = vulkan_rhi.begin_single_time_commands()?;
-//         let vk_command_buffer = command_buffer.as_any().downcast_ref::<VulkanCommandBuffer>().unwrap().get_resource();
+    let mut mip_width = width;
+    let mut mip_height = height;
 
-//         let subresource = vk::ImageSubresourceRange::builder()
-//             .aspect_mask(vk::ImageAspectFlags::COLOR)
-//             .base_array_layer(0)
-//             .layer_count(layers)
-//             .level_count(1);
+    for i in 1..mip_levels {
+        barrier.subresource_range.base_mip_level = i-1;
+        barrier.old_layout=vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+        barrier.new_layout=vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        barrier.src_access_mask=vk::AccessFlags::TRANSFER_WRITE;
+        barrier.dst_access_mask=vk::AccessFlags::TRANSFER_READ;
+        unsafe {
+            rhi.m_device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[] as &[vk::MemoryBarrier],
+                &[] as &[vk::BufferMemoryBarrier],
+                &[barrier],
+            );
+        }
 
-//         let mut barrier = vk::ImageMemoryBarrier::builder()
-//             .image(image)
-//             .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-//             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-//             .subresource_range(subresource);
+        let src_subresource = vk::ImageSubresourceLayers::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .mip_level(i-1)
+            .base_array_layer(0)
+            .layer_count(layers);
 
-//         let mut mip_width = width;
-//         let mut mip_height = height;
+        let dst_subresource = vk::ImageSubresourceLayers::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .mip_level(i)
+            .base_array_layer(0)
+            .layer_count(layers);
 
-//         let device = vulkan_rhi.m_device.as_ref().unwrap();
+        let blit = vk::ImageBlit::builder()
+            .src_offsets([
+                vk::Offset3D { x: 0, y: 0, z: 0 },
+                vk::Offset3D {
+                    x: mip_width as i32,
+                    y: mip_height as i32,
+                    z: 1,
+                },
+            ])
+            .src_subresource(src_subresource)
+            .dst_offsets([
+                vk::Offset3D { x: 0, y: 0, z: 0 },
+                vk::Offset3D {
+                    x: (if mip_width > 1 { mip_width / 2 } else { 1 }) as i32,
+                    y: (if mip_height > 1 { mip_height / 2 } else { 1 }) as i32,
+                    z: 1,
+                },
+            ])
+            .dst_subresource(dst_subresource);
+        unsafe {
+            rhi.m_device.cmd_blit_image(
+                command_buffer, 
+                image, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, 
+                image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
+                &[blit],vk::Filter::LINEAR
+            );
+        }
 
-//         for i in 1..mip_levels {
-//             barrier.subresource_range.base_mip_level = i-1;
-//             barrier.old_layout=vk::ImageLayout::TRANSFER_DST_OPTIMAL;
-//             barrier.new_layout=vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
-//             barrier.src_access_mask=vk::AccessFlags::TRANSFER_WRITE;
-//             barrier.dst_access_mask=vk::AccessFlags::TRANSFER_READ;
-//             unsafe {
-//                 device.cmd_pipeline_barrier(
-//                     vk_command_buffer,
-//                     vk::PipelineStageFlags::TRANSFER,
-//                     vk::PipelineStageFlags::TRANSFER,
-//                     vk::DependencyFlags::empty(),
-//                     &[] as &[vk::MemoryBarrier],
-//                     &[] as &[vk::BufferMemoryBarrier],
-//                     &[barrier],
-//                 );
-//             }
+        barrier.old_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+        barrier.src_access_mask = vk::AccessFlags::TRANSFER_READ;
+        barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
 
-//             let src_subresource = vk::ImageSubresourceLayers::builder()
-//                 .aspect_mask(vk::ImageAspectFlags::COLOR)
-//                 .mip_level(i-1)
-//                 .base_array_layer(0)
-//                 .layer_count(layers);
+        unsafe {
+            rhi.m_device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[] as &[vk::MemoryBarrier],
+                &[] as &[vk::BufferMemoryBarrier],
+                &[barrier],
+            );
+        }
 
-//             let dst_subresource = vk::ImageSubresourceLayers::builder()
-//                 .aspect_mask(vk::ImageAspectFlags::COLOR)
-//                 .mip_level(i)
-//                 .base_array_layer(0)
-//                 .layer_count(layers);
+        if mip_width>1{
+            mip_width/=2;
+        }
+        if mip_height>1{
+            mip_height/=2;
+        }   
+    }
 
-//             let blit = vk::ImageBlit::builder()
-//                 .src_offsets([
-//                     vk::Offset3D { x: 0, y: 0, z: 0 },
-//                     vk::Offset3D {
-//                         x: mip_width as i32,
-//                         y: mip_height as i32,
-//                         z: 1,
-//                     },
-//                 ])
-//                 .src_subresource(src_subresource)
-//                 .dst_offsets([
-//                     vk::Offset3D { x: 0, y: 0, z: 0 },
-//                     vk::Offset3D {
-//                         x: (if mip_width > 1 { mip_width / 2 } else { 1 }) as i32,
-//                         y: (if mip_height > 1 { mip_height / 2 } else { 1 }) as i32,
-//                         z: 1,
-//                     },
-//                 ])
-//                 .dst_subresource(dst_subresource);
-//             unsafe {
-//                 device.cmd_blit_image(
-//                     vk_command_buffer, 
-//                     image, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, 
-//                     image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
-//                     &[blit],vk::Filter::LINEAR
-//                 );
-//             }
+    barrier.subresource_range.base_mip_level = mip_levels - 1;
+    barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+    barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
+    barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+    barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
 
-//             barrier.old_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
-//             barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
-//             barrier.src_access_mask = vk::AccessFlags::TRANSFER_READ;
-//             barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+    unsafe {
+        rhi.m_device.cmd_pipeline_barrier(
+            command_buffer,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::DependencyFlags::empty(),
+            &[] as &[vk::MemoryBarrier],
+            &[] as &[vk::BufferMemoryBarrier],
+            &[barrier],
+        );
+    }
 
-//             unsafe {
-//                 device.cmd_pipeline_barrier(
-//                     vk_command_buffer,
-//                     vk::PipelineStageFlags::TRANSFER,
-//                     vk::PipelineStageFlags::FRAGMENT_SHADER,
-//                     vk::DependencyFlags::empty(),
-//                     &[] as &[vk::MemoryBarrier],
-//                     &[] as &[vk::BufferMemoryBarrier],
-//                     &[barrier],
-//                 );
-//             }
+    rhi.end_single_time_commands(command_buffer)?;
 
-//             if mip_width>1{
-//                 mip_width/=2;
-//             }
-//             if mip_height>1{
-//                 mip_height/=2;
-//             }   
-//         }
-
-//         barrier.subresource_range.base_mip_level = mip_levels - 1;
-//         barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
-//         barrier.new_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
-//         barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
-//         barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
-
-//         unsafe {
-//             device.cmd_pipeline_barrier(
-//                 vk_command_buffer,
-//                 vk::PipelineStageFlags::TRANSFER,
-//                 vk::PipelineStageFlags::FRAGMENT_SHADER,
-//                 vk::DependencyFlags::empty(),
-//                 &[] as &[vk::MemoryBarrier],
-//                 &[] as &[vk::BufferMemoryBarrier],
-//                 &[barrier],
-//             );
-//         }
+    Ok(())
+}
     
-//         rhi.end_single_time_commands(command_buffer)?;
+pub fn create_texture_image(
+    rhi: &VulkanRHI,
+    width: u32,
+    height: u32,
+    pixels: &[u8],
+    format: vk::Format,
+    mip_levels: u32
+) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
 
-//         Ok(())
-//     }
-    
-//     pub fn create_texture_image(
-//         rhi:&dyn RHI,
-//         width: u32,
-//         height: u32,
-//         pixels: &[u8],
-//         format: vk::Format,
-//         mip_levels: u32
-//     ) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
+    let physical_device = rhi.m_data.m_physical_device;
+    let size = pixels.len() as u64;
+    let (staging_buffer, staging_buffer_memory) = create_buffer(
+        &rhi.m_instance, &rhi.m_device, physical_device, size,
+        vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    )?;
 
-//         let vulkan_rhi = rhi.as_any().downcast_ref::<VulkanRHI>().unwrap();
-//         let instance = vulkan_rhi.m_instance.as_ref().unwrap();
-//         let device = vulkan_rhi.m_device.as_ref().unwrap();
-//         let physical_device = vulkan_rhi.m_physical_device;
-//         let size = pixels.len() as u64;
-//         let (staging_buffer, staging_buffer_memory) = Self::create_buffer(
-//             instance, device, physical_device, size,
-//             vk::BufferUsageFlags::TRANSFER_SRC,
-//             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-//         )?;
+    unsafe {
+        let memory = rhi.m_device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+        copy_nonoverlapping(pixels.as_ptr().cast(), memory, pixels.len());
+        rhi.m_device.unmap_memory(staging_buffer_memory);
+    }
 
-//         unsafe {
-//             let memory = device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
-//             copy_nonoverlapping(pixels.as_ptr(), memory.cast(), pixels.len());
-//             device.unmap_memory(staging_buffer_memory);
-//         }
+    let mip_levels = if mip_levels > 0 { 
+        mip_levels 
+    } else { 
+        ((width.max(height) as f32).log2().floor() as u32) + 1 
+    };
 
-//         let mip_levels = if mip_levels > 0 { 
-//             mip_levels 
-//         } else { 
-//             ((width.max(height) as f32).log2().floor() as u32) + 1 
-//         };
+    let (texture_image, texture_image_memory) = create_image(
+        &rhi.m_instance, &rhi.m_device, physical_device, width, height, format,
+        vk::ImageTiling::OPTIMAL,
+        vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        vk::ImageCreateFlags::empty(),
+        1,
+        mip_levels,
+    )?;
 
-//         let (texture_image, texture_image_memory) = Self::create_image(
-//             instance, device, physical_device, width, height, format,
-//             vk::ImageTiling::OPTIMAL,
-//             vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC,
-//             vk::MemoryPropertyFlags::DEVICE_LOCAL,
-//             vk::ImageCreateFlags::empty(),
-//             1,
-//             mip_levels,
-//         )?;
+    transition_image_layout(
+        rhi, texture_image, 
+        vk::ImageLayout::UNDEFINED, 
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
+        1, 
+        mip_levels,
+        vk::ImageAspectFlags::COLOR,
+    )?;
 
-//         Self::transition_image_layout(
-//             rhi, texture_image, 
-//             vk::ImageLayout::UNDEFINED, 
-//             vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
-//             1, 
-//             mip_levels,
-//             vk::ImageAspectFlags::COLOR,
-//         )?;
+    copy_buffer_to_image(rhi, staging_buffer, texture_image, width, height, 1)?;
 
-//         Self::copy_buffer_to_image(rhi, staging_buffer, texture_image, width, height, 1)?;
+    unsafe {
+        rhi.m_device.destroy_buffer(staging_buffer, None);
+        rhi.m_device.free_memory(staging_buffer_memory, None);
+    }
 
-//         unsafe {
-//             device.destroy_buffer(staging_buffer, None);
-//             device.free_memory(staging_buffer_memory, None);
-//         }
+    generate_mipmaps(rhi, texture_image, format, width, height, 1, mip_levels)?;
 
-//         Self::generate_mipmaps(rhi, texture_image, format, width, height, 1, mip_levels)?;
+    let image_view = create_image_view(
+        &rhi.m_device, 
+        texture_image, 
+        format, 
+        vk::ImageAspectFlags::COLOR, 
+        vk::ImageViewType::_2D, 
+        1,
+        mip_levels
+    )?;
 
-//         let image_view = Self::create_image_view(
-//             device, 
-//             texture_image, 
-//             format, 
-//             vk::ImageAspectFlags::COLOR, 
-//             vk::ImageViewType::_2D, 
-//             1,
-//             mip_levels
-//         )?;
-
-//         Ok((texture_image, texture_image_memory, image_view))
-//     }
+    Ok((texture_image, texture_image_memory, image_view))
+}
     
 pub fn create_image(
     instance: &Instance,

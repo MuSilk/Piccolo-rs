@@ -11,7 +11,7 @@ pub struct RuntimeGlobalContext {
     pub m_debugdraw_manager: Rc<RefCell<DebugDrawManager>>,
 }
 
-static mut RUNTIME_GLOBAL_CONTEXT: Option<RefCell<RuntimeGlobalContext>> = None;
+static mut G_RUNTIME_GLOBAL_CONTEXT: Option<RefCell<RuntimeGlobalContext>> = None;
 
 unsafe impl Send for RuntimeGlobalContext {}
 unsafe impl Sync for RuntimeGlobalContext {}
@@ -21,14 +21,14 @@ impl RuntimeGlobalContext {
     pub fn isinitialized() -> bool {
         unsafe{
             #[allow(static_mut_refs)]
-            RUNTIME_GLOBAL_CONTEXT.is_some()
+            G_RUNTIME_GLOBAL_CONTEXT.is_some()
         }
     }
 
     pub fn global() -> &'static RefCell<Self> {
         unsafe{
             #[allow(static_mut_refs)]
-            RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap()
+            G_RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap()
         }   
     }
     pub fn start_systems(event_loop: &ActiveEventLoop, _config_file_path: &Path) -> Result<()> {
@@ -41,7 +41,7 @@ impl RuntimeGlobalContext {
         let rhi = render_system.get_rhi();
         let debugdraw_manager = DebugDrawManager::create(rhi)?;
         unsafe{
-            RUNTIME_GLOBAL_CONTEXT = Some(RefCell::new(RuntimeGlobalContext {
+            G_RUNTIME_GLOBAL_CONTEXT = Some(RefCell::new(RuntimeGlobalContext {
                 m_window_system: Rc::new(RefCell::new(window_system)),
                 m_render_system: Rc::new(RefCell::new(render_system)),
                 m_debugdraw_manager: Rc::new(RefCell::new(debugdraw_manager))
@@ -51,7 +51,9 @@ impl RuntimeGlobalContext {
     }
 
 
-    pub fn shutdown_systems(&mut self){
-        self.m_render_system.borrow_mut().get_rhi().borrow_mut().destroy(); 
+    pub fn shutdown_systems(&self){
+        self.m_render_system.borrow().get_rhi().borrow().wait_idle().unwrap();
+        self.m_debugdraw_manager.borrow_mut().destroy();
+        self.m_render_system.borrow().destroy().unwrap();
     }
 }

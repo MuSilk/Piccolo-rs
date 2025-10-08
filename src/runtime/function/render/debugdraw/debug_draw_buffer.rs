@@ -1,18 +1,21 @@
 use std::{cell::RefCell, collections::VecDeque, f32::consts::TAU, ptr::copy_nonoverlapping, rc::{Rc, Weak}};
 
 use anyhow::Result;
+use linkme::distributed_slice;
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::runtime::function::render::{debugdraw::debug_draw_primitive::DebugDrawVertex, interface::vulkan::vulkan_rhi::VulkanRHI};
+use crate::runtime::function::render::{debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::DebugDrawVertex}, interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC}, render_type::RHIDefaultSamplerType};
+
 
 #[derive(Default)]
 struct UniformBufferObject{
     proj_view_matrix: Mat4,
 }
 
-#[repr(align(256))]
+#[repr(align(64))]
 #[repr(C)]
+#[derive(Debug)]
 struct UniformBufferDynamicObject{
     model_matrix: Mat4,
     color: Vec4
@@ -62,8 +65,6 @@ pub struct DebugDrawAllocator{
     m_cylinder_resource: Option<Resource>,
     m_capsule_resource: Option<Resource>,
 
-    // m_font: Rc<RefCell<DebugDrawFont>>,
-
     m_current_frame: u32,
     m_deffer_delete_queue: [VecDeque<Resource>;Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT],
 }
@@ -73,9 +74,16 @@ impl DebugDrawAllocator {
     const M_CIRCLE_SAMPLE_COUNT: usize = 10;
 }
 
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER)]
+static UNIFORM_BUFFER_COUNT: u32 = VulkanRHI::get_max_frames_in_flight() as u32;
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC)]
+static UNIFORM_BUFFER_DYNAMIC_COUNT: u32 = VulkanRHI::get_max_frames_in_flight() as u32;
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
+static COMBINED_IMAGE_SAMPLER_COUNT: u32 = VulkanRHI::get_max_frames_in_flight() as u32;
+
 impl DebugDrawAllocator {
 
-    pub fn create(rhi: &Rc<RefCell<VulkanRHI>>) -> Result<Self> {
+    pub fn create(rhi: &Rc<RefCell<VulkanRHI>>,font: &DebugDrawFont) -> Result<Self> {
 
         let m_rhi = Rc::downgrade(rhi);
         let descriptor = Self::setup_descriptor_set(&rhi.borrow())?;
@@ -86,7 +94,7 @@ impl DebugDrawAllocator {
             ..Default::default()
         };
 
-        buffer.prepare_descriptor_set()?;
+        buffer.prepare_descriptor_set(&rhi.borrow(), font)?;
 
         Ok(buffer)
     }
@@ -94,6 +102,15 @@ impl DebugDrawAllocator {
     pub fn destroy(&mut self){
         self.clear();
         self.unload_mesh_buffer();
+        let rhi = self.m_rhi.upgrade().unwrap();
+        let rhi = rhi.borrow();
+        rhi.destroy_descriptor_set_layout(self.m_descriptor.layout);
+        for queue in self.m_deffer_delete_queue.iter_mut() {
+            while let Some(resource) = queue.pop_front() {
+                rhi.destroy_buffer(resource.buffer);
+                rhi.free_memory(resource.memory);
+            }
+        }
     }
 
     pub fn tick(&mut self){
@@ -103,6 +120,10 @@ impl DebugDrawAllocator {
 
     pub fn get_vertex_buffer(&self) -> vk::Buffer {
         return self.m_vertex_resource.buffer;
+    }
+
+    pub fn get_descriptor_set_layout(&self) -> vk::DescriptorSetLayout{
+        self.m_descriptor.layout
     }
 
     pub fn get_descriptor_set(&self) -> &vk::DescriptorSet{
@@ -188,7 +209,7 @@ impl DebugDrawAllocator {
 
             if uniform_dynamic_buffer_size > 0 {
                 let data = rhi.borrow().map_memory(
-                    memory, 0, uniform_buffer_size as u64, vk::MemoryMapFlags::empty(),
+                    memory, 0, uniform_dynamic_buffer_size as u64, vk::MemoryMapFlags::empty(),
                 )?;
                 unsafe{
                     copy_nonoverlapping(self.m_uniform_buffer_dynamic_object_cache.as_mut_ptr().cast(), data, uniform_dynamic_buffer_size);
@@ -211,6 +232,10 @@ impl DebugDrawAllocator {
 
     pub fn get_size_of_uniform_buffer_object() -> usize {
         std::mem::size_of::<UniformBufferObject>()
+    }
+
+    pub fn get_size_of_uniform_buffer_dynamic_object() -> usize {
+        std::mem::size_of::<UniformBufferDynamicObject>()
     }
 
     pub fn get_sphere_vertex_buffer(&mut self) -> Result<vk::Buffer> {
@@ -298,12 +323,12 @@ impl DebugDrawAllocator {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::VERTEX)
                 .build(),
-            // vk::DescriptorSetLayoutBinding::builder()
-            //     .binding(2)
-            //     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            //     .descriptor_count(1)
-            //     .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-            //     .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
         ];
 
 
@@ -326,32 +351,26 @@ impl DebugDrawAllocator {
         })
     }
 
-    fn prepare_descriptor_set(&mut self) -> Result<()> {
-        // let rhi = self.m_rhi.upgrade().unwrap();
-        // let rhi = rhi.borrow();
-        // let sampler = rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Linear)?;
+    fn prepare_descriptor_set(&mut self, rhi: &VulkanRHI, font: &DebugDrawFont) -> Result<()> {
+        let sampler = rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Linear)?;
         
-        // let font = self.m_font.borrow();
-        // let image_info = [
-        //     RHIDescriptorImageInfo{
-        //         image_view: font.get_image_view(),
-        //         sampler: sampler,
-        //         image_layout: RHIImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //     }
-        // ];
-        // for i in 0..rhi.get_max_frames_in_flight() {
-        //     let descriptor_write = RHIWriteDescriptorSet{
-        //         dst_set: &self.m_descriptor.as_ref().unwrap().descriptor_set[i as usize],
-        //         dst_binding: 2,
-        //         dst_array_element: 0,
-        //         descriptor_type: RHIDescriptorType::COMBINED_IMAGE_SAMPLER,
-        //         image_info: &image_info,
-        //         buffer_info: &[],
-        //         texel_buffer_view: &[],
-        //     };
+        let image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_view(font.get_image_view())
+                .sampler(*sampler)
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build()
+        ];
+        for i in 0..VulkanRHI::get_max_frames_in_flight() {
+            let descriptor_write = vk::WriteDescriptorSet::builder()
+                .dst_set(self.m_descriptor.descriptor_set[i as usize])
+                .dst_binding(2)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(&image_info)
+                .build();
 
-        //     rhi.update_descriptor_sets(&[descriptor_write])?;
-        // }
+            rhi.update_descriptor_sets(&[descriptor_write])?;
+        }
         Ok(())
     } 
 
@@ -418,13 +437,13 @@ impl DebugDrawAllocator {
             let r1 = (1.0 - h1 * h1).sqrt();
             for j in 0..(2 * param) {
                 let p = Vec3::new(
-                    r * (TAU / (2.0 * param as f32) * j as f32).cos() * r,
-                    r * (TAU / (2.0 * param as f32) * j as f32).sin() * r,
+                    (TAU / (2.0 * param as f32) * j as f32).cos() * r,
+                    (TAU / (2.0 * param as f32) * j as f32).sin() * r,
                     h, 
                 );
                 let p1 = Vec3::new(
-                    r1 * (TAU / (2.0 * param as f32) * j as f32).cos() * r1,
-                    r1 * (TAU / (2.0 * param as f32) * j as f32).sin() * r1,
+                    (TAU / (2.0 * param as f32) * j as f32).cos() * r1,
+                    (TAU / (2.0 * param as f32) * j as f32).sin() * r1,
                     h1, 
                 );
                 vertices.push(DebugDrawVertex{
@@ -439,13 +458,13 @@ impl DebugDrawAllocator {
             if i != -param - 1 {
                 for j in 0..(2 * param) {
                     let p = Vec3::new(
-                        r * (TAU / (2.0 * param as f32) * j as f32).cos() * r,
-                        r * (TAU / (2.0 * param as f32) * j as f32).sin() * r,
+                        (TAU / (2.0 * param as f32) * j as f32).cos() * r,
+                        (TAU / (2.0 * param as f32) * j as f32).sin() * r,
                         h, 
                     );
                     let p1 = Vec3::new(
-                        r * (TAU / (2.0 * param as f32) * (j + 1) as f32).cos() * r,
-                        r * (TAU / (2.0 * param as f32) * (j + 1) as f32).sin() * r,
+                        (TAU / (2.0 * param as f32) * (j + 1) as f32).cos() * r,
+                        (TAU / (2.0 * param as f32) * (j + 1) as f32).sin() * r,
                         h, 
                     );
 

@@ -1,11 +1,11 @@
-use std::{collections::HashSet, ffi::CStr, fmt::Debug, os::raw::c_void, rc::{Rc, Weak}};
+use std::{cell::OnceCell, collections::HashSet, ffi::CStr, fmt::Debug, os::raw::c_void, rc::{Rc, Weak}};
 
 use anyhow::{anyhow, Result};
 use vulkanalia::{loader::{LibloadingLoader, LIBRARY}, prelude::v1_0::*, vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension}, window::{self as vk_window}, Version};
 use winit::window::Window;
 use log::*;
 
-use crate::runtime::function::render::interface::{rhi::RHICreateInfo, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}};
+use crate::runtime::function::render::{interface::{rhi::RHICreateInfo, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}}, render_type::RHIDefaultSamplerType};
 
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
@@ -15,18 +15,16 @@ const K_MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 pub struct VulkanRHI {
     _m_entry: Entry,
-    m_instance: Instance,
+    pub m_instance: Instance,
     pub m_data: VulkanRHIData,
-    m_device: Device,
+    pub m_device: Device,
     m_current_frame_index: usize,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct VulkanRHIData {
     // Pipeline
-    vertex_buffer: vk::Buffer,
-    vertex_buffer_memory: vk::DeviceMemory,
-    images_in_flight: Vec<vk::Fence>,
+    m_images_in_flight: Vec<vk::Fence>,
 
     m_graphics_queue: vk::Queue,
 
@@ -50,7 +48,7 @@ pub struct VulkanRHIData {
 
     m_window: Weak<Window>,
     m_surface: vk::SurfaceKHR,
-    m_physical_device: vk::PhysicalDevice,
+    pub m_physical_device: vk::PhysicalDevice,
     m_present_queue: vk::Queue,
 
     m_swapchain: vk::SwapchainKHR,
@@ -74,8 +72,8 @@ pub struct VulkanRHIData {
 
     m_device_extensions: Vec<vk::ExtensionName>,
 
-    // m_linear_sampler: OnceCell<Box<dyn RHISampler>>,
-    // m_nearest_sampler: OnceCell<Box<dyn RHISampler>>,
+    m_linear_sampler: OnceCell<vk::Sampler>,
+    m_nearest_sampler: OnceCell<vk::Sampler>,
     // _m_mipmap_sampler_map: HashMap<u32, Box<dyn RHISampler>>,
 
     m_enable_validation_layers: bool,
@@ -154,10 +152,14 @@ impl VulkanRHI {
         })
     }
 
-    
     pub fn destroy(&mut self) {
         unsafe{
-            self.m_device.device_wait_idle().unwrap();
+            if let Some(sampler) = self.m_data.m_linear_sampler.get() {
+                self.m_device.destroy_sampler(*sampler, None);
+            }
+            if let Some(sampler) = self.m_data.m_nearest_sampler.get() {
+                self.m_device.destroy_sampler(*sampler, None);
+            }
 
             self.m_device.destroy_image_view(self.m_data.m_depth_image_view, None);
             self.m_device.destroy_image(self.m_data.m_depth_image, None);
@@ -169,8 +171,6 @@ impl VulkanRHI {
             self.m_data.m_is_frame_in_flight_fences.iter().for_each(|f| self.m_device.destroy_fence(*f, None));
             self.m_data.m_image_finished_for_presentation_semaphores.iter().for_each(|s| self.m_device.destroy_semaphore(*s, None));
             self.m_data.m_image_available_for_render_semaphores.iter().for_each(|s| self.m_device.destroy_semaphore(*s, None));
-            self.m_device.free_memory(self.m_data.vertex_buffer_memory, None);
-            self.m_device.destroy_buffer(self.m_data.vertex_buffer, None);
             self.m_data.m_command_pools.iter().for_each(|p| self.m_device.destroy_command_pool(*p, None));
             self.m_device.destroy_command_pool(self.m_data.m_command_pool, None);
             self.m_device.destroy_device(None);
@@ -183,7 +183,6 @@ impl VulkanRHI {
             self.m_instance.destroy_instance(None);
         }
     }
-
 
     pub fn prepare_context(&mut self) {
         let command_buffer: vk::CommandBuffer = self.m_data.m_command_buffers[self.m_current_frame_index];
@@ -220,73 +219,70 @@ impl VulkanRHI {
             self.m_device.destroy_image_view(self.m_data.m_depth_image_view, None);
             self.m_device.destroy_image(self.m_data.m_depth_image, None);
             self.m_device.free_memory(self.m_data.m_depth_image_memory, None);
-            create_depth_objects(&self.m_instance, &self.m_device, &mut self.m_data)?;
             self.m_data.m_swapchain_image_views.iter().for_each(|v| self.m_device.destroy_image_view(*v, None));
             self.m_device.destroy_swapchain_khr(self.m_data.m_swapchain, None);
             create_swapchain(window, &self.m_instance, &self.m_device, &mut self.m_data)?;
             create_swapchain_image_views(&self.m_device, &mut self.m_data)?;
-            self.m_data.images_in_flight.resize(self.m_data.m_swapchain_images.len(), vk::Fence::null());
+            create_depth_objects(&self.m_instance, &self.m_device, &mut self.m_data)?;
+            self.m_data.m_images_in_flight.resize(self.m_data.m_swapchain_images.len(), vk::Fence::null());
         }
         Ok(())
     }
 
-    
-    // fn get_or_create_default_sampler(&self, sampler_type: RHIDefaultSamplerType) -> Result<&Box<dyn RHISampler>> {
-    //     match sampler_type {
-    //         RHIDefaultSamplerType::Linear => {
-    //             Ok(self.m_linear_sampler.get_or_init(|| {
-    //                 let properties = unsafe{self.m_instance.as_ref().unwrap().get_physical_device_properties(self.m_physical_device)};
-    //                 let create_info = vk::SamplerCreateInfo::builder()
-    //                     .mag_filter(vk::Filter::LINEAR)
-    //                     .min_filter(vk::Filter::LINEAR)
-    //                     .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
-    //                     .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-    //                     .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-    //                     .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-    //                     .mip_lod_bias(0.0)
-    //                     .anisotropy_enable(false)
-    //                     .max_anisotropy(properties.limits.max_sampler_anisotropy)
-    //                     .compare_enable(false)
-    //                     .compare_op(vk::CompareOp::ALWAYS)
-    //                     .min_lod(0.0)
-    //                     .max_lod(8.0)
-    //                     .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
-    //                     .unnormalized_coordinates(false);
+    pub fn get_or_create_default_sampler(&self, sampler_type: RHIDefaultSamplerType) -> Result<&vk::Sampler> {
+        match sampler_type {
+            RHIDefaultSamplerType::Linear => {
+                Ok(self.m_data.m_linear_sampler.get_or_init(|| {
+                    let properties = unsafe{self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)};
+                    let create_info = vk::SamplerCreateInfo::builder()
+                        .mag_filter(vk::Filter::LINEAR)
+                        .min_filter(vk::Filter::LINEAR)
+                        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+                        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .mip_lod_bias(0.0)
+                        .anisotropy_enable(false)
+                        .max_anisotropy(properties.limits.max_sampler_anisotropy)
+                        .compare_enable(false)
+                        .compare_op(vk::CompareOp::ALWAYS)
+                        .min_lod(0.0)
+                        .max_lod(8.0)
+                        .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+                        .unnormalized_coordinates(false);
 
-    //                 let sampler = unsafe {
-    //                     self.m_device.as_ref().unwrap().create_sampler(&create_info, None).unwrap()
-    //                 };
-    //                 Box::new(VulkanSampler::new(sampler)) as Box<dyn RHISampler>
-    //             }))
-    //         }
-    //         RHIDefaultSamplerType::Nearest => {
-    //             Ok(self.m_nearest_sampler.get_or_init(||{
-    //                 let properties = unsafe{self.m_instance.as_ref().unwrap().get_physical_device_properties(self.m_physical_device)};
-    //                 let create_info = vk::SamplerCreateInfo::builder()
-    //                     .mag_filter(vk::Filter::NEAREST)
-    //                     .min_filter(vk::Filter::NEAREST)
-    //                     .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
-    //                     .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-    //                     .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-    //                     .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-    //                     .mip_lod_bias(0.0)
-    //                     .anisotropy_enable(false)
-    //                     .max_anisotropy(properties.limits.max_sampler_anisotropy)
-    //                     .compare_enable(false)
-    //                     .compare_op(vk::CompareOp::ALWAYS)
-    //                     .min_lod(0.0)
-    //                     .max_lod(8.0)
-    //                     .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
-    //                     .unnormalized_coordinates(false);
+                    unsafe {
+                        self.m_device.create_sampler(&create_info, None).unwrap()
+                    }
+                }))
+            }
+            RHIDefaultSamplerType::Nearest => {
+                Ok(self.m_data.m_nearest_sampler.get_or_init(||{
+                    let properties = unsafe{self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)};
+                    let create_info = vk::SamplerCreateInfo::builder()
+                        .mag_filter(vk::Filter::NEAREST)
+                        .min_filter(vk::Filter::NEAREST)
+                        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+                        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .mip_lod_bias(0.0)
+                        .anisotropy_enable(false)
+                        .max_anisotropy(properties.limits.max_sampler_anisotropy)
+                        .compare_enable(false)
+                        .compare_op(vk::CompareOp::ALWAYS)
+                        .min_lod(0.0)
+                        .max_lod(8.0)
+                        .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+                        .unnormalized_coordinates(false);
 
-    //                 let sampler = unsafe {
-    //                     self.m_device.as_ref().unwrap().create_sampler(&create_info, None).unwrap()
-    //                 };
-    //                 Box::new(VulkanSampler::new(sampler)) as Box<dyn RHISampler>
-    //             }))
-    //         }
-    //     }
-    // }
+                    unsafe {
+                        self.m_device.create_sampler(&create_info, None).unwrap()
+                    }
+                }))
+            }
+        }
+    }
 
     pub fn create_shader_module(&self, data: &[u8]) -> Result<vk::ShaderModule> {
         let shader_module = vulkan_util::create_shader_module(&self.m_device, data)?;
@@ -320,21 +316,45 @@ impl VulkanRHI {
         Ok(())
     }
 
-    // fn create_texture_image(&self, width: u32, height: u32, pixels: &[u8], format: RHIFormat, mip_levels: u32) -> Result<(Box<dyn RHIImage>, Box<dyn RHIDeviceMemory>, Box<dyn RHIImageView>)> {
-    //     let (image, memory, image_view) = VulkanUtil::create_texture_image(
-    //         self,
-    //         width,
-    //         height,
-    //         pixels,
-    //         vk::Format::from_raw(format.as_raw()),
-    //         mip_levels,
-    //     )?;
-    //     Ok((
-    //         Box::new(VulkanImage::new(image)), 
-    //         Box::new(VulkanDeviceMemory::new(memory)),
-    //         Box::new(VulkanImageView::new(image_view)),
-    //     ))
-    // }
+    pub fn create_image(
+        &self, width: u32, height: u32, format: vk::Format, 
+        tiling: vk::ImageTiling, usage: vk::ImageUsageFlags, properties: vk::MemoryPropertyFlags,
+        flags: vk::ImageCreateFlags, array_layers: u32, mip_levels: u32,
+    ) -> Result<(vk::Image, vk::DeviceMemory)> {
+        Ok(vulkan_util::create_image(
+            &self.m_instance, &self.m_device, self.m_data.m_physical_device,
+            width, height, format, 
+            tiling, usage, properties,
+            flags,
+            array_layers,
+            mip_levels,
+        )?)
+    }
+    
+    pub fn create_image_view(
+        &self, image: vk::Image, format: vk::Format, 
+        aspect_flags: vk::ImageAspectFlags, 
+        view_type: vk::ImageViewType,
+        layout_count: u32,
+        mip_levels: u32
+    ) -> Result<vk::ImageView> {
+        Ok(
+            vulkan_util::create_image_view(
+                &self.m_device, image, format, aspect_flags, view_type , layout_count, mip_levels,
+            )?
+        )
+    }
+
+    pub fn create_texture_image(&self, width: u32, height: u32, pixels: &[u8], format: vk::Format, mip_levels: u32) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
+        Ok(vulkan_util::create_texture_image(
+            self,
+            width,
+            height,
+            pixels,
+            vk::Format::from_raw(format.as_raw()),
+            mip_levels,
+        )?)
+    }
 
     pub fn create_descriptor_set_layout(&self, create_info:&vk::DescriptorSetLayoutCreateInfo) -> Result<vk::DescriptorSetLayout>{
         Ok(unsafe {
@@ -450,6 +470,13 @@ impl VulkanRHI {
         Ok(())
     }
     
+    pub fn wait_idle(&self) -> Result<()>{
+        unsafe {
+            self.m_device.device_wait_idle()?;
+        }
+        Ok(())
+    }
+    
     pub fn get_current_command_buffer(&self) -> vk::CommandBuffer {
         self.m_data.m_current_command_buffer
     }
@@ -544,11 +571,11 @@ impl VulkanRHI {
             Err(e) => return Err(anyhow!(e)),
         };
 
-        let image_in_flight = self.m_data.images_in_flight[self.m_data.m_current_swapchain_image_index];
+        let image_in_flight = self.m_data.m_images_in_flight[self.m_data.m_current_swapchain_image_index];
         if !image_in_flight.is_null() {
             unsafe { self.m_device.wait_for_fences(&[image_in_flight], true, u64::MAX) }?;
         }
-        self.m_data.images_in_flight[self.m_data.m_current_swapchain_image_index] = in_flight_fence;
+        self.m_data.m_images_in_flight[self.m_data.m_current_swapchain_image_index] = in_flight_fence;
 
         let info = vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
@@ -626,14 +653,12 @@ impl VulkanRHI {
             }
         }
     }
-
-    // fn clear(&self) {
-    //     if self.m_enable_debug_utils_label {
-    //         unsafe{
-    //             self.m_instance.as_ref().unwrap().destroy_debug_utils_messenger_ext(self.m_debug_messenger, None);
-    //         }
-    //     }
-    // }
+    
+    pub fn destroy_descriptor_set_layout(&self, layout: vk::DescriptorSetLayout) {
+        unsafe{
+            self.m_device.destroy_descriptor_set_layout(layout, None);
+        }
+    }
     
     pub fn destroy_shader_module(&self, shader: vk::ShaderModule) {
         unsafe{
@@ -641,19 +666,17 @@ impl VulkanRHI {
         }
     }
     
-    // fn destroy_image_view(&self, image_view: Box<dyn RHIImageView>) {
-    //     let image_view = image_view.as_any().downcast_ref::<VulkanImageView>().unwrap().get_resource();
-    //     unsafe {
-    //         self.m_device.as_ref().unwrap().destroy_image_view(image_view, None);
-    //     }
-    // }
+    pub fn destroy_image_view(&self, image_view: vk::ImageView) {
+        unsafe {
+            self.m_device.destroy_image_view(image_view, None);
+        }
+    }
 
-    // fn destroy_image(&self, image: Box<dyn RHIImage>) {
-    //     let image = image.as_any().downcast_ref::<VulkanImage>().unwrap().get_resource();
-    //     unsafe {
-    //         self.m_device.as_ref().unwrap().destroy_image(image, None);
-    //     }
-    // }
+    pub fn destroy_image(&self, image: vk::Image) {
+        unsafe {
+            self.m_device.destroy_image(image, None);
+        }
+    }
 
     pub fn destroy_framebuffer(&self, framebuffer: vk::Framebuffer) {
         unsafe {
@@ -1086,7 +1109,7 @@ fn create_sync_objects(device: &Device, data: &mut VulkanRHIData) -> Result<()> 
             data.m_image_finished_for_presentation_semaphores[i] = device.create_semaphore(&semaphore_info, None)?;
             data.m_is_frame_in_flight_fences[i] = device.create_fence(&fence_info, None)?;
         }
-        data.images_in_flight.push(vk::Fence::null());
+        data.m_images_in_flight.push(vk::Fence::null());
     }
 
     Ok(())

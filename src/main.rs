@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::env;
+use std::rc::Rc;
 
 use anyhow::{anyhow, Result};
 use winit::application::ApplicationHandler;
@@ -7,10 +9,13 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{WindowId};
 
 
+use crate::editor::editor::Editor;
+use crate::editor::editor_global_context::EditorGlobalContext;
 use crate::runtime::engine::Engine;
 use crate::runtime::function::global::global_context::RuntimeGlobalContext;
 
 pub mod runtime;
+pub mod editor;
 pub mod shader;
 
 fn main() -> Result<()> {
@@ -28,7 +33,8 @@ fn main() -> Result<()> {
 #[derive(Default)]
 struct WinitApp{
     minimized: bool,
-    engine: Engine,
+    engine: Rc<RefCell<Engine>>,
+    editor: Editor,
 }
 
 impl ApplicationHandler for WinitApp {
@@ -37,16 +43,18 @@ impl ApplicationHandler for WinitApp {
         let config_file_path = executable_path.parent().ok_or_else(||
             anyhow!("Failed to get parent directory")
         ).unwrap();
-        self.engine.initialize();
-        RuntimeGlobalContext::start_systems(event_loop, config_file_path).unwrap();
+        self.engine.borrow().start_engine(event_loop, config_file_path).unwrap();
+        self.engine.borrow_mut().initialize();
+        self.editor.initialize(&self.engine);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::RedrawRequested 
                 if !event_loop.exiting() &&!self.minimized => {
-                    let delta_time = self.engine.calculate_delta_time();
-                    if !self.engine.tick_one_frame(delta_time).unwrap() {
+                    let delta_time = self.engine.borrow_mut().calculate_delta_time();
+                    EditorGlobalContext::global().borrow().m_input_manager.tick(delta_time);
+                    if !self.engine.borrow_mut().tick_one_frame(delta_time).unwrap() {
                         event_loop.exit();
                     }  
             }
@@ -58,8 +66,23 @@ impl ApplicationHandler for WinitApp {
                 }
             }
             WindowEvent::CloseRequested => {
-                RuntimeGlobalContext::global().borrow_mut().shutdown_systems();
+                self.engine.borrow().shutdown_engine();
                 event_loop.exit();
+            }
+            WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
+                let global = RuntimeGlobalContext::global().borrow();
+                let window_system = global.m_window_system.borrow();
+                window_system.on_key(device_id, &event, is_synthetic);
+            }
+            WindowEvent::MouseInput { device_id, state, button } => {
+                let global = RuntimeGlobalContext::global().borrow();
+                let mut window_system = global.m_window_system.borrow_mut();
+                window_system.on_mouse_button(device_id, state, button);
+            }
+            WindowEvent::CursorMoved { device_id, position } => {
+                let global = RuntimeGlobalContext::global().borrow();
+                let window_system = global.m_window_system.borrow();
+                window_system.on_cursor_pos(device_id, position);
             }
             _ => {}
         }

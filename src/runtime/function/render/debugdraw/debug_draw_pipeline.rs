@@ -1,10 +1,9 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use anyhow::Result;
-use linkme::distributed_slice;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::{runtime::function::render::{debugdraw::debug_draw_primitive::DebugDrawVertex, interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC}}, shader::generated::shader::{DEBUGDRAW_FRAG, DEBUGDRAW_VERT}};
+use crate::{runtime::function::render::{debugdraw::debug_draw_primitive::DebugDrawVertex, interface::vulkan::vulkan_rhi::VulkanRHI}, shader::generated::shader::{DEBUGDRAW_FRAG, DEBUGDRAW_VERT}};
 
 struct DebugDrawFramebufferAttachment {
     image: vk::Image,
@@ -58,25 +57,22 @@ impl DebugDrawPipelineType {
 #[derive(Default)]
 pub struct DebugDrawPipeline {
     m_pipeline_type: DebugDrawPipelineType,
-    m_descriptor_set_layout: vk::DescriptorSetLayout,
     m_render_pipelines: Vec<DebugDrawPipelineBase>,
     m_framebuffer: DebugDrawFramebuffer,
     m_rhi: Weak<RefCell<VulkanRHI>>,
 }
 
 impl DebugDrawPipeline {
-    pub fn create(pipeline_type: DebugDrawPipelineType, rhi: &Rc<RefCell<VulkanRHI>>) -> Result<Self> {
+    pub fn create(pipeline_type: DebugDrawPipelineType, rhi: &Rc<RefCell<VulkanRHI>>, descriptor_set_layout: vk::DescriptorSetLayout) -> Result<Self> {
         let m_rhi = Rc::downgrade(rhi);
         let rhi = rhi.borrow();
         let swapchain_info = rhi.get_swapchain_info();
         setup_attachments();
         let render_pass = setup_render_pass(&rhi)?;
         let framebuffers = setup_framebuffer(&rhi, render_pass)?;
-        let descriptor_set_layout = setup_descriptor_layout(&rhi)?;
         let pipeline = setup_pipelines(&rhi, render_pass, descriptor_set_layout, pipeline_type)?;
         Ok(Self{
             m_pipeline_type : pipeline_type,
-            m_descriptor_set_layout: descriptor_set_layout,
             m_render_pipelines: vec![pipeline],
             m_framebuffer: DebugDrawFramebuffer{
                 width: swapchain_info.extent.width,
@@ -123,11 +119,11 @@ fn setup_render_pass(rhi: &VulkanRHI) -> Result<vk::RenderPass> {
     let color_attachment = vk::AttachmentDescription::builder()
         .format(rhi.get_swapchain_info().image_format)
         .samples(vk::SampleCountFlags::_1)
-        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .load_op(vk::AttachmentLoadOp::LOAD)
         .store_op(vk::AttachmentStoreOp::STORE)
         .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
         .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .initial_layout(vk::ImageLayout::PRESENT_SRC_KHR)
         .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
     let color_attachment_ref = vk::AttachmentReference::builder()
@@ -137,11 +133,11 @@ fn setup_render_pass(rhi: &VulkanRHI) -> Result<vk::RenderPass> {
     let depth_stencil_attachment = vk::AttachmentDescription::builder()
         .format(rhi.get_depth_image_info().format)
         .samples(vk::SampleCountFlags::_1)
-        .load_op(vk::AttachmentLoadOp::CLEAR)
-        .store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .load_op(vk::AttachmentLoadOp::LOAD)
+        .store_op(vk::AttachmentStoreOp::STORE)
         .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
         .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .initial_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
@@ -193,41 +189,6 @@ fn setup_framebuffer(rhi: &VulkanRHI, render_pass : vk::RenderPass) -> Result<Ve
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(framebuffers)
-}
-
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER)]
-static UNIFORM_BUFFER_COUNT: u32 = VulkanRHI::get_max_frames_in_flight() as u32;
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC)]
-static UNIFORM_BUFFER_DYNAMIC_COUNT: u32 = VulkanRHI::get_max_frames_in_flight() as u32;
-// #[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
-// static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 1;
-
-fn setup_descriptor_layout(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
-    let ubo_layout_binding = [
-        vk::DescriptorSetLayoutBinding::builder()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)
-            .build(),
-        vk::DescriptorSetLayoutBinding::builder()
-            .binding(1)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)
-            .build(),
-        // vk::DescriptorSetLayoutBinding::builder()
-        //     .binding(2)
-        //     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-        //     .descriptor_count(1)
-        //     .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-        //     .build(),
-    ];
-
-    let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
-        .bindings(&ubo_layout_binding);
-
-    Ok(rhi.create_descriptor_set_layout(&layout_info)?)
 }
 
 fn setup_pipelines(rhi: &VulkanRHI, render_pass : vk::RenderPass, set_layout: vk::DescriptorSetLayout, pipeline_type: DebugDrawPipelineType)-> Result<DebugDrawPipelineBase> {

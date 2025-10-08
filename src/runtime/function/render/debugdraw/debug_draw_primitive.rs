@@ -33,11 +33,21 @@ pub enum FillMode {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug)]
 pub struct DebugDrawVertex {
     pub pos: Vec3,
     pub color: Vec4,
     pub texcoord: Vec2,
+}
+
+impl Default for DebugDrawVertex {
+    fn default() -> Self {
+        Self::new(
+            Vec3::default(),
+            Vec4::default(),
+            Vec2::new(-1.0, -1.0),
+        )
+    }
 }
 
 impl DebugDrawVertex {
