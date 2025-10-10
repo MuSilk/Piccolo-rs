@@ -2,9 +2,10 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use bitflags::bitflags;
 use nalgebra_glm::{Vec2, Vec3, Vec4};
+use runtime::{engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
 use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{editor::{self, editor::Editor, editor_global_context::EditorGlobalContext}, runtime::{engine::G_IS_EDITOR_MODE, function::{global::global_context::RuntimeGlobalContext, render::window_system}}};
+use crate::{editor::{self, editor::Editor, editor_global_context::EditorGlobalContext}};
 
 bitflags! {
     #[repr(transparent)]

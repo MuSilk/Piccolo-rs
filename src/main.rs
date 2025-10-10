@@ -3,20 +3,16 @@ use std::env;
 use std::rc::Rc;
 
 use anyhow::{anyhow, Result};
+use runtime::engine::Engine;
+use runtime::function::global::global_context::RuntimeGlobalContext;
 use winit::application::ApplicationHandler;
 use winit::event::{WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{WindowId};
 
-
+pub mod editor;
 use crate::editor::editor::Editor;
 use crate::editor::editor_global_context::EditorGlobalContext;
-use crate::runtime::engine::Engine;
-use crate::runtime::function::global::global_context::RuntimeGlobalContext;
-
-pub mod runtime;
-pub mod editor;
-pub mod shader;
 
 fn main() -> Result<()> {
     pretty_env_logger::init();
@@ -42,8 +38,8 @@ impl ApplicationHandler for WinitApp {
         let executable_path = env::current_exe().unwrap();
         let config_file_path = executable_path.parent().ok_or_else(||
             anyhow!("Failed to get parent directory")
-        ).unwrap();
-        self.engine.borrow().start_engine(event_loop, config_file_path).unwrap();
+        ).unwrap().join("PiccoloEditor.ini");
+        self.engine.borrow().start_engine(event_loop, &config_file_path).unwrap();
         self.engine.borrow_mut().initialize();
         self.editor.initialize(&self.engine);
     }

@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use crate::{editor::editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, runtime::{engine::{Engine, G_IS_EDITOR_MODE}, function::global::global_context::RuntimeGlobalContext}};
+use runtime::{engine::{Engine, G_IS_EDITOR_MODE}, function::global::global_context::RuntimeGlobalContext};
 
-
+use crate::{editor::editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}};
 
 
 #[derive(Default)]
