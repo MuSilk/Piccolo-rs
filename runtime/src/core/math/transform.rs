@@ -16,3 +16,12 @@ impl Default for Transform {
         }
     }
 }
+
+impl Transform {
+    pub fn get_matrix(&self) -> nalgebra_glm::Mat4 {
+        let translation_matrix = nalgebra_glm::translation(&self.m_position);
+        let rotation_matrix = nalgebra_glm::quat_to_mat4(&self.m_rotation);
+        let scale_matrix = nalgebra_glm::scaling(&self.m_scale);
+        translation_matrix * rotation_matrix * scale_matrix
+    }
+}

@@ -138,8 +138,20 @@ impl<T> ReflectionPtr<T> {
 
     pub fn cast<U>(&self) -> ReflectionPtr<U> {
         ReflectionPtr {
-            m_type_name: self.m_type_name.clone(),
+            m_type_name: self.m_type_name,
             m_instance: self.m_instance as *mut U,
         }
+    }
+
+    pub fn get_ptr(&self) -> *mut T {
+        self.m_instance
+    }
+
+    pub fn get_type_name(&self) -> &'static str {
+        self.m_type_name
+    }
+
+    pub fn set_type_name(&mut self, type_name: &'static str) {
+        self.m_type_name = type_name;
     }
 }

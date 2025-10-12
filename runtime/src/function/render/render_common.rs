@@ -1,5 +1,5 @@
 use nalgebra_glm::{Mat4, Vec3, Vec4};
-
+use vulkanalia::{prelude::v1_0::*};
 
 
 const S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT: usize = 64;
@@ -37,3 +37,28 @@ pub struct MeshPreframeStorageBufferObject {
     pub directional_light_proj_view: Mat4
 }
 
+#[derive(Default)]
+pub struct VulkanMesh {
+    pub enable_vertex_blending: bool,
+
+    pub mesh_vertex_count : u32,
+
+    pub mesh_vertex_position_buffer: vk::Buffer,
+    pub mesh_vertex_position_buffer_allocation: vk::DeviceMemory,
+
+    mesh_vertex_varying_enable_blending_buffer: vk::Buffer,
+    mesh_vertex_varying_enable_blending_buffer_allocation: vk::DeviceMemory,
+
+    mesh_vertex_joint_binding_buffer: vk::Buffer,
+    mesh_vertex_joint_binding_buffer_allocation: vk::DeviceMemory,
+
+    mesh_vertex_blending_descriptor_set: vk::DescriptorSet,
+
+    mesh_vertex_varying_buffer: vk::Buffer,
+    mesh_vertex_varying_buffer_allocation: vk::DeviceMemory,
+
+    pub mesh_index_count: u32,
+
+    pub mesh_index_buffer: vk::Buffer,
+    pub mesh_index_buffer_allocation: vk::DeviceMemory,
+}

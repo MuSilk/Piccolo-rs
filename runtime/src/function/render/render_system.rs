@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{self, RenderCamera, RenderCameraType}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_scene::{self, RenderScene}, render_swap_context::{self, RenderSwapContext}, render_type::RenderPipelineType, window_system::WindowSystem}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{self, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{self, RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_scene::{self, RenderScene}, render_swap_context::{self, RenderSwapContext}, render_type::{MeshSourceDesc, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -110,7 +110,69 @@ impl RenderSystem {
     fn process_swap_date(&mut self) {
         let swap_data = self.m_swap_context.get_render_swap_data();
 
-        if let Some(camera_swap_data) = &swap_data.m_camera_swap_data {
+        if let Some(game_object_resource_desc) = &mut swap_data.borrow_mut().m_game_object_resource_descs {
+            while !game_object_resource_desc.is_empty() {
+                let gobject = game_object_resource_desc.get_next_process_object();
+
+                for (part_index, game_object_part) in gobject.get_object_parts().iter().enumerate() {
+                    let part_id = GameObjectPartId{
+                        m_go_id: gobject.get_id(),
+                        m_part_id: part_index
+                    };
+                    
+                    let is_entity_in_scene = self.m_render_scene.get_instance_id_allocator().has_element(&part_id);
+                    let mut render_entity = RenderEntity::default();
+                    render_entity.m_instance_id = 
+                        self.m_render_scene.get_instance_id_allocator().alloc_guid(&part_id) as u32;
+                    render_entity.m_model_matrix = game_object_part.m_transform_desc.m_transform_matrix;
+
+                    self.m_render_scene.add_instance_id_to_map(render_entity.m_instance_id, gobject.get_id());
+
+                    let mesh_source = MeshSourceDesc {
+                        m_mesh_file: game_object_part.m_mesh_desc.m_mesh_file.clone(),
+                    };
+                    let is_mesh_loaded = self.m_render_scene.get_mesh_asset_id_allocator().has_element(&mesh_source);
+
+                    let mut mesh_data = RenderMeshData::default();
+                    if !is_mesh_loaded {
+                        mesh_data = self.m_render_resource.m_base.load_mesh_data(&mesh_source, &mut render_entity.m_bounding_box);
+                    }
+                    else{
+                        render_entity.m_bounding_box = self.m_render_resource.m_base.get_cached_bounding_box(&mesh_source).unwrap().clone();
+                    }
+
+                    render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                    render_entity.m_enable_vertex_blending = 
+                        game_object_part.m_skeleton_animation_result.m_transforms.len() > 1;
+                    render_entity.m_joint_matrices.resize(game_object_part.m_skeleton_animation_result.m_transforms.len(), Default::default());
+                    for i in 0..game_object_part.m_skeleton_animation_result.m_transforms.len() {
+                        render_entity.m_joint_matrices[i] = game_object_part.m_skeleton_animation_result.m_transforms[i].m_matrix;
+                    }
+
+                    //todo material
+
+                    if !is_mesh_loaded {
+                        self.m_render_resource.upload_game_object_render_resource(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                    }
+
+                    if !is_entity_in_scene {
+                        self.m_render_scene.m_render_entities.push(render_entity);
+                    }
+                    else{
+                        for entity in &mut self.m_render_scene.m_render_entities {
+                            if entity.m_instance_id == render_entity.m_instance_id {
+                                *entity = render_entity;
+                                break;
+                            }
+                        }
+                    } 
+                }
+                game_object_resource_desc.pop();
+            }
+            self.m_swap_context.reset_game_object_resource_swap_data();
+        }
+
+        if let Some(camera_swap_data) = &swap_data.borrow().m_camera_swap_data {
             if let Some(m_fov_x) = &camera_swap_data.m_fov_x {
                 self.m_render_camera.borrow_mut().set_fov_x(*m_fov_x);
             }

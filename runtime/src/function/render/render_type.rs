@@ -1202,13 +1202,39 @@ pub type RHIDeviceSize = u64;
 pub type RHIFlags = u32;
 pub type RHISampleMask = u32;
 
-pub struct MeshSourceDesc{
-    m_mesh_file: String,
-}
-
 pub enum RenderPipelineType{
     ForwardPipeline,
     DeferredPipeline,
-    EnumCount,
+    PipelineTypeCount,
 }
 
+#[derive(Default)]
+pub struct BufferData {
+    pub m_data: Vec<u8>,
+}
+
+#[repr(C)]
+pub struct MeshVertexDataDefinition {
+    pub x: f32, pub y: f32, pub z: f32,
+    pub nx: f32,pub ny: f32, pub nz: f32,
+    pub tx: f32,pub ty: f32, pub tz: f32,
+    pub u: f32,pub v: f32,
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
+pub struct MeshSourceDesc{
+    pub m_mesh_file: String,
+}
+
+
+#[derive(Default)]
+pub struct StaticMeshData{
+    pub m_vertex_buffer: BufferData,
+    pub m_index_buffer: BufferData,
+}
+
+#[derive(Default)]
+pub struct RenderMeshData{
+    pub m_static_mesh_data: StaticMeshData,
+    pub m_skeleton_binding_buffer: BufferData,
+}

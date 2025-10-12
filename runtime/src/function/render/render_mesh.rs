@@ -3,22 +3,26 @@ use std::mem::offset_of;
 use nalgebra_glm::{Vec2, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
 
-struct VulkanMeshVertexPosition{
-    position: Vec3,
+#[repr(C)]
+pub struct VulkanMeshVertexPosition{
+    pub position: Vec3,
 }
 
-struct VulkanMeshVertexVaryingEnableBlending{
-    normal: Vec3,
-    tangent: Vec3,
+#[repr(C)]
+pub struct VulkanMeshVertexVaryingEnableBlending{
+    pub normal: Vec3,
+    pub tangent: Vec3,
 }
 
-struct VulkanMeshVertexVarying{
-    texcoord: Vec2,
+#[repr(C)]
+pub struct VulkanMeshVertexVarying{
+    pub texcoord: Vec2,
 }
 
-struct VulkanMeshVertexJointBinding{
-    indices: [u32; 4],
-    weights: Vec4,
+#[repr(C)]
+pub struct VulkanMeshVertexJointBinding{
+    pub indices: [u32; 4],
+    pub weights: Vec4,
 }
 
 pub struct MeshVertex{

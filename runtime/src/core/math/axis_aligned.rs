@@ -2,6 +2,7 @@ use std::f32;
 
 use nalgebra_glm::Vec3;
 
+#[derive(Clone)]
 pub struct AxisAlignedBox {
     m_center: Vec3,
     m_half_extent : Vec3,
