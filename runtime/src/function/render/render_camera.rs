@@ -27,7 +27,7 @@ impl Default for RenderCamera {
     fn default() -> Self {
         Self {
             m_current_type: RenderCameraType::Editor,
-            m_position: nalgebra_glm::vec3(0.0, 0.0, 5.0),
+            m_position: nalgebra_glm::vec3(0.0, -1.0, 0.0),
             m_rotation: nalgebra_glm::quat_identity(),
             m_inv_rotation: nalgebra_glm::quat_identity(),
             m_znear: 0.1,

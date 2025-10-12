@@ -8,5 +8,5 @@ layout(location = 3) in highp vec2 in_texcoord;
 layout(location = 0) out highp vec4 out_scene_color;
 
 void main() {
-    out_scene_color = vec4(0.0, 0.0, 0.0 , 1.0);
+    out_scene_color = vec4(1.0, 1.0, 1.0 , 1.0);
 }

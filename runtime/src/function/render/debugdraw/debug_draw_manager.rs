@@ -91,37 +91,24 @@ impl DebugDrawManager {
         let group = self.try_get_or_create_debug_draw_group("test");
         static mut TOTAL_TIME: f32 = 0.0;
         unsafe{TOTAL_TIME += delta_time;}
-        group.borrow_mut().add_quad(
-            &Vec3::new(0.5,0.5,0.0),
-            &Vec3::new(-0.5,0.5,0.0),
-            &Vec3::new(-0.5,-0.5,0.0),
-            &Vec3::new(0.5,-0.5,0.0),
-            &Vec4::new(1.0, 0.0, 0.0, 1.0),
-            &Vec4::new(0.0, 1.0, 0.0, 1.0),
-            &Vec4::new(0.0, 0.0, 1.0, 1.0),
-            &Vec4::new(1.0, 1.0, 1.0, 1.0),
-            K_DEBUG_DRAW_ONE_FRAME,
-            true,
-            FillMode::Solid
-        );
         group.borrow_mut().add_sphere(
             &Vec3::new(0.5, 0.0, 0.0), 
             unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.0, unsafe{TOTAL_TIME.cos()} , 1.0), 
+            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.3, unsafe{TOTAL_TIME.cos()} , 1.0), 
             K_DEBUG_DRAW_ONE_FRAME, 
             true
         );
         group.borrow_mut().add_sphere(
             &Vec3::new(0.0, 0.5, 0.0), 
             unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.0, unsafe{TOTAL_TIME.cos()} , 1.0), 
+            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.6, unsafe{TOTAL_TIME.cos()} , 1.0), 
             K_DEBUG_DRAW_ONE_FRAME, 
             true
         );
         group.borrow_mut().add_sphere(
             &Vec3::new(0.0, 0.0, 0.5), 
             unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.0, unsafe{TOTAL_TIME.cos()} , 1.0), 
+            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.9, unsafe{TOTAL_TIME.cos()} , 1.0), 
             K_DEBUG_DRAW_ONE_FRAME, 
             true
         );
@@ -224,6 +211,9 @@ impl DebugDrawManager {
     }
 
     fn draw_point_line_triangle_box(&self, current_swapchain_image_index: usize){
+        if self.m_buffer_allocator.get_vertex_buffer().is_null() {
+            return;
+        }
         let vertex_buffers = [self.m_buffer_allocator.get_vertex_buffer()];
         let rhi = self.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
