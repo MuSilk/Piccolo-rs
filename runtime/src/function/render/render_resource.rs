@@ -1,20 +1,72 @@
-use std::{collections::HashMap, ptr::copy_nonoverlapping};
+use std::{cell::RefCell, collections::HashMap, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
 use nalgebra_glm::Vec3;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{interface::vulkan::vulkan_rhi::VulkanRHI, render_camera::RenderCamera, render_common::{MeshPreframeStorageBufferObject, VulkanMesh}, render_entity::{self, RenderEntity}, render_mesh::{MeshVertex, VulkanMeshVertexPosition}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_type::{MeshVertexDataDefinition, RenderMeshData}};
-
+use crate::function::render::{interface::{rhi, vulkan::vulkan_rhi::{self, VulkanRHI}}, render_camera::RenderCamera, render_common::{MeshPerframeStorageBufferObject, VulkanMesh}, render_entity::{self, RenderEntity}, render_mesh::{MeshVertex, VulkanMeshVertexPosition}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_type::{MeshVertexDataDefinition, RenderMeshData}};
 
 #[derive(Default)]
+struct IBLResource {
+
+}
+
+struct IBLResourceData {
+
+}
+
+#[derive(Default)]
+struct ColorGradingResource {
+
+}
+
+struct ColorGradingResourceData {
+
+}
+
+#[derive(Default)]
+pub struct StorageBuffer {
+    pub _min_uniform_buffer_offset_alignment: u32,
+    pub _min_storage_buffer_offset_alignment: u32,
+    pub _max_storage_buffer_range: u32,
+    pub _non_coherent_atom_size: u32,
+
+    pub _global_upload_ringbuffer: vk::Buffer,
+    pub _global_upload_ringbuffer_memory: vk::DeviceMemory,
+    pub _global_upload_ringbuffer_pointer: *mut c_void,
+    pub _global_upload_ringbuffers_begin: Vec<u32>,
+    pub _global_upload_ringbuffers_end: Vec<u32>,
+    pub _global_upload_ringbuffers_size: Vec<u32>,
+}
+
+#[derive(Default)]
+pub struct GlobalRenderResource {
+    _ibl_resource: IBLResource,
+    _color_grading_resource: ColorGradingResource,
+    pub _storage_buffer: StorageBuffer,
+}
+
+#[derive(Clone, Default)]
 pub struct RenderResource{
     pub m_base:RenderResourceBase,
-    pub m_mesh_perframe_storage_buffer_object: MeshPreframeStorageBufferObject,
+
+    pub m_global_render_resource: Rc<RefCell<GlobalRenderResource>>,
+
+    pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
 
     pub m_vulkan_meshes: HashMap<usize, VulkanMesh>,
 }
 
 impl RenderResource {
+    pub fn reset_ring_buffer_offset(&mut self, current_frame_index: usize) {
+        let mut resource = self.m_global_render_resource.borrow_mut();
+        resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
+            resource._storage_buffer._global_upload_ringbuffers_begin[current_frame_index];
+    }
+
+
+    pub fn upload_global_render_resource(&mut self, rhi: &VulkanRHI) {
+        self.create_and_map_storage_buffer(rhi);
+    }
     pub fn update_per_frame_buffer(&mut self, render_scene: &RenderScene, camera: &RenderCamera){
         let view_matrix = camera.get_view_matrix();
         let proj_matrix = camera.get_pers_proj_matrix();
@@ -62,7 +114,7 @@ impl RenderResource {
                     index_buffer_data, 
                     vertex_buffer_data, 
                     now_mesh
-                );
+                ).unwrap();
             }
         }
 
@@ -140,6 +192,7 @@ impl RenderResource {
         }
         Ok(())
     } 
+    
     fn update_index_buffer(rhi: &VulkanRHI, index_buffer_size: u32, index_buffer_data: &[u8], now_mesh: &mut VulkanMesh) -> Result<()>{
         let buffer_size = index_buffer_size as u64;
         let (staging_buffer, staging_memory) = rhi.create_buffer(
@@ -167,5 +220,42 @@ impl RenderResource {
         now_mesh.mesh_index_buffer_allocation = memory;
 
         Ok(())
+    }
+
+    fn create_and_map_storage_buffer(&mut self, rhi: &VulkanRHI){
+        let _storage_buffer = &mut self.m_global_render_resource.borrow_mut()._storage_buffer;
+        let frames_in_flight = vulkan_rhi::K_MAX_FRAMES_IN_FLIGHT;
+
+        let properties = rhi.get_physical_device_properties();
+        _storage_buffer._min_uniform_buffer_offset_alignment = properties.limits.min_uniform_buffer_offset_alignment as u32;
+        _storage_buffer._min_storage_buffer_offset_alignment = properties.limits.min_storage_buffer_offset_alignment as u32;
+        _storage_buffer._max_storage_buffer_range = properties.limits.max_storage_buffer_range as u32;
+        _storage_buffer._non_coherent_atom_size = properties.limits.non_coherent_atom_size as u32;
+
+        let global_storage_buffer_size = 1024 * 1024 * 128;
+        (_storage_buffer._global_upload_ringbuffer, _storage_buffer._global_upload_ringbuffer_memory) = rhi.create_buffer(
+            global_storage_buffer_size,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        ).unwrap();
+
+        _storage_buffer._global_upload_ringbuffers_begin.resize(frames_in_flight, 0);
+        _storage_buffer._global_upload_ringbuffers_end.resize(frames_in_flight, 0);
+        _storage_buffer._global_upload_ringbuffers_size.resize(frames_in_flight, 0);
+
+        for i in 0..frames_in_flight {
+            _storage_buffer._global_upload_ringbuffers_begin[i] =
+                (global_storage_buffer_size as u32 * i as u32) / frames_in_flight as u32;
+            _storage_buffer._global_upload_ringbuffers_size[i] =
+                (global_storage_buffer_size as u32 * (i + 1) as u32) / frames_in_flight as u32 - 
+                (global_storage_buffer_size as u32 * i as u32) / frames_in_flight as u32;
+        }
+
+        _storage_buffer._global_upload_ringbuffer_pointer = rhi.map_memory(
+            _storage_buffer._global_upload_ringbuffer_memory, 
+            0,
+            global_storage_buffer_size as u64, 
+            vk::MemoryMapFlags::empty()
+        ).unwrap();
     }
 }

@@ -3,9 +3,9 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_pass_base::RenderPassCommonInfo, render_type::RHIDefaultSamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
 
-pub struct CombineUIPassCreateInfo<'a>{
+pub struct CombineUIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
     pub scene_input_attachment: vk::ImageView,
@@ -13,18 +13,17 @@ pub struct CombineUIPassCreateInfo<'a>{
 
 #[derive(Default)]
 pub struct CombineUIPass {
-    m_render_pass: RenderPass,
+    pub m_render_pass: RenderPass,
 }
 
 impl CombineUIPass {
-    pub fn create(info: &CombineUIPassCreateInfo) -> Result<Self> {
-        let mut combine_ui_pass = CombineUIPass::default();
-        combine_ui_pass.m_render_pass.m_framebuffer.render_pass = info.render_pass;
-        combine_ui_pass.setup_descriptor_layout(&info.rhi.borrow())?;
-        combine_ui_pass.setup_pipelines(&info.rhi.borrow())?;
-        combine_ui_pass.setup_descriptor_set(&info.rhi.borrow())?;
-        combine_ui_pass.update_after_framebuffer_recreate(&info.rhi.borrow(), info.scene_input_attachment)?;
-        Ok(combine_ui_pass)
+    pub fn initialize(&mut self, info: &CombineUIPassInitInfo) -> Result<()> {
+        self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
+        self.setup_descriptor_layout(&info.rhi.borrow())?;
+        self.setup_pipelines(&info.rhi.borrow())?;
+        self.setup_descriptor_set(&info.rhi.borrow())?;
+        self.update_after_framebuffer_recreate(&info.rhi.borrow(), info.scene_input_attachment)?;
+        Ok(())
     }
     pub fn draw(&self) {
         let color = [1.0;4];
@@ -71,6 +70,7 @@ static INPUT_ATTACHMENT_COUNT: u32 = 1;
 
 impl CombineUIPass {
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        self.m_render_pass.m_descriptor_infos.clear();
         let post_process_global_layout_bindings = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
@@ -89,6 +89,7 @@ impl CombineUIPass {
     }
 
     fn setup_pipelines(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        self.m_render_pass.m_render_pipeline.clear();
         let vert_shader_module = rhi.create_shader_module(&POST_PROCESS_VERT)?;
         let frag_shader_module = rhi.create_shader_module(&COMBINE_UI_FRAG)?;
 
@@ -168,7 +169,7 @@ impl CombineUIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(0)
+            .subpass(1)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

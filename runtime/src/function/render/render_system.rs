@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{self, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{self, RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_scene::{self, RenderScene}, render_swap_context::{self, RenderSwapContext}, render_type::{MeshSourceDesc, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{self, RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::{self, RenderResource}, render_scene::{self, RenderScene}, render_swap_context::{self, RenderSwapContext}, render_type::{MeshSourceDesc, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -14,7 +14,7 @@ pub struct RenderSystem{
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RenderScene,
-    m_render_resource: RenderResource,
+    m_render_resource: Rc<RefCell<RenderResource>>,
     m_render_pipeline: RenderPipeline,
 }
 
@@ -23,18 +23,22 @@ impl RenderSystem {
         let rhi_create_info = RHICreateInfo {
             window_system: create_info.window_system,
         };
-        let vulakn_rhi = VulkanRHI::create(&rhi_create_info)?;
-        let vulkan_rhi = Rc::new(RefCell::new(vulakn_rhi));
+        let vulkan_rhi = VulkanRHI::create(&rhi_create_info)?;
+        let vulkan_rhi = Rc::new(RefCell::new(vulkan_rhi));
 
         let swap_context = RenderSwapContext::default();
 
         let mut render_camera = RenderCamera::default();
         render_camera.set_aspect(1024.0/768.0);
         let render_scene = RenderScene::default();
-        let render_resource = RenderResource::default();
+
+        let mut render_resource = RenderResource::default();
+        render_resource.upload_global_render_resource(&vulkan_rhi.borrow());
+        let render_resource = Rc::new(RefCell::new(render_resource));
 
         let create_info = RenderPipelineCreateInfo {
-            rhi : &vulkan_rhi
+            rhi : &vulkan_rhi,
+            render_resource: &render_resource,
         };
         let render_pipeline = RenderPipeline::create(&create_info)?;
 
@@ -51,15 +55,15 @@ impl RenderSystem {
     pub fn tick(&mut self, delta_time: f32) -> Result<()>{
         self.process_swap_date();
         self.m_rhi.borrow_mut().prepare_context();
-        self.m_render_resource.update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
-        self.m_render_pipeline.m_base.borrow().prepare_pass_data(&self.m_render_resource);
+        self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
+        self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
         RuntimeGlobalContext::global().borrow().m_debugdraw_manager.borrow_mut().tick(delta_time);
         match self.m_render_pipeline_type {
             RenderPipelineType::ForwardPipeline => {
-                self.m_render_pipeline.forward_render()?;
+                self.m_render_pipeline.forward_render(&mut self.m_render_resource.borrow_mut())?;
             },
             RenderPipelineType::DeferredPipeline => {
-                self.m_render_pipeline.defferred_render()?;
+                self.m_render_pipeline.defferred_render(&mut self.m_render_resource.borrow_mut())?;
             },
             _ => {panic!("Unknown render pipeline type")}
         }
@@ -135,10 +139,10 @@ impl RenderSystem {
 
                     let mut mesh_data = RenderMeshData::default();
                     if !is_mesh_loaded {
-                        mesh_data = self.m_render_resource.m_base.load_mesh_data(&mesh_source, &mut render_entity.m_bounding_box);
+                        mesh_data = self.m_render_resource.borrow_mut().m_base.load_mesh_data(&mesh_source, &mut render_entity.m_bounding_box);
                     }
                     else{
-                        render_entity.m_bounding_box = self.m_render_resource.m_base.get_cached_bounding_box(&mesh_source).unwrap().clone();
+                        render_entity.m_bounding_box = self.m_render_resource.borrow_mut().m_base.get_cached_bounding_box(&mesh_source).unwrap().clone();
                     }
 
                     render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
@@ -152,7 +156,7 @@ impl RenderSystem {
                     //todo material
 
                     if !is_mesh_loaded {
-                        self.m_render_resource.upload_game_object_render_resource(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                        self.m_render_resource.borrow_mut().upload_game_object_render_resource(&self.m_rhi.borrow(), &render_entity, &mesh_data);
                     }
 
                     if !is_entity_in_scene {

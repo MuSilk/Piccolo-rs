@@ -1,8 +1,8 @@
-use std::{ rc::{Rc}};
+use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{ render_pass_base::{RenderPassBase, RenderPassCommonInfo, RenderPassCreateInfo}};
+use crate::function::render::{ render_pass_base::{RenderPassBase, RenderPassCommonInfo, RenderPassCreateInfo}, render_resource::GlobalRenderResource};
 
 pub const _MAIN_CAMERA_PASS_GBUFFER_A: usize = 0;
 pub const _MAIN_CAMERA_PASS_GBUFFER_B: usize = 1;
@@ -59,6 +59,8 @@ pub struct RenderPipelineBase{
 pub struct RenderPass{
     pub m_base : RenderPassBase,
 
+    pub m_global_render_resource: Weak<RefCell<GlobalRenderResource>>,
+
     pub m_descriptor_infos: Vec<Descriptor>,
     pub m_render_pipeline: Vec<RenderPipelineBase>,
     pub m_framebuffer: Framebuffer,
@@ -67,6 +69,7 @@ pub struct RenderPass{
 impl RenderPass{
     pub fn set_common_info(&mut self, common_info: &RenderPassCommonInfo){
         self.m_base.m_rhi = Rc::downgrade(common_info.rhi);
+        self.m_base.m_render_resource = Rc::downgrade(common_info.render_resource);
     }
 
     pub fn create(info: &RenderPassCreateInfo) -> Self{

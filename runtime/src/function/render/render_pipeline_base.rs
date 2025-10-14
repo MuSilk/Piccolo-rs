@@ -1,19 +1,22 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::main_camera_pass::MainCameraPass, render_resource::RenderResource}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{combine_ui_pass::CombineUIPass, main_camera_pass::MainCameraPass}, render_resource::RenderResource}};
 
 pub struct RenderPipelineCreateInfo<'a>{
-    pub rhi : &'a Rc<RefCell<VulkanRHI>>
+    pub rhi : &'a Rc<RefCell<VulkanRHI>>,
+    pub render_resource : &'a Rc<RefCell<RenderResource>>,
 }
 
 pub struct RenderPipelineBase{
     pub m_rhi : Weak<RefCell<VulkanRHI>>,
 
     pub m_main_camera_pass: MainCameraPass,
+    pub m_combine_ui_pass: CombineUIPass,
 }
 
 impl RenderPipelineBase{
-    pub fn prepare_pass_data(&self, render_resource : &RenderResource){
+    pub fn prepare_pass_data(&mut self, render_resource : &RenderResource){
+        self.m_main_camera_pass.prepare_pass_data(render_resource);
         RuntimeGlobalContext::global().borrow().m_debugdraw_manager.borrow_mut().prepare_pass_data(render_resource);
     }   
 

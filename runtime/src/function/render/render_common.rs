@@ -1,3 +1,5 @@
+use std::array;
+
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
 
@@ -6,7 +8,7 @@ const S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT: usize = 64;
 const S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT: usize = 1024;
 const S_MAX_POINT_LIGHT_COUNT: usize                = 15;
 
-#[derive(Default)]
+#[derive(Clone ,Default)]
 pub struct VulkanSceneDirectionalLight {
     pub direction : Vec3,
     pub _padding_direction: f32,
@@ -21,8 +23,9 @@ pub struct VulkanScenePointLight {
     pub _padding_intensity: f32,
 }
 
-#[derive(Default)]
-pub struct MeshPreframeStorageBufferObject {
+#[repr(C)]
+#[derive(Clone, Default)]
+pub struct MeshPerframeStorageBufferObject {
     pub proj_view_matrix : Mat4,
     pub camera_position : Vec3,
     pub _padding_camera_position: f32,
@@ -36,8 +39,32 @@ pub struct MeshPreframeStorageBufferObject {
     pub scene_directional_light: VulkanSceneDirectionalLight,
     pub directional_light_proj_view: Mat4
 }
+#[repr(C)]
+#[derive(Clone, Default)]
+pub struct VulkanMeshInstance {
+    enable_vertex_blending: f32,
+    _padding_enable_vertex_blending_1: f32,
+    _padding_enable_vertex_blending_2: f32,
+    _padding_enable_vertex_blending_3: f32,
+    model_matrix: Mat4,
+}
 
-#[derive(Default)]
+#[repr(C)]
+#[derive(Clone)]
+pub struct MeshPerdrawcallStorageBufferObject {
+    mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+}
+
+impl Default for MeshPerdrawcallStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            mesh_instances: array::from_fn(|_| VulkanMeshInstance::default()),
+        }
+    }
+}
+
+
+#[derive(Clone, Default)]
 pub struct VulkanMesh {
     pub enable_vertex_blending: bool,
 

@@ -1,12 +1,11 @@
 use std::{collections::HashMap, fs::File, io::BufReader, path::PathBuf};
 
-use itertools::Itertools;
 use nalgebra_glm::{Vec2, Vec3};
 
 use crate::{core::math::axis_aligned::AxisAlignedBox, function::{render::render_type::{MeshSourceDesc, MeshVertexDataDefinition, RenderMeshData, StaticMeshData}}};
 
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct RenderResourceBase{
     m_bounding_box_cache_map: HashMap<MeshSourceDesc, AxisAlignedBox>,
 }

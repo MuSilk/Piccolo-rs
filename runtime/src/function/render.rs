@@ -5,6 +5,7 @@ pub mod render_camera;
 pub mod render_common;
 pub mod render_entity;
 pub mod render_guid_allocator;
+pub mod render_helper;
 pub mod render_mesh;
 pub mod render_object;
 pub mod render_pass_base;

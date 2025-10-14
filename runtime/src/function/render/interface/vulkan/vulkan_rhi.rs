@@ -11,7 +11,7 @@ const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
-const K_MAX_FRAMES_IN_FLIGHT: usize = 3;
+pub const K_MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 pub struct VulkanRHI {
     _m_entry: Entry,
@@ -398,6 +398,11 @@ impl VulkanRHI {
         }
     }
 
+    pub fn cmd_next_subpass(&self, command_buffer: vk::CommandBuffer, contents: vk::SubpassContents) {
+        unsafe{
+            self.m_device.cmd_next_subpass(command_buffer, contents);
+        }
+    }
     pub fn cmd_bind_pipeline(&self, command_buffer: vk::CommandBuffer, pipeline_bind_point: vk::PipelineBindPoint, pipeline: vk::Pipeline) {
         unsafe{
             self.m_device.cmd_bind_pipeline(command_buffer, pipeline_bind_point, pipeline);
@@ -470,6 +475,12 @@ impl VulkanRHI {
         Ok(())
     }
     
+    pub fn get_physical_device_properties(&self) -> vk::PhysicalDeviceProperties {
+        unsafe {
+            self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)
+        }
+    }
+
     pub fn wait_idle(&self) -> Result<()>{
         unsafe {
             self.m_device.device_wait_idle()?;
