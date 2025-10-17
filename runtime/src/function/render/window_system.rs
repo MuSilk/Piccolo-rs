@@ -30,7 +30,7 @@ pub struct WindowSystem{
     pub m_window: Option<Rc<Window>>,
     m_width: u32,
     m_height: u32,
-    m_is_focus_mode: bool,
+    _m_is_focus_mode: bool,
 
     m_on_key_func: Vec<Box<OnKeyFunc>>,
     m_on_mouse_button_func: Vec<Box<OnMouseButtonFunc>>,

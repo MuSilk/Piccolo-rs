@@ -30,7 +30,9 @@ impl RenderResourceBase {
     }
 
     fn load_static_mesh(filename: &str, bounding_box: &mut AxisAlignedBox) -> StaticMeshData {
-        let mut reader = BufReader::new(File::open(filename).unwrap());
+        let mut reader = BufReader::new(File::open(filename).unwrap_or_else(|_|{
+            panic!("Failed to open mesh file: {}", filename);
+        }));
         let (models, _) = tobj::load_obj_buf(&mut reader, &tobj::LoadOptions{
             triangulate: true,
             ..Default::default()
@@ -39,7 +41,7 @@ impl RenderResourceBase {
         let mut mesh_vertices = Vec::new();
 
         for model in models {
-            for index in (0..model.mesh.indices.len()).step_by(3) {
+            for index in 0..model.mesh.indices.len()/3 {
                 let mut with_normal = true;
                 let mut with_texcoord = true;
                 let mut vertex = [Vec3::default(); 3];
@@ -47,18 +49,18 @@ impl RenderResourceBase {
                 let mut uv = [Vec2::default(); 3];
                 for i in 0..3 {
                     vertex[i] = Vec3::new(
-                        model.mesh.positions[model.mesh.indices[(index + i) * 3 + 0] as usize],
-                        model.mesh.positions[model.mesh.indices[(index + i) * 3 + 1] as usize],
-                        model.mesh.positions[model.mesh.indices[(index + i) * 3 + 2] as usize],
+                        model.mesh.positions[model.mesh.indices[index * 3 + i] as usize * 3 + 0],
+                        model.mesh.positions[model.mesh.indices[index * 3 + i] as usize * 3 + 1],
+                        model.mesh.positions[model.mesh.indices[index * 3 + i] as usize * 3 + 2],
                     );
 
                     bounding_box.merge(&vertex[i]);
 
                     if !model.mesh.normals.is_empty() {
                         normal[i] = Vec3::new(
-                            model.mesh.normals[model.mesh.normal_indices[(index + i) * 3 + 0] as usize],
-                            model.mesh.normals[model.mesh.normal_indices[(index + i) * 3 + 1] as usize],
-                            model.mesh.normals[model.mesh.normal_indices[(index + i) * 3 + 2] as usize],
+                            model.mesh.normals[model.mesh.normal_indices[index * 3 + i] as usize * 3 + 0],
+                            model.mesh.normals[model.mesh.normal_indices[index * 3 + i] as usize * 3 + 1],
+                            model.mesh.normals[model.mesh.normal_indices[index * 3 + i] as usize * 3 + 2],
                         );
                     } else {
                         with_normal = false;

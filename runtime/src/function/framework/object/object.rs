@@ -1,26 +1,56 @@
+use std::{cell::RefCell, rc::{Rc, Weak}};
+
 use reflection::reflection::ReflectionPtr;
 
-use crate::function::framework::{component::component::ComponentTrait, object::object_id_allocator::GObjectID};
+use crate::{function::framework::{component::component::ComponentTrait, level::level::Level, object::object_id_allocator::GObjectID}, resource::res_type::common::object::ObjectInstanceRes};
 
 pub struct GObject {
+    m_parent_level: Weak<RefCell<Level>>,
     m_id: GObjectID,
     m_name: String,
     m_definition_url: String,
-    m_components: Vec<ReflectionPtr<Box<dyn ComponentTrait>>>,
 }
 
 impl GObject {
-
     pub fn get_id(&self) -> GObjectID {
         self.m_id
     }
-    pub fn try_get_component<T: ComponentTrait>(&self, component_type_name: &str) -> Option<&mut Box<T>> {
-        for component in &self.m_components {
-            if component.get_type_name() == component_type_name {
-                let res = component.get_ptr() as *mut Box<T>;
-                return Some(unsafe { &mut *res });
-            }
-        }
-        None
+
+    pub fn set_name(&mut self, name: &str) {
+        self.m_name = name.to_string();
+    }
+
+    pub fn get_name(&self) -> &str {
+        self.m_name.as_str()
+    }
+
+}
+
+pub struct WrappedGObject(Rc<RefCell<GObject>>);
+
+impl std::ops::Deref for WrappedGObject {
+    type Target = Rc<RefCell<GObject>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for WrappedGObject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl WrappedGObject {
+
+    pub fn new(id: GObjectID, parent_level: &Rc<RefCell<Level>>) -> Self {
+        Self(
+            Rc::new(RefCell::new(GObject {
+                m_parent_level: Rc::downgrade(parent_level),
+                m_id: id,
+                m_name: String::new(),
+                m_definition_url: String::new(),
+            }))
+        )
     }
 }

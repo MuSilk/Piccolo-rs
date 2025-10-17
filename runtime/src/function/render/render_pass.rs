@@ -1,8 +1,8 @@
-use std::{cell::RefCell, rc::{Rc, Weak}};
+use std::{cell::{LazyCell, RefCell}, rc::{Rc, Weak}};
 
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{ render_pass_base::{RenderPassBase, RenderPassCommonInfo, RenderPassCreateInfo}, render_resource::GlobalRenderResource};
+use crate::function::render::{ render_common::RenderMeshNode, render_pass_base::{RenderPassBase, RenderPassCommonInfo, RenderPassCreateInfo}, render_resource::GlobalRenderResource};
 
 pub const _MAIN_CAMERA_PASS_GBUFFER_A: usize = 0;
 pub const _MAIN_CAMERA_PASS_GBUFFER_B: usize = 1;
@@ -26,6 +26,14 @@ pub const _MAIN_CAMERA_SUBPASS_FXAA: u32 = 5;
 pub const _MAIN_CAMERA_SUBPASS_UI: u32 = 6;
 pub const _MAIN_CAMERA_SUBPASS_COMBINE_UI: u32 = 7;
 pub const _MAIN_CAMERA_SUBPASS_COUNT: u32 = 8;
+
+#[derive(Default)]
+pub struct VisiableNodes {
+    pub p_directional_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
+    pub p_point_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
+    pub p_main_camera_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
+    // p_axis_node: RenderAxisNode,
+}
 
 #[derive(Default,Clone, Copy)]
 pub struct FrameBufferAttachment{
@@ -55,6 +63,9 @@ pub struct RenderPipelineBase{
     pub pipeline: vk::Pipeline,
 }
 
+pub static mut M_VISIABLE_NODES: LazyCell<RefCell<VisiableNodes>> = LazyCell::new(||RefCell::new(VisiableNodes::default()));
+
+
 #[derive(Default)]
 pub struct RenderPass{
     pub m_base : RenderPassBase,
@@ -72,7 +83,7 @@ impl RenderPass{
         self.m_base.m_render_resource = Rc::downgrade(common_info.render_resource);
     }
 
-    pub fn create(info: &RenderPassCreateInfo) -> Self{
+    pub fn create(_info: &RenderPassCreateInfo) -> Self{
         Self {
             ..Default::default()
         }
@@ -87,5 +98,10 @@ impl RenderPass{
     pub fn get_descriptor_set_layouts(&self) -> Vec<vk::DescriptorSetLayout> {
         self.m_descriptor_infos.iter()
             .map(|descriptor| descriptor.layout).collect::<Vec<_>>()
+    }
+
+    #[allow(static_mut_refs)]
+    pub fn m_visiable_nodes() -> &'static RefCell<VisiableNodes>{
+        unsafe { &M_VISIABLE_NODES }
     }
 } 

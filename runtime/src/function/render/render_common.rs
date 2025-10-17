@@ -1,4 +1,4 @@
-use std::array;
+use std::{array, cell::RefCell, rc::{Weak}};
 
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
@@ -42,17 +42,17 @@ pub struct MeshPerframeStorageBufferObject {
 #[repr(C)]
 #[derive(Clone, Default)]
 pub struct VulkanMeshInstance {
-    enable_vertex_blending: f32,
-    _padding_enable_vertex_blending_1: f32,
-    _padding_enable_vertex_blending_2: f32,
-    _padding_enable_vertex_blending_3: f32,
-    model_matrix: Mat4,
+    pub enable_vertex_blending: f32,
+    pub _padding_enable_vertex_blending_1: f32,
+    pub _padding_enable_vertex_blending_2: f32,
+    pub _padding_enable_vertex_blending_3: f32,
+    pub model_matrix: Mat4,
 }
 
 #[repr(C)]
 #[derive(Clone)]
 pub struct MeshPerdrawcallStorageBufferObject {
-    mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+    pub mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
 }
 
 impl Default for MeshPerdrawcallStorageBufferObject {
@@ -73,19 +73,29 @@ pub struct VulkanMesh {
     pub mesh_vertex_position_buffer: vk::Buffer,
     pub mesh_vertex_position_buffer_allocation: vk::DeviceMemory,
 
-    mesh_vertex_varying_enable_blending_buffer: vk::Buffer,
-    mesh_vertex_varying_enable_blending_buffer_allocation: vk::DeviceMemory,
+    pub mesh_vertex_varying_enable_blending_buffer: vk::Buffer,
+    pub mesh_vertex_varying_enable_blending_buffer_allocation: vk::DeviceMemory,
 
-    mesh_vertex_joint_binding_buffer: vk::Buffer,
-    mesh_vertex_joint_binding_buffer_allocation: vk::DeviceMemory,
+    pub mesh_vertex_joint_binding_buffer: vk::Buffer,
+    pub mesh_vertex_joint_binding_buffer_allocation: vk::DeviceMemory,
 
-    mesh_vertex_blending_descriptor_set: vk::DescriptorSet,
+    pub mesh_vertex_blending_descriptor_set: vk::DescriptorSet,
 
-    mesh_vertex_varying_buffer: vk::Buffer,
-    mesh_vertex_varying_buffer_allocation: vk::DeviceMemory,
+    pub mesh_vertex_varying_buffer: vk::Buffer,
+    pub mesh_vertex_varying_buffer_allocation: vk::DeviceMemory,
 
     pub mesh_index_count: u32,
 
     pub mesh_index_buffer: vk::Buffer,
     pub mesh_index_buffer_allocation: vk::DeviceMemory,
+}
+
+#[derive(Clone, Default)]
+pub struct RenderMeshNode {
+    pub model_matrix: Mat4,
+    pub joint_matrices: Vec<Mat4>,
+    pub ref_mesh: Weak<VulkanMesh>,
+    // pub ref_material: Rc<RefCell<VulkanPBRMaterial>>,
+    pub node_id: u32,
+    pub enable_vertex_blending: bool,
 }

@@ -1,10 +1,12 @@
+use std::cell::RefCell;
+
 use nalgebra_glm::Mat4;
 use reflection::reflection_derive::ReflectWhiteListFields;
 
 use crate::{core::math::transform::Transform, function::framework::component::component::{Component, ComponentTrait}};
 
 
-#[derive(ReflectWhiteListFields)]
+#[derive(Clone, Default, ReflectWhiteListFields)]
 pub struct TransformComponent {
     m_component: Component,
     #[meta]

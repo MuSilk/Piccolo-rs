@@ -8,7 +8,7 @@ enum PrimitiveType {
 }
 
 #[derive(Default)]
-struct RawVertexBuffer {
+pub struct RawVertexBuffer {
     vertex_count: u32,
     positions: Vec<f32>,
     normals: Vec<f32>,
@@ -17,14 +17,14 @@ struct RawVertexBuffer {
 }
 
 #[derive(Default)]
-struct RawIndexBuffer {
+pub struct RawIndexBuffer {
     primitive_type: PrimitiveType,
     primitive_count: u32,
     indices: Vec<u32>,
 }
 
 #[derive(Default)]
-struct MaterialTexture {
+pub struct MaterialTexture {
     base_color: String,
     metalloc_roughness: String,
     normal: String,

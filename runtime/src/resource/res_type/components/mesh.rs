@@ -2,14 +2,14 @@ use reflection::reflection_derive::ReflectFields;
 
 use crate::core::math::transform::Transform;
 
-#[derive(ReflectFields, Clone)]
-struct SubMeshRes {
-    m_obj_file_ref: String,
-    m_transform: Transform,
-    m_material: String,
+#[derive(ReflectFields, Clone, Default)]
+pub struct SubMeshRes {
+    pub m_obj_file_ref: String,
+    pub m_transform: Transform,
+    pub m_material: String,
 }
 
-#[derive(ReflectFields, Clone)]
+#[derive(ReflectFields, Clone, Default)]
 pub struct MeshComponentRes {
-    m_sub_meshs: Vec<SubMeshRes>,
+    pub m_sub_meshs: Vec<SubMeshRes>,
 }

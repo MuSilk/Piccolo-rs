@@ -427,6 +427,12 @@ impl VulkanRHI {
         }
     }
 
+    pub fn cmd_bind_index_buffer(&self, command_buffer: vk::CommandBuffer, buffer: vk::Buffer, offset: vk::DeviceSize, index_type: vk::IndexType) {
+        unsafe {
+            self.m_device.cmd_bind_index_buffer(command_buffer, buffer, offset, index_type);
+        }
+    }
+    
     pub fn cmd_bind_descriptor_sets(&self, command_buffer: vk::CommandBuffer, pipeline_bind_point: vk::PipelineBindPoint, layout: vk::PipelineLayout, first_set: u32, descriptor_sets: &[vk::DescriptorSet], dynamic_offsets: &[u32]) {
         unsafe {
             self.m_device.cmd_bind_descriptor_sets(
@@ -447,6 +453,19 @@ impl VulkanRHI {
                 vertex_count, 
                 instance_count, 
                 first_vertex, 
+                first_instance,
+            );
+        }
+    }
+
+    pub fn cmd_draw_indexed(&self, command_buffer: vk::CommandBuffer, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32){
+        unsafe {
+            self.m_device.cmd_draw_indexed(
+                command_buffer, 
+                index_count, 
+                instance_count, 
+                first_index, 
+                vertex_offset, 
                 first_instance,
             );
         }

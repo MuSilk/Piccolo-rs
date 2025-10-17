@@ -1,11 +1,11 @@
-use std::{cell::RefCell, rc::{Rc, Weak}};
+use std::{cell::RefCell, rc::{Rc}};
 
 use bitflags::bitflags;
-use nalgebra_glm::{Vec2, Vec3, Vec4};
+use nalgebra_glm::{Vec2, Vec3};
 use runtime::{engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
 use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{editor::{self, editor::Editor, editor_global_context::EditorGlobalContext}};
+use crate::{editor::{editor_global_context::EditorGlobalContext}};
 
 bitflags! {
     #[repr(transparent)]
@@ -166,7 +166,7 @@ impl WrappedEditorInputManager {
         self.register_input();
     }
 
-    pub fn tick(&self,delta_time: f32) {
+    pub fn tick(&self, _delta_time: f32) {
         self.process_editor_command();
     }
 }

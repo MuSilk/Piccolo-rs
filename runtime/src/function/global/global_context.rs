@@ -3,10 +3,12 @@ use std::{cell::{RefCell}, path::Path, rc::Rc};
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{function::render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, resource::config_manager::ConfigManager};
+use crate::{function::{framework::world::world_manager::WorldManager, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
+    pub m_asset_manager: Rc<RefCell<AssetManager>>,
     pub m_config_manager: Rc<RefCell<ConfigManager>>,
+    pub m_world_manager: Rc<RefCell<WorldManager>>,
     pub m_window_system: Rc<RefCell<WindowSystem>>,
     pub m_render_system: Rc<RefCell<RenderSystem>>,
     pub m_debugdraw_manager: Rc<RefCell<DebugDrawManager>>,
@@ -18,14 +20,6 @@ unsafe impl Send for RuntimeGlobalContext {}
 unsafe impl Sync for RuntimeGlobalContext {}
 
 impl RuntimeGlobalContext {
-
-    pub fn isinitialized() -> bool {
-        unsafe{
-            #[allow(static_mut_refs)]
-            G_RUNTIME_GLOBAL_CONTEXT.is_some()
-        }
-    }
-
     pub fn global() -> &'static RefCell<Self> {
         unsafe{
             #[allow(static_mut_refs)]
@@ -35,6 +29,9 @@ impl RuntimeGlobalContext {
     pub fn start_systems(event_loop: &ActiveEventLoop, config_file_path: &Path) -> Result<()> {
         let mut config_manager = ConfigManager::default();
         config_manager.initialize(config_file_path);
+
+        let mut world_manager = WorldManager::default();
+        world_manager.initialize(&config_manager.get_default_world_url());
 
         let mut window_system = WindowSystem::default();
         window_system.initialize(event_loop, WindowCreateInfo::default())?;
@@ -50,7 +47,9 @@ impl RuntimeGlobalContext {
 
         unsafe{
             G_RUNTIME_GLOBAL_CONTEXT = Some(RefCell::new(RuntimeGlobalContext {
+                m_asset_manager: Rc::new(RefCell::new(AssetManager::default())),
                 m_config_manager: Rc::new(RefCell::new(config_manager)),
+                m_world_manager: Rc::new(RefCell::new(world_manager)),
                 m_window_system: Rc::new(RefCell::new(window_system)),
                 m_render_system: Rc::new(RefCell::new(render_system)),
                 m_debugdraw_manager: Rc::new(RefCell::new(debugdraw_manager))

@@ -50,7 +50,7 @@ layout(location = 2) out vec3 out_tangent;
 layout(location = 3) out vec2 out_texcoord;
 
 void main() {
-    gl_Position = proj_view_matrix * vec4(in_position, 1.0);
+    gl_Position = proj_view_matrix * mesh_instances[gl_InstanceIndex].model_matrix  * vec4(in_position, 1.0);
     out_world_position = in_position;
     out_normal = in_normal;
     out_tangent = in_tangent;

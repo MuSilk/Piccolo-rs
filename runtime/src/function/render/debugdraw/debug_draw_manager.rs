@@ -4,7 +4,7 @@ use anyhow::Result;
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::{FillMode, K_DEBUG_DRAW_ONE_FRAME}}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource};
+use crate::function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::{K_DEBUG_DRAW_ONE_FRAME}}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource};
 
 pub struct DebugDrawManagerCreateInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,

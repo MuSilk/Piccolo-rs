@@ -1,4 +1,4 @@
-use std::{cell::LazyCell, collections::HashMap, os::raw::c_void};
+use std::{cell::{LazyCell}, collections::HashMap, os::raw::c_void};
 
 pub type SetFunction = fn(*mut c_void, *const c_void);
 pub type GetFunction = fn(*const c_void) -> *const c_void;
@@ -122,36 +122,61 @@ impl ReflectionInstance {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct ReflectionPtr<T> {
+#[derive(Default)]
+pub struct ReflectionPtr<T: ?Sized> {
     m_type_name: &'static str,
-    m_instance: *mut T,
+    m_instance: Box<T>,
 }
 
-impl<T> ReflectionPtr<T> {
-    pub fn new(type_name: &'static str, instance: *mut T) -> Self {
+impl<T: ?Sized> ReflectionPtr<T> {
+
+    pub fn new(type_name: &'static str, instance: Box<T>) -> Self
+    {
         Self {
             m_type_name: type_name,
             m_instance: instance,
         }
     }
-
-    pub fn cast<U>(&self) -> ReflectionPtr<U> {
-        ReflectionPtr {
-            m_type_name: self.m_type_name,
-            m_instance: self.m_instance as *mut U,
-        }
-    }
-
-    pub fn get_ptr(&self) -> *mut T {
-        self.m_instance
-    }
-
     pub fn get_type_name(&self) -> &'static str {
         self.m_type_name
     }
 
     pub fn set_type_name(&mut self, type_name: &'static str) {
         self.m_type_name = type_name;
+    }
+
+    pub fn downcast_ref<U>(&self) -> Option<&U> {
+        // if self.m_type_name == std::any::type_name::<U>() {
+            unsafe {
+                Some(&*(self.m_instance.as_ref() as *const T as *const U))
+            }
+        // } else {
+        //     None
+        // }
+    }
+
+    pub fn downcast_mut<U>(&mut self) -> Option<&mut U> {
+        // if self.m_type_name == std::any::type_name::<U>() {
+            unsafe {
+                Some(&mut *(self.m_instance.as_mut() as *mut T as *mut U))
+            }
+        // } else {
+        //     None
+        // }
+    }
+}
+
+
+impl<T: ?Sized> std::ops::Deref for ReflectionPtr<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.m_instance
+    }
+}
+
+impl<T: ?Sized> std::ops::DerefMut for ReflectionPtr<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.m_instance
     }
 }

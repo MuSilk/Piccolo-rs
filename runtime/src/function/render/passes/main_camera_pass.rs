@@ -6,7 +6,7 @@ use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use nalgebra_glm::Vec3;
+use nalgebra_glm::{Mat4, Vec3};
 use vulkanalia::{prelude::v1_0::*};
 
 pub struct MainCameraPassInitInfo<'a> {
@@ -151,7 +151,7 @@ impl MainCameraPass {
         let color = [1.0;4];
         rhi.push_event(command_buffer, "BasePass", color);
 
-        self.draw_object()?;
+        self.draw_mesh_gbuffer()?;
 
         rhi.pop_event(command_buffer);
 
@@ -557,7 +557,7 @@ impl MainCameraPass {
         Ok(())
     }
     
-    fn draw_object(&self) -> Result<()> {
+    fn draw_mesh_gbuffer(&self) -> Result<()> {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
@@ -603,17 +603,47 @@ impl MainCameraPass {
             ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
                 perdrawcall_dynamic_offset + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
 
-        rhi.cmd_bind_descriptor_sets(
-            command_buffer, 
-            vk::PipelineBindPoint::GRAPHICS, 
-            self.m_render_pass.m_render_pipeline[0].layout,
-            0,
-            &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
-            &[perframe_dynamic_offset, perdrawcall_dynamic_offset],
-        );
-        
-        rhi.cmd_bind_vertex_buffers(command_buffer, 0, &[self.t_test_triangle_buffer], &[0]);
-        rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
+        let m_visiable_nodes = RenderPass::m_visiable_nodes().borrow();
+
+
+        for render_mesh_node in m_visiable_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap().borrow().iter() {
+            let mut object = MeshPerdrawcallStorageBufferObject::default();
+            object.mesh_instances[0].model_matrix = render_mesh_node.model_matrix.clone();
+
+            unsafe{
+                std::ptr::copy_nonoverlapping(
+                    &object as *const _ as *const c_void,
+                    self.m_render_pass.m_global_render_resource.upgrade().unwrap().borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
+                    std::mem::size_of::<MeshPerdrawcallStorageBufferObject>()
+                );
+            }
+
+            rhi.cmd_bind_descriptor_sets(
+                command_buffer, 
+                vk::PipelineBindPoint::GRAPHICS, 
+                self.m_render_pass.m_render_pipeline[0].layout,
+                0,
+                &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
+                &[perframe_dynamic_offset, perdrawcall_dynamic_offset],
+            );
+
+            let buffers = [
+                render_mesh_node.ref_mesh.upgrade().unwrap().mesh_vertex_position_buffer,
+                render_mesh_node.ref_mesh.upgrade().unwrap().mesh_vertex_varying_enable_blending_buffer,
+                render_mesh_node.ref_mesh.upgrade().unwrap().mesh_vertex_varying_buffer,
+            ];
+            
+            rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0,0,0]);
+            rhi.cmd_bind_index_buffer(command_buffer, render_mesh_node.ref_mesh.upgrade().unwrap().mesh_index_buffer, 0, vk::IndexType::UINT16);
+            rhi.cmd_draw_indexed(
+                command_buffer, 
+                render_mesh_node.ref_mesh.upgrade().unwrap().mesh_index_count, 
+                1, 
+                0, 
+                0, 
+                0
+            );
+        }
         Ok(())
     }
 }

@@ -54,17 +54,23 @@ impl Engine {
     pub fn tick_one_frame(&mut self, delta_time: f32) -> Result<bool> {
         let ctx = RuntimeGlobalContext::global().borrow();
         ctx.m_render_system.borrow_mut().swap_logic_render_data();
-        self.renderer_tick(delta_time)?;
+        Self::logical_tick(delta_time);
+        Self::renderer_tick(delta_time)?;
         Ok(!ctx.m_window_system.borrow().should_close())
     }
 }
 
 impl Engine {
-    fn renderer_tick(&mut self, delta_time: f32) -> Result<()>{
+    fn renderer_tick(delta_time: f32) -> Result<()>{
         let ctx = RuntimeGlobalContext::global().borrow();
         let mut render_system = ctx.m_render_system.borrow_mut();
         render_system.tick(delta_time)?;
         Ok(())
+    }
+
+    fn logical_tick(delta_time: f32) {
+        let ctx = RuntimeGlobalContext::global().borrow();
+        ctx.m_world_manager.borrow_mut().tick(delta_time);
     }
 
     const S_FPS_ALPHA: f32 = 1.0 / 100.0;
