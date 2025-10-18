@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::{RenderResource}, render_scene::{RenderScene}, render_swap_context::{RenderSwapContext}, render_type::{MeshSourceDesc, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::RenderSwapContext, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -43,6 +43,9 @@ impl RenderSystem {
             render_resource: &render_resource,
         };
         let render_pipeline = RenderPipeline::create(&create_info)?;
+
+        render_resource.borrow_mut().m_material_descriptor_set_layout = 
+            render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[1].layout;
 
         Ok(Self {
             m_rhi: vulkan_rhi, 
@@ -160,9 +163,30 @@ impl RenderSystem {
                         }
 
                         //todo material
+                        let mut material_source = MaterialSourceDesc::default();
+                        if game_object_part.m_material_desc.m_with_texture {
+                            //todo
+                        }
+                        else{
+                            material_source.m_base_color_file = "asset/texture/default/albedo.jpg".to_string();
+                            material_source.m_metallic_roughness_file = "asset/texture/default/mr.jpg".to_string();
+                            material_source.m_normal_file = "asset/texture/default/normal.jpg".to_string();
+                        }
+                        let is_material_loaded = self.m_render_scene.get_material_asset_id_allocator().has_element(&material_source);
+                        
+                        let mut material_data = RenderMaterialData::default();
+                        if !is_material_loaded {
+                            material_data = RenderResourceBase::load_material_data(&material_source);
+                        }
+
+                        render_entity.m_material_asset_id = self.m_render_scene.get_material_asset_id_allocator().alloc_guid(&material_source);
 
                         if !is_mesh_loaded {
-                            self.m_render_resource.borrow_mut().upload_game_object_render_resource(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                            self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                        }
+
+                        if !is_material_loaded {
+                            self.m_render_resource.borrow_mut().upload_game_object_render_resource_material(&self.m_rhi.borrow(), &render_entity, &material_data);
                         }
 
                         if !is_entity_in_scene {

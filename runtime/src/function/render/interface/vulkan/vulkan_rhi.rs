@@ -1,4 +1,4 @@
-use std::{cell::OnceCell, collections::HashSet, ffi::CStr, fmt::Debug, os::raw::c_void, rc::{Rc, Weak}};
+use std::{cell::{OnceCell, RefCell}, collections::{HashMap, HashSet}, ffi::CStr, fmt::Debug, os::raw::c_void, rc::{Rc, Weak}};
 
 use anyhow::{anyhow, Result};
 use vulkanalia::{loader::{LibloadingLoader, LIBRARY}, prelude::v1_0::*, vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension}, window::{self as vk_window}, Version};
@@ -74,7 +74,7 @@ pub struct VulkanRHIData {
 
     m_linear_sampler: OnceCell<vk::Sampler>,
     m_nearest_sampler: OnceCell<vk::Sampler>,
-    // _m_mipmap_sampler_map: HashMap<u32, Box<dyn RHISampler>>,
+    m_mipmap_sampler_map: RefCell<HashMap<u32, vk::Sampler>>,
 
     m_enable_validation_layers: bool,
     m_enable_debug_utils_label: bool,
@@ -284,6 +284,40 @@ impl VulkanRHI {
         }
     }
 
+    pub fn get_or_create_mipmap_sampler(&self, width: u32, height: u32) -> Result<vk::Sampler> {
+        let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
+        if let Some(sampler) = self.m_data.m_mipmap_sampler_map.borrow().get(&mip_levels) {
+            return Ok(*sampler);
+        }
+
+        let physical_device_properties = unsafe {
+            self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)
+        };
+        let sampler_info = vk::SamplerCreateInfo::builder()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::REPEAT)
+            .address_mode_v(vk::SamplerAddressMode::REPEAT)
+            .address_mode_w(vk::SamplerAddressMode::REPEAT)
+            .anisotropy_enable(true)
+            .max_anisotropy(physical_device_properties.limits.max_sampler_anisotropy)
+            .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+            .unnormalized_coordinates(false)
+            .compare_enable(false)
+            .compare_op(vk::CompareOp::ALWAYS)
+            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .mip_lod_bias(0.0)
+            .min_lod(0.0)
+            .max_lod((mip_levels - 1) as f32);
+
+        let sampler = unsafe {
+            self.m_device.create_sampler(&sampler_info, None)?
+        };
+        
+        self.m_data.m_mipmap_sampler_map.borrow_mut().insert(mip_levels, sampler);
+        Ok(sampler)
+    }
+
     pub fn create_shader_module(&self, data: &[u8]) -> Result<vk::ShaderModule> {
         let shader_module = vulkan_util::create_shader_module(&self.m_device, data)?;
         Ok(shader_module)
@@ -345,6 +379,7 @@ impl VulkanRHI {
         )
     }
 
+    //mip_levels: 0 means auto
     pub fn create_texture_image(&self, width: u32, height: u32, pixels: &[u8], format: vk::Format, mip_levels: u32) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
         Ok(vulkan_util::create_texture_image(
             self,
@@ -403,6 +438,7 @@ impl VulkanRHI {
             self.m_device.cmd_next_subpass(command_buffer, contents);
         }
     }
+    
     pub fn cmd_bind_pipeline(&self, command_buffer: vk::CommandBuffer, pipeline_bind_point: vk::PipelineBindPoint, pipeline: vk::Pipeline) {
         unsafe{
             self.m_device.cmd_bind_pipeline(command_buffer, pipeline_bind_point, pipeline);

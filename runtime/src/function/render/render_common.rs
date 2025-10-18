@@ -1,4 +1,4 @@
-use std::{array, cell::RefCell, rc::{Weak}};
+use std::{array, rc::{Weak}};
 
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
@@ -63,6 +63,19 @@ impl Default for MeshPerdrawcallStorageBufferObject {
     }
 }
 
+#[repr(C)]
+pub struct MeshPerMaterialUniformBufferObject {
+    pub base_color_factor: Vec4,
+
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
+    pub normal_scale: f32,
+    pub occlusion_strength: f32,
+
+    pub emissive_factor: Vec3,
+    pub is_blend: u32,
+    pub id_double_sided: u32,
+}
 
 #[derive(Clone, Default)]
 pub struct VulkanMesh {
@@ -90,12 +103,69 @@ pub struct VulkanMesh {
     pub mesh_index_buffer_allocation: vk::DeviceMemory,
 }
 
+#[derive(Default)]
+pub struct VulkanPBRMaterial {
+    pub base_color_texture_image: vk::Image,
+    pub base_color_image_view: vk::ImageView,
+    pub base_color_image_allocation: vk::DeviceMemory,
+
+    pub metallic_roughness_texture_image: vk::Image,
+    pub metallic_roughness_image_view: vk::ImageView,
+    pub metallic_roughness_image_allocation: vk::DeviceMemory,
+
+    pub normal_texture_image: vk::Image,
+    pub normal_image_view: vk::ImageView,
+    pub normal_image_allocation: vk::DeviceMemory,
+
+    pub occlusion_texture_image: vk::Image,
+    pub occlusion_image_view: vk::ImageView,
+    pub occlusion_image_allocation: vk::DeviceMemory,
+
+    pub emissive_texture_image: vk::Image,
+    pub emissive_image_view: vk::ImageView,
+    pub emissive_image_allocation: vk::DeviceMemory,
+
+    pub material_uniform_buffer: vk::Buffer,
+    pub material_uniform_buffer_allocation: vk::DeviceMemory,
+
+    pub material_descriptor_set: vk::DescriptorSet,
+}
+
 #[derive(Clone, Default)]
 pub struct RenderMeshNode {
     pub model_matrix: Mat4,
     pub joint_matrices: Vec<Mat4>,
     pub ref_mesh: Weak<VulkanMesh>,
-    // pub ref_material: Rc<RefCell<VulkanPBRMaterial>>,
+    pub ref_material: Weak<VulkanPBRMaterial>,
     pub node_id: u32,
     pub enable_vertex_blending: bool,
+}
+
+pub struct TextureDataToUpdate<'a>{
+    pub base_color_image_pixels: &'a [u8],
+    pub base_color_image_width: u32,
+    pub base_color_image_height: u32,
+    pub base_color_image_format: vk::Format,
+
+    pub metallic_roughness_image_pixels: &'a [u8],
+    pub metallic_roughness_image_width: u32,
+    pub metallic_roughness_image_height: u32,
+    pub metallic_roughness_image_format: vk::Format,
+
+    pub normal_roughness_image_pixels: &'a [u8],
+    pub normal_roughness_image_width: u32,
+    pub normal_roughness_image_height: u32,
+    pub normal_roughness_image_format: vk::Format,
+
+    pub occlusion_image_pixels: &'a [u8],
+    pub occlusion_image_width: u32,
+    pub occlusion_image_height: u32,
+    pub occlusion_image_format: vk::Format,
+
+    pub emissive_image_pixels: &'a [u8],
+    pub emissive_image_width: u32,
+    pub emissive_image_height: u32,
+    pub emissive_image_format: vk::Format,
+
+    pub now_material: &'a mut VulkanPBRMaterial,
 }

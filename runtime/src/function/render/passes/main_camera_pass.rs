@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, os::raw::c_void, rc::Rc, slice};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC}, passes::combine_ui_pass::CombineUIPass, render_common::{MeshPerdrawcallStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::{MeshVertex, VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_pass::{RenderPass, RenderPipelineBase, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_resource::RenderResource}, shader::generated::shader::{MESH_GBUFFER_FRAG, MESH_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER}, passes::combine_ui_pass::CombineUIPass, render_common::{MeshPerdrawcallStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::{MeshVertex, VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_pass::{RenderPass, RenderPipelineBase, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_resource::RenderResource}, shader::generated::shader::{MESH_GBUFFER_FRAG, MESH_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -167,8 +167,12 @@ impl MainCameraPass {
 
 // #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
 // static STORAGE_BUFFER_COUNT: u32 = 1;
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER)]
+static UNIFORM_BUFFER_COUNT: u32 = 1;
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC)]
 static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 2;
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
+static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 5;
 
 impl MainCameraPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
@@ -388,7 +392,7 @@ impl MainCameraPass {
 
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
         // self.m_render_pass.m_descriptor_infos.resize_with(LayoutType::LayoutTypeCount as usize, Default::default);
-        self.m_render_pass.m_descriptor_infos.resize_with(1, Default::default);
+        self.m_render_pass.m_descriptor_infos.resize_with(2, Default::default);
         {
             let mesh_global_layout_bindings = [
                 vk::DescriptorSetLayoutBinding::builder()
@@ -408,6 +412,50 @@ impl MainCameraPass {
                 .bindings(&mesh_global_layout_bindings)
                 .build();
             self.m_render_pass.m_descriptor_infos[0].layout = rhi.create_descriptor_set_layout(&create_info)?;
+        }
+        {
+            let mesh_material_layout_bindings = [
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(2)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(3)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(4)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(5)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                    .build(),
+            ];
+            let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&mesh_material_layout_bindings)
+                .build();
+            self.m_render_pass.m_descriptor_infos[1].layout = rhi.create_descriptor_set_layout(&create_info)?;
         }
         Ok(())
     }
@@ -475,7 +523,10 @@ impl MainCameraPass {
         let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
             .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
-        let set_layouts = &self.m_render_pass.get_descriptor_set_layouts();
+        let set_layouts = &[
+            self.m_render_pass.m_descriptor_infos[0].layout,
+            self.m_render_pass.m_descriptor_infos[1].layout,
+        ];
         let layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(set_layouts);
 
@@ -623,7 +674,10 @@ impl MainCameraPass {
                 vk::PipelineBindPoint::GRAPHICS, 
                 self.m_render_pass.m_render_pipeline[0].layout,
                 0,
-                &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
+                &[
+                    self.m_render_pass.m_descriptor_infos[0].descriptor_set,
+                    render_mesh_node.ref_material.upgrade().unwrap().material_descriptor_set,
+                ],
                 &[perframe_dynamic_offset, perdrawcall_dynamic_offset],
             );
 

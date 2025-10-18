@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::function::{framework::object::object_id_allocator::GObjectID, render::{render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::MeshSourceDesc}};
+use crate::function::{framework::object::object_id_allocator::GObjectID, render::{render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}};
 
 
 
@@ -13,6 +13,7 @@ pub struct RenderScene{
 
     m_instance_id_allocator: GuidAllocator<GameObjectPartId>,
     m_mesh_asset_id_allocator: GuidAllocator<MeshSourceDesc>,
+    m_material_asset_id_allocator: GuidAllocator<MaterialSourceDesc>,
 
     m_mesh_object_id_map: HashMap<u32, GObjectID>,
 }
@@ -27,6 +28,7 @@ impl RenderScene {
         RenderPass::m_visiable_nodes().borrow_mut().p_main_camera_visible_mesh_nodes = 
             Rc::downgrade(&self.m_main_camera_visible_mesh_nodes);
     }
+    
     pub fn get_instance_id_allocator(&mut self) -> &mut GuidAllocator<GameObjectPartId> {
         &mut self.m_instance_id_allocator
     }
@@ -35,6 +37,10 @@ impl RenderScene {
         &mut self.m_mesh_asset_id_allocator
     }
 
+    pub fn get_material_asset_id_allocator(&mut self) -> &mut GuidAllocator<MaterialSourceDesc> {
+        &mut self.m_material_asset_id_allocator
+    }
+    
     pub fn add_instance_id_to_map(&mut self, instance_id: u32, go_id: GObjectID) {
         self.m_mesh_object_id_map.insert(instance_id, go_id);
     }
@@ -52,6 +58,9 @@ impl RenderScene {
             let mesh_asset = render_resource.get_entity_mesh(entity);
             temp_node.ref_mesh = Rc::downgrade(mesh_asset);
             temp_node.enable_vertex_blending = entity.m_enable_vertex_blending;
+
+            let material_asset = render_resource.get_entity_material(entity);
+            temp_node.ref_material = Rc::downgrade(material_asset);
 
             self.m_main_camera_visible_mesh_nodes.borrow_mut().push(temp_node);
         }

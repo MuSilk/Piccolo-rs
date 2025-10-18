@@ -1,8 +1,9 @@
-use std::{collections::HashMap, fs::File, io::BufReader, path::PathBuf};
+use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::PathBuf};
 
+use vulkanalia::prelude::v1_0::*;
 use nalgebra_glm::{Vec2, Vec3};
 
-use crate::{core::math::axis_aligned::AxisAlignedBox, function::{render::render_type::{MeshSourceDesc, MeshVertexDataDefinition, RenderMeshData, StaticMeshData}}};
+use crate::{core::math::axis_aligned::AxisAlignedBox, function::{global::global_context::RuntimeGlobalContext, render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}, resource::asset_manager};
 
 
 #[derive(Clone, Default)]
@@ -11,6 +12,30 @@ pub struct RenderResourceBase{
 }
 
 impl RenderResourceBase {
+
+    fn load_texture(file: &str, is_srgb: bool) -> Option<TextureData> {
+        let global = RuntimeGlobalContext::global().borrow();
+        let asset_manager = global.m_asset_manager.borrow();
+
+        let image = image::open(asset_manager.get_full_path(file)).ok()?;
+        let image = image.to_rgba8();
+
+        let mut texture = TextureData::default();
+        texture.m_pixels = image.bytes().map(|byte| byte.unwrap()).collect::<Vec<_>>();
+        texture.m_width = image.width();
+        texture.m_height = image.height();
+        texture.m_format = if is_srgb {
+            vk::Format::R8G8B8A8_SRGB
+        } else {
+            vk::Format::R8G8B8A8_UNORM
+        };
+        texture.m_depth = 1;
+        texture.m_array_layers = 1;
+        texture.m_mip_levels = 1;
+        texture.m_type = ImageType::_2D;
+
+        Some(texture)
+    }
 
     pub fn load_mesh_data(&mut self, source: &MeshSourceDesc, bounding_box: &mut AxisAlignedBox) -> RenderMeshData {
         let mut ret = RenderMeshData::default();
@@ -23,6 +48,16 @@ impl RenderResourceBase {
 
         self.m_bounding_box_cache_map.insert(source.clone(), bounding_box.clone());
 
+        ret
+    }
+
+    pub fn load_material_data(source: &MaterialSourceDesc) -> RenderMaterialData {
+        let mut ret = RenderMaterialData::default();
+        ret.m_base_color_texture = Self::load_texture(&source.m_base_color_file, true);
+        ret.m_metallic_roughness_texture = Self::load_texture(&source.m_metallic_roughness_file, false);
+        ret.m_normal_texture = Self::load_texture(&source.m_normal_file, false);
+        ret.m_occlusion_texture = Self::load_texture(&source.m_occlusion_file, false);
+        ret.m_emissive_texture = Self::load_texture(&source.m_emissive_file, false);
         ret
     }
     pub fn get_cached_bounding_box(&self, mesh_source: &MeshSourceDesc) -> Option<&AxisAlignedBox> {

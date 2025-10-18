@@ -3,7 +3,7 @@ use anyhow::Result;
 use nalgebra_glm::{Vec2, Vec3};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerframeStorageBufferObject, VulkanMesh}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_type::{MeshVertexDataDefinition, RenderMeshData}};
+use crate::function::render::{interface::{vulkan::vulkan_rhi::{self, VulkanRHI}}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_type::{MeshVertexDataDefinition, RenderMaterialData, RenderMeshData}};
 
 #[derive(Default)]
 struct IBLResource {
@@ -54,6 +54,9 @@ pub struct RenderResource{
     pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
 
     pub m_vulkan_meshes: HashMap<usize, Rc<VulkanMesh>>,
+    pub m_vulkan_pbr_materials: HashMap<usize, Rc<VulkanPBRMaterial>>,
+
+    pub m_material_descriptor_set_layout: vk::DescriptorSetLayout,
 }
 
 impl RenderResource {
@@ -78,12 +81,25 @@ impl RenderResource {
         
     }
 
-    pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData){
+    pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData, material_data: &RenderMaterialData) {
         self.get_or_create_vulkan_mesh(rhi, render_entity, mesh_data);
+        self.get_or_create_vulkan_material(rhi, render_entity, material_data);
+    }
+
+    pub fn upload_game_object_render_resource_mesh(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData){
+        self.get_or_create_vulkan_mesh(rhi, render_entity, mesh_data);
+    }
+
+    pub fn upload_game_object_render_resource_material(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, material_data: &RenderMaterialData){
+        self.get_or_create_vulkan_material(rhi, render_entity, material_data);
     }
 
     pub fn get_entity_mesh(&self, entity: &RenderEntity) -> &Rc<VulkanMesh> {
         self.m_vulkan_meshes.get(&entity.m_mesh_asset_id).unwrap()
+    }
+
+    pub fn get_entity_material(&self, entity: &RenderEntity) -> &Rc<VulkanPBRMaterial> {
+        self.m_vulkan_pbr_materials.get(&entity.m_material_asset_id).unwrap()
     }
 }
 
@@ -126,6 +142,242 @@ impl RenderResource {
         self.m_vulkan_meshes.get(&assetid).unwrap()
     }
 
+    fn get_or_create_vulkan_material(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, material_data: &RenderMaterialData) -> &VulkanPBRMaterial {
+        let assetid = entity.m_material_asset_id;
+
+        if let None = self.m_vulkan_pbr_materials.get(&assetid) {
+            let mut now_material = VulkanPBRMaterial::default();
+            let empty_image = [255, 255, 255, 255];
+            let empty_image_data = empty_image.as_slice();
+
+            let mut base_color_image_pixels = empty_image_data;
+            let mut base_color_image_width = 1;
+            let mut base_color_image_height = 1;
+            let mut base_color_image_format = vk::Format::R8G8B8A8_SRGB;
+            if let Some(texture) = &material_data.m_base_color_texture {
+                base_color_image_pixels = &texture.m_pixels;
+                base_color_image_width = texture.m_width;
+                base_color_image_height = texture.m_height;
+                base_color_image_format = texture.m_format;
+            }
+
+            let mut metallic_roughness_image_pixels = empty_image_data;
+            let mut metallic_roughness_image_width = 1;
+            let mut metallic_roughness_image_height = 1;
+            let mut metallic_roughness_image_format = vk::Format::R8G8B8A8_UNORM;
+            if let Some(texture) = &material_data.m_metallic_roughness_texture {
+                metallic_roughness_image_pixels = &texture.m_pixels;
+                metallic_roughness_image_width = texture.m_width;
+                metallic_roughness_image_height = texture.m_height;
+                metallic_roughness_image_format = texture.m_format;
+            }
+
+            let mut normal_roughness_image_pixels = empty_image_data;
+            let mut normal_roughness_image_width = 1;
+            let mut normal_roughness_image_height = 1;
+            let mut normal_roughness_image_format = vk::Format::R8G8B8A8_UNORM;
+            if let Some(texture) = &material_data.m_normal_texture {
+                normal_roughness_image_pixels = &texture.m_pixels;
+                normal_roughness_image_width = texture.m_width;
+                normal_roughness_image_height = texture.m_height;
+                normal_roughness_image_format = texture.m_format;
+            }
+
+            let mut occlusion_image_pixels = empty_image_data;
+            let mut occlusion_image_width = 1;
+            let mut occlusion_image_height = 1;
+            let mut occlusion_image_format = vk::Format::R8G8B8A8_UNORM;
+            if let Some(texture) = &material_data.m_occlusion_texture {
+                occlusion_image_pixels = &texture.m_pixels;
+                occlusion_image_width = texture.m_width;
+                occlusion_image_height = texture.m_height;
+                occlusion_image_format = texture.m_format;
+            }
+
+            let mut emissive_image_pixels = empty_image_data;
+            let mut emissive_image_width = 1;
+            let mut emissive_image_height = 1;
+            let mut emissive_image_format = vk::Format::R8G8B8A8_UNORM;
+            if let Some(texture) = &material_data.m_emissive_texture {
+                emissive_image_pixels = &texture.m_pixels;
+                emissive_image_width = texture.m_width;
+                emissive_image_height = texture.m_height;
+                emissive_image_format = texture.m_format;
+            }
+
+            {
+                let buffer_size = std::mem::size_of::<MeshPerMaterialUniformBufferObject>();
+
+                let (staging_buffer, staging_memory) = rhi.create_buffer(
+                    buffer_size as u64, 
+                    vk::BufferUsageFlags::TRANSFER_SRC, 
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                ).unwrap();
+
+                let staging_buffer_data = rhi.map_memory(
+                    staging_memory, 0, buffer_size as u64, vk::MemoryMapFlags::empty()
+                ).unwrap();
+
+                let material_uniform_buffer_info = unsafe{
+                    &mut *(staging_buffer_data as *mut MeshPerMaterialUniformBufferObject)
+                };
+                material_uniform_buffer_info.is_blend = entity.m_blend as u32;
+                material_uniform_buffer_info.id_double_sided = entity.m_double_sided as u32;
+                material_uniform_buffer_info.base_color_factor = entity.m_base_color_factor;
+                material_uniform_buffer_info.metallic_factor = entity.m_metallic_factor;
+                material_uniform_buffer_info.roughness_factor = entity.m_roughness_factor;
+                material_uniform_buffer_info.normal_scale = entity.m_normal_scale;
+                material_uniform_buffer_info.occlusion_strength = entity.m_occlusion_strength;
+                material_uniform_buffer_info.emissive_factor = entity.m_emissive_factor;
+
+                rhi.unmap_memory(staging_memory);
+
+                (now_material.material_uniform_buffer, now_material.material_uniform_buffer_allocation) = rhi.create_buffer(
+                    buffer_size as u64,
+                    vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                ).unwrap();//todo: alignment
+
+                rhi.copy_buffer(
+                    staging_buffer, now_material.material_uniform_buffer, 0, 0, buffer_size as u64
+                ).unwrap();
+
+                rhi.destroy_buffer(staging_buffer);
+                rhi.free_memory(staging_memory);
+            }
+
+            let mut update_texture_data = TextureDataToUpdate {
+                base_color_image_pixels,
+                base_color_image_width,
+                base_color_image_height,
+                base_color_image_format,
+
+                metallic_roughness_image_pixels,
+                metallic_roughness_image_width,
+                metallic_roughness_image_height,
+                metallic_roughness_image_format,
+
+                normal_roughness_image_pixels,
+                normal_roughness_image_width,
+                normal_roughness_image_height,
+                normal_roughness_image_format,
+
+                occlusion_image_pixels,
+                occlusion_image_width,
+                occlusion_image_height,
+                occlusion_image_format,
+
+                emissive_image_pixels,
+                emissive_image_width,
+                emissive_image_height,
+                emissive_image_format,
+                
+                now_material: &mut now_material,
+            };
+
+            Self::update_texture_image_data(rhi, &mut update_texture_data);
+
+            let set_layouts = [self.m_material_descriptor_set_layout];
+
+            let material_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&set_layouts);
+            now_material.material_descriptor_set = rhi.allocate_descriptor_sets(&material_descriptor_set_alloc_info).unwrap()[0];
+
+            let material_uniform_buffer_info = vk::DescriptorBufferInfo::builder()
+                .buffer(now_material.material_uniform_buffer)
+                .offset(0)
+                .range(size_of::<MeshPerMaterialUniformBufferObject>() as u64);
+
+            let base_color_image_info = vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.base_color_image_view)
+                .sampler(rhi.get_or_create_mipmap_sampler(
+                    base_color_image_width,
+                    base_color_image_height,
+                ).unwrap());
+            let metallic_roughness_image_info = vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.metallic_roughness_image_view)
+                .sampler(rhi.get_or_create_mipmap_sampler(
+                    metallic_roughness_image_width,
+                    metallic_roughness_image_height,
+                ).unwrap());
+            let normal_roughness_image_info = vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.normal_image_view)
+                .sampler(rhi.get_or_create_mipmap_sampler(
+                    normal_roughness_image_width,
+                    normal_roughness_image_height,
+                ).unwrap());
+            let occlusion_image_info = vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.occlusion_image_view)
+                .sampler(rhi.get_or_create_mipmap_sampler(
+                    occlusion_image_width,
+                    occlusion_image_height,
+                ).unwrap());
+            let emissive_image_info = vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.emissive_image_view)
+                .sampler(rhi.get_or_create_mipmap_sampler(
+                    emissive_image_width,
+                    emissive_image_height,
+                ).unwrap());
+
+            let mesh_descriptor_writes_info = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_material.material_descriptor_set)
+                    .dst_binding(0)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .buffer_info(&[material_uniform_buffer_info])
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_material.material_descriptor_set)
+                    .dst_binding(1)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(&[base_color_image_info])
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_material.material_descriptor_set)
+                    .dst_binding(2)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(&[metallic_roughness_image_info])
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_material.material_descriptor_set)
+                    .dst_binding(3)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(&[normal_roughness_image_info])
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_material.material_descriptor_set)
+                    .dst_binding(4)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(&[occlusion_image_info])
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_material.material_descriptor_set)
+                    .dst_binding(5)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(&[emissive_image_info])
+                    .build(),
+            ];
+
+            rhi.update_descriptor_sets(&mesh_descriptor_writes_info).unwrap();
+
+            self.m_vulkan_pbr_materials.insert(assetid, Rc::new(now_material));
+        }
+
+        self.m_vulkan_pbr_materials.get(&assetid).unwrap()
+    }
+    
     fn update_mesh_data(
         rhi: &VulkanRHI,
         enable_vertex_blending: bool,
@@ -271,6 +523,68 @@ impl RenderResource {
         Ok(())
     }
 
+    fn update_texture_image_data(rhi: &VulkanRHI, texture_data: &mut TextureDataToUpdate) {
+        (
+            texture_data.now_material.base_color_texture_image,
+            texture_data.now_material.base_color_image_allocation,
+            texture_data.now_material.base_color_image_view
+        ) = rhi.create_texture_image(
+            texture_data.base_color_image_width,
+            texture_data.base_color_image_height,
+            texture_data.base_color_image_pixels,
+            texture_data.base_color_image_format,
+            0,
+        ).unwrap();
+
+        (
+            texture_data.now_material.metallic_roughness_texture_image,
+            texture_data.now_material.metallic_roughness_image_allocation,
+            texture_data.now_material.metallic_roughness_image_view
+        ) = rhi.create_texture_image(
+            texture_data.metallic_roughness_image_width,
+            texture_data.metallic_roughness_image_height,
+            texture_data.metallic_roughness_image_pixels,
+            texture_data.metallic_roughness_image_format,
+            0,
+        ).unwrap();
+
+        (
+            texture_data.now_material.normal_texture_image,
+            texture_data.now_material.normal_image_allocation,
+            texture_data.now_material.normal_image_view
+        ) = rhi.create_texture_image(
+            texture_data.normal_roughness_image_width,
+            texture_data.normal_roughness_image_height,
+            texture_data.normal_roughness_image_pixels,
+            texture_data.normal_roughness_image_format,
+            0,
+        ).unwrap();
+
+        (
+            texture_data.now_material.occlusion_texture_image,
+            texture_data.now_material.occlusion_image_allocation,
+            texture_data.now_material.occlusion_image_view
+        ) = rhi.create_texture_image(
+            texture_data.occlusion_image_width,
+            texture_data.occlusion_image_height,
+            texture_data.occlusion_image_pixels,
+            texture_data.occlusion_image_format,
+            0,
+        ).unwrap();
+
+        (
+            texture_data.now_material.emissive_texture_image,
+            texture_data.now_material.emissive_image_allocation,
+            texture_data.now_material.emissive_image_view
+        ) = rhi.create_texture_image(
+            texture_data.emissive_image_width,
+            texture_data.emissive_image_height,
+            texture_data.emissive_image_pixels,
+            texture_data.emissive_image_format,
+            0,
+        ).unwrap();
+    }
+    
     fn create_and_map_storage_buffer(&mut self, rhi: &VulkanRHI){
         let _storage_buffer = &mut self.m_global_render_resource.borrow_mut()._storage_buffer;
         let frames_in_flight = vulkan_rhi::K_MAX_FRAMES_IN_FLIGHT;

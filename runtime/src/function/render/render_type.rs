@@ -1,3 +1,4 @@
+use vulkanalia::prelude::v1_0::*;
 use bitflags::bitflags;
 use vulkanalia::vk::Flags;
 
@@ -1202,6 +1203,13 @@ pub type RHIDeviceSize = u64;
 pub type RHIFlags = u32;
 pub type RHISampleMask = u32;
 
+#[derive(Default)]
+pub enum ImageType{
+    #[default]
+    UNKNOWN = 0,
+    _2D
+}
+
 pub enum RenderPipelineType{
     ForwardPipeline,
     DeferredPipeline,
@@ -1211,6 +1219,18 @@ pub enum RenderPipelineType{
 #[derive(Default)]
 pub struct BufferData {
     pub m_data: Vec<u8>,
+}
+
+#[derive(Default)]
+pub struct TextureData {
+    pub m_width: u32,
+    pub m_height: u32,
+    pub m_depth: u32,
+    pub m_mip_levels: u32,
+    pub m_array_layers: u32,
+    pub m_pixels: Vec<u8>,
+    pub m_format: vk::Format,
+    pub m_type: ImageType
 }
 
 #[repr(C)]
@@ -1226,6 +1246,14 @@ pub struct MeshSourceDesc{
     pub m_mesh_file: String,
 }
 
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
+pub struct MaterialSourceDesc{
+    pub m_base_color_file: String,
+    pub m_metallic_roughness_file: String,
+    pub m_normal_file: String,
+    pub m_occlusion_file: String,
+    pub m_emissive_file: String,
+}
 
 #[derive(Default)]
 pub struct StaticMeshData{
@@ -1237,4 +1265,13 @@ pub struct StaticMeshData{
 pub struct RenderMeshData{
     pub m_static_mesh_data: StaticMeshData,
     pub m_skeleton_binding_buffer: BufferData,
+}
+
+#[derive(Default)]
+pub struct RenderMaterialData {
+    pub m_base_color_texture: Option<TextureData>,
+    pub m_metallic_roughness_texture: Option<TextureData>,
+    pub m_normal_texture: Option<TextureData>,
+    pub m_occlusion_texture: Option<TextureData>,
+    pub m_emissive_texture: Option<TextureData>,
 }

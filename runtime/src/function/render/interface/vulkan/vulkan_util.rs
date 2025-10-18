@@ -5,7 +5,6 @@ use vulkanalia::{bytecode::Bytecode, prelude::v1_0::*};
 
 use crate::function::render::interface::vulkan::vulkan_rhi::VulkanRHI;
 
-
 pub fn find_memory_type(
     instance: &Instance,
     physical_device: vk::PhysicalDevice, 
@@ -352,7 +351,7 @@ fn generate_mipmaps(
 
     Ok(())
 }
-    
+
 pub fn create_texture_image(
     rhi: &VulkanRHI,
     width: u32,
