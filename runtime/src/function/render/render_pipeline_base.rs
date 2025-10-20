@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use imgui_winit_support::WinitPlatform;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, ui_pass::UIPass}, render_resource::RenderResource}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -16,6 +16,7 @@ pub struct RenderPipelineBase{
     pub m_rhi : Weak<RefCell<VulkanRHI>>,
 
     pub m_main_camera_pass: MainCameraPass,
+    pub m_tone_mapping_pass: ToneMappingPass,
     pub m_color_grading_pass: ColorGradingPass,
     pub m_fxaa_pass: FXAAPass,
     pub m_ui_pass: UIPass,

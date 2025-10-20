@@ -3,28 +3,27 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
 
-pub struct CombineUIPassInitInfo<'a>{
+pub struct ToneMappingInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
-    pub scene_input_attachment: vk::ImageView,
-    pub ui_input_attachment: vk::ImageView,
+    pub input_attachment: vk::ImageView,
 }
 
 #[derive(Default)]
-pub struct CombineUIPass {
+pub struct ToneMappingPass {
     pub m_render_pass: RenderPass,
 }
 
-impl CombineUIPass {
-    pub fn initialize(&mut self, info: &CombineUIPassInitInfo) -> Result<()> {
+impl ToneMappingPass {
+    pub fn initialize(&mut self, info: &ToneMappingInitInfo) -> Result<()> {
         self.m_render_pass.initialize();
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(&info.rhi.borrow())?;
         self.setup_pipelines(&info.rhi.borrow())?;
         self.setup_descriptor_set(&info.rhi.borrow())?;
-        self.update_after_framebuffer_recreate(&info.rhi.borrow(), info.scene_input_attachment, info.ui_input_attachment)?;
+        self.update_after_framebuffer_recreate(&info.rhi.borrow(), info.input_attachment)?;
         Ok(())
     }
     pub fn draw(&self) {
@@ -32,7 +31,7 @@ impl CombineUIPass {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
-        rhi.push_event(command_buffer, "Combine UI", color);
+        rhi.push_event(command_buffer, "Tone Map", color);
         let info = rhi.get_swapchain_info();
         rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
         rhi.cmd_set_viewport(command_buffer, 0, std::slice::from_ref(info.viewport));
@@ -48,14 +47,10 @@ impl CombineUIPass {
         rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
         rhi.pop_event(command_buffer);
     }
-    pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, scene_input_attachment: vk::ImageView, ui_input_attachment: vk::ImageView) -> Result<()> {
-        let per_frame_scene_input_attachment_info = vk::DescriptorImageInfo::builder()
+    pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, input_attachment: vk::ImageView) -> Result<()> {
+        let post_process_per_frame_input_attachment_info = vk::DescriptorImageInfo::builder()
             .sampler(*rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Nearest)?)
-            .image_view(scene_input_attachment)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let per_frame_ui_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Nearest)?)
-            .image_view(ui_input_attachment)
+            .image_view(input_attachment)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
         let post_process_descriptor_writes_info = [
@@ -63,13 +58,7 @@ impl CombineUIPass {
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[per_frame_scene_input_attachment_info])
-                .build(),
-            vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
-                .dst_binding(1)
-                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[per_frame_ui_input_attachment_info])
+                .image_info(&[post_process_per_frame_input_attachment_info])
                 .build(),
         ];
         rhi.update_descriptor_sets(&post_process_descriptor_writes_info)?;
@@ -78,27 +67,21 @@ impl CombineUIPass {
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
-static INPUT_ATTACHMENT_COUNT: u32 = 2;
+static INPUT_ATTACHMENT_COUNT: u32 = 1;
 
-impl CombineUIPass {
+impl ToneMappingPass {
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.m_render_pass.m_descriptor_infos.clear();
-        let post_process_global_layout_bindings = [
+        let post_process_global_layout_in_color = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT)
                 .build(),
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(1)
-                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                .build(),
         ];
         let post_process_global_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&post_process_global_layout_bindings);
+            .bindings(&post_process_global_layout_in_color);
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
             layout: rhi.create_descriptor_set_layout(&post_process_global_layout_create_info)?,
             descriptor_set: Default::default(),
@@ -109,7 +92,7 @@ impl CombineUIPass {
     fn setup_pipelines(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.m_render_pass.m_render_pipeline.clear();
         let vert_shader_module = rhi.create_shader_module(&POST_PROCESS_VERT)?;
-        let frag_shader_module = rhi.create_shader_module(&COMBINE_UI_FRAG)?;
+        let frag_shader_module = rhi.create_shader_module(&TONE_MAPPING_FRAG)?;
 
         let vert_stage = vk::PipelineShaderStageCreateInfo::builder()
             .stage(vk::ShaderStageFlags::VERTEX)
@@ -129,11 +112,9 @@ impl CombineUIPass {
             .topology(vk::PrimitiveTopology::TRIANGLE_STRIP)
             .primitive_restart_enable(false);
 
-        let swapchain_info = rhi.get_swapchain_info();
-
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
-            .viewports(std::slice::from_ref(swapchain_info.viewport))
-            .scissors(std::slice::from_ref(swapchain_info.scissor));
+            .viewport_count(1)
+            .scissor_count(1);
 
         let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false)
@@ -147,12 +128,6 @@ impl CombineUIPass {
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::_1);
-
-        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS)
-            .stencil_test_enable(false);
 
         let attachment = vk::PipelineColorBlendAttachmentState::builder()
             .color_write_mask(vk::ColorComponentFlags::all())
@@ -182,12 +157,11 @@ impl CombineUIPass {
             .viewport_state(&viewport_state)
             .rasterization_state(&rasterization_state)
             .multisample_state(&multisample_state)
-            .depth_stencil_state(&depth_stencil_state)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(5)
+            .subpass(1)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

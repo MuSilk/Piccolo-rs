@@ -7,5 +7,6 @@ pub static FXAA_VERT: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulka
 pub static MESH_VERT: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulkan-Minecraft\runtime\src\shader\generated\spv\mesh.vert.spv");
 pub static MESH_GBUFFER_FRAG: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulkan-Minecraft\runtime\src\shader\generated\spv\mesh_gbuffer.frag.spv");
 pub static POST_PROCESS_VERT: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulkan-Minecraft\runtime\src\shader\generated\spv\post_process.vert.spv");
+pub static TONE_MAPPING_FRAG: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulkan-Minecraft\runtime\src\shader\generated\spv\tone_mapping.frag.spv");
 pub static UI_FRAG: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulkan-Minecraft\runtime\src\shader\generated\spv\ui.frag.spv");
 pub static UI_VERT: &[u8] = include_bytes!(r"E:\program\rust\MuSilk-Rust-Vulkan-Minecraft\runtime\src\shader\generated\spv\ui.vert.spv");
