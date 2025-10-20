@@ -40,7 +40,7 @@ impl Engine {
     }
 
     pub fn shutdown_engine(&self){
-        RuntimeGlobalContext::global().borrow().shutdown_systems();
+        RuntimeGlobalContext::global().shutdown_systems();
         reflection_register::meta_unregister();
     }
 
@@ -52,24 +52,21 @@ impl Engine {
     }
 
     pub fn tick_one_frame(&mut self, delta_time: f32) -> Result<bool> {
-        let ctx = RuntimeGlobalContext::global().borrow();
-        ctx.m_render_system.borrow_mut().swap_logic_render_data();
+        RuntimeGlobalContext::get_render_system().borrow_mut().swap_logic_render_data();
         Self::logical_tick(delta_time);
         Self::renderer_tick(delta_time)?;
-        Ok(!ctx.m_window_system.borrow().should_close())
+        Ok(!RuntimeGlobalContext::get_window_system().borrow().should_close())
     }
 }
 
 impl Engine {
     fn renderer_tick(delta_time: f32) -> Result<()>{
-        let ctx = RuntimeGlobalContext::global().borrow();
-        let mut render_system = ctx.m_render_system.borrow_mut();
-        render_system.tick(delta_time)?;
+        RuntimeGlobalContext::get_render_system().borrow_mut().tick(delta_time)?;
         Ok(())
     }
 
     fn logical_tick(delta_time: f32) {
-        let ctx = RuntimeGlobalContext::global().borrow();
+        let ctx = RuntimeGlobalContext::global();
         ctx.m_world_manager.borrow_mut().tick(delta_time);
     }
 

@@ -1,12 +1,11 @@
 use std::{cell::RefCell, mem::offset_of, rc::{Rc, Weak}};
 use anyhow::Result;
-use imgui::{draw_list, internal::RawWrapper, sys::{ImDrawIdx, ImDrawVert, ImVec2}, BackendFlags, Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
+use imgui::{internal::RawWrapper, sys::{ImDrawIdx}, BackendFlags, Context, DrawCmd, DrawCmdParams, DrawData, TextureId, Textures};
 use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
-use winit::platform;
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT, UI_FRAG, UI_VERT}};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -35,6 +34,7 @@ pub struct UIPass {
 
 impl UIPass {
     pub fn initialize(&mut self, info: &UIPassInitInfo) -> Result<()> {
+        self.m_render_pass.initialize();
 
         self.ctx = Rc::downgrade(info.ctx);
         self.platform = Rc::downgrade(info.platform);
@@ -64,9 +64,9 @@ impl UIPass {
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "UI", color);
 
-        let global = RuntimeGlobalContext::global().borrow();
+        let window_system = RuntimeGlobalContext::get_window_system().borrow();
         let platform = self.platform.upgrade().unwrap();
-        platform.borrow_mut().prepare_render(&ui, global.m_window_system.borrow().get_window());
+        platform.borrow_mut().prepare_render(&ui, window_system.get_window());
         let draw_data = ctx.render();
         self.imgui_render(&rhi, &draw_data).unwrap();
 
@@ -395,7 +395,7 @@ impl UIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(1)
+            .subpass(3)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

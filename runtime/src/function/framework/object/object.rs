@@ -1,8 +1,6 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use reflection::reflection::ReflectionPtr;
-
-use crate::{function::framework::{component::component::ComponentTrait, level::level::Level, object::object_id_allocator::GObjectID}, resource::res_type::common::object::ObjectInstanceRes};
+use crate::{function::framework::{level::level::Level, object::object_id_allocator::GObjectID}};
 
 pub struct GObject {
     m_parent_level: Weak<RefCell<Level>>,

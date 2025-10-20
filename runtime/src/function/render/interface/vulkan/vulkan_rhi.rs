@@ -506,6 +506,16 @@ impl VulkanRHI {
         }
     }
 
+    pub fn cmd_clear_attachments(&self, command_buffer: vk::CommandBuffer, clear_attachments: &[vk::ClearAttachment], clear_rects: &[vk::ClearRect]) {
+        unsafe {
+            self.m_device.cmd_clear_attachments(
+                command_buffer, 
+                clear_attachments, 
+                clear_rects,
+            );
+        }
+    }
+
     pub fn cmd_draw_indexed(&self, command_buffer: vk::CommandBuffer, index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32){
         unsafe {
             self.m_device.cmd_draw_indexed(

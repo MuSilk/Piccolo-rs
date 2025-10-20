@@ -173,8 +173,7 @@ impl WrappedEditorInputManager {
 
 impl WrappedEditorInputManager {
     fn register_input(&self) {
-        let global = RuntimeGlobalContext::global().borrow();
-        let mut window_system = global.m_window_system.borrow_mut();
+        let mut window_system = RuntimeGlobalContext::get_window_system().borrow_mut();
         let this = Rc::downgrade(&self.0);
         window_system.register_on_cursor_pos_func(move |device_id, position| {
             let this = this.upgrade().unwrap();

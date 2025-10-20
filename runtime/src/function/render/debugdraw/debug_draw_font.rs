@@ -47,8 +47,7 @@ impl DebugDrawFont {
     }
 
     pub fn destroy(&mut self){
-        let global = RuntimeGlobalContext::global().borrow();
-        let render_system = global.m_render_system.borrow();
+        let render_system = RuntimeGlobalContext::get_render_system().borrow();
         let rhi = render_system.get_rhi();
         rhi.borrow().free_memory(self.m_font_image_memory);
         rhi.borrow().destroy_image_view(self.m_font_image_view);

@@ -13,8 +13,8 @@ pub struct RenderResourceBase{
 
 impl RenderResourceBase {
 
-    fn load_texture(file: &str, is_srgb: bool) -> Option<TextureData> {
-        let global = RuntimeGlobalContext::global().borrow();
+    pub fn load_texture(file: &str, is_srgb: bool) -> Option<TextureData> {
+        let global = RuntimeGlobalContext::global();
         let asset_manager = global.m_asset_manager.borrow();
 
         let image = image::open(asset_manager.get_full_path(file)).ok()?;
@@ -60,6 +60,7 @@ impl RenderResourceBase {
         ret.m_emissive_texture = Self::load_texture(&source.m_emissive_file, false);
         ret
     }
+    
     pub fn get_cached_bounding_box(&self, mesh_source: &MeshSourceDesc) -> Option<&AxisAlignedBox> {
         self.m_bounding_box_cache_map.get(mesh_source)
     }

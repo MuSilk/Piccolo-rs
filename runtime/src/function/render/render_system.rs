@@ -2,10 +2,9 @@ use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use vulkanalia::window;
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event};
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::RenderSwapContext, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::{self, WindowSystem}}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -45,8 +44,15 @@ impl RenderSystem {
         let render_scene = RenderScene::default();
         render_scene.set_visible_nodes_reference();
 
+        let level_resource_desc = LevelResourceDesc{
+            m_ibl_resource_desc: LevelIBLResourceDesc{},
+            m_color_grading_resource_desc: LevelColorGradingResourceDesc{
+                m_color_grading_map: "asset/texture/lut/color_grading_LUT.jpg".to_string(),
+            }
+        };
+
         let mut render_resource = RenderResource::default();
-        render_resource.upload_global_render_resource(&vulkan_rhi.borrow());
+        render_resource.upload_global_render_resource(&vulkan_rhi.borrow(), &level_resource_desc);
         let render_resource = Rc::new(RefCell::new(render_resource));
 
         let create_info = RenderPipelineCreateInfo {
@@ -80,9 +86,8 @@ impl RenderSystem {
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
         self.m_render_scene.update_visible_objects(&self.m_render_resource.borrow(), &self.m_render_camera.borrow());
         self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
-        RuntimeGlobalContext::global().borrow().m_debugdraw_manager.borrow_mut().tick(delta_time);
-        let global = RuntimeGlobalContext::global().borrow();
-        let window_system = &global.m_window_system.borrow();
+        RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().tick(delta_time);
+        let window_system = RuntimeGlobalContext::get_window_system().borrow();
         self.m_imgui_context.borrow_mut().io_mut().update_delta_time(Duration::from_secs_f32(delta_time));
         self.m_imgui_platform.borrow_mut().prepare_frame(self.m_imgui_context.borrow_mut().io_mut(), window_system.get_window()).unwrap();
         match self.m_render_pipeline_type {
@@ -140,7 +145,7 @@ impl RenderSystem {
     pub fn handle_event<T>(&self, event: &Event<T>) {
         self.m_imgui_platform.borrow_mut().handle_event(
             self.m_imgui_context.borrow_mut().io_mut(), 
-            RuntimeGlobalContext::global().borrow().m_window_system.borrow().get_window(), 
+            RuntimeGlobalContext::get_window_system().borrow().get_window(), 
             event
         );
     }

@@ -4,6 +4,20 @@ use nalgebra_glm::Mat4;
 
 use crate::function::render::{render_camera::RenderCameraType, render_object::GameObjectDesc};
 
+pub struct LevelIBLResourceDesc{
+    // m_skybox_irradiance_map: SkyBoxIrradianceMap,
+    // m_skybox_specular_map: SkyBoxSpecularMap,
+    // m_brdf_map: String,
+}
+
+pub struct LevelColorGradingResourceDesc {
+    pub m_color_grading_map: String,
+}
+
+pub struct LevelResourceDesc {
+    pub m_ibl_resource_desc: LevelIBLResourceDesc,
+    pub m_color_grading_resource_desc: LevelColorGradingResourceDesc,
+}
 
 #[derive(Default, Clone, Copy)]
 pub struct CameraSwapData{

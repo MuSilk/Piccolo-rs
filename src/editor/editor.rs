@@ -17,18 +17,18 @@ impl Editor {
         self.m_engine_runtime = Rc::downgrade(engine_runtime);
 
         let info = EditorGlobalContextCreateInfo {
-            window_system: &RuntimeGlobalContext::global().borrow().m_window_system,
-            render_system: &RuntimeGlobalContext::global().borrow().m_render_system,
+            window_system: &RuntimeGlobalContext::get_window_system(),
+            render_system: &RuntimeGlobalContext::get_render_system(),
             engine_runtime: engine_runtime,
         };
         EditorGlobalContext::initialize(info);
         EditorGlobalContext::global().borrow().m_scene_manager.borrow_mut().set_editor_camera(
-            RuntimeGlobalContext::global().borrow().m_render_system.borrow().get_render_camera()
+            RuntimeGlobalContext::get_render_system().borrow().get_render_camera()
         );
 
         self.m_editor_ui.initialize(WindowUIInitInfo{
-            window_system: &RuntimeGlobalContext::global().borrow().m_window_system,
-            render_system: &RuntimeGlobalContext::global().borrow().m_render_system,
+            window_system: &RuntimeGlobalContext::get_window_system(),
+            render_system: &RuntimeGlobalContext::get_render_system(),
         });
     }
 }

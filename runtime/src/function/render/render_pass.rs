@@ -78,6 +78,12 @@ pub struct RenderPass{
 }
 
 impl RenderPass{
+
+    pub fn initialize(&mut self) {
+         self.m_global_render_resource = 
+            Rc::downgrade(&self.m_base.m_render_resource.upgrade().unwrap().borrow().m_global_render_resource);
+    }
+
     pub fn set_common_info(&mut self, common_info: &RenderPassCommonInfo){
         self.m_base.m_rhi = Rc::downgrade(common_info.rhi);
         self.m_base.m_render_resource = Rc::downgrade(common_info.render_resource);

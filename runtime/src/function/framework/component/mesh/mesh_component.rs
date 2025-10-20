@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use reflection::reflection_derive::ReflectWhiteListFields;
 
-use crate::{function::{framework::{component::{component::{Component, ComponentTrait}, transform::transform_component::TransformComponent}, level::level::Level, object::object_id_allocator::GObjectID}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectDesc, GameObjectPartDesc}}, resource::res_type::components::mesh::MeshComponentRes};
+use crate::{function::{framework::{component::{component::{Component, ComponentTrait}, transform::transform_component::TransformComponent}, level::level::Level, object::object_id_allocator::GObjectID}, global::global_context::RuntimeGlobalContext, render::{render_object::{GameObjectDesc, GameObjectPartDesc}}}, resource::res_type::components::mesh::MeshComponentRes};
 
 
 
@@ -30,7 +30,7 @@ impl ComponentTrait for MeshComponent {
         self.m_raw_meshes.resize(self.m_mesh_res.m_sub_meshs.len(), GameObjectPartDesc::default());
         for (raw_mesh_index, sub_mesh) in self.m_mesh_res.m_sub_meshs.iter().enumerate() {
             let mesh_component = &mut self.m_raw_meshes[raw_mesh_index];
-            let global = RuntimeGlobalContext::global().borrow();
+            let global = RuntimeGlobalContext::global();
             let asset_manager = global.m_asset_manager.borrow();
             mesh_component.m_mesh_desc.m_mesh_file = asset_manager.get_full_path(&sub_mesh.m_obj_file_ref).to_str().unwrap().to_string();
             mesh_component.m_material_desc.m_with_texture = !sub_mesh.m_material.is_empty();
@@ -56,8 +56,7 @@ impl ComponentTrait for MeshComponent {
                 mesh_part.m_transform_desc.m_transform_matrix = object_transform_matrix;
             }
 
-            let global = RuntimeGlobalContext::global().borrow();
-            let render_system = global.m_render_system.borrow();
+            let render_system = RuntimeGlobalContext::get_render_system().borrow();
             let render_swap_context = render_system.get_swap_context();
             let logic_swap_data = render_swap_context.get_logic_swap_data();
             transform_component.set_dirty_flag(false);

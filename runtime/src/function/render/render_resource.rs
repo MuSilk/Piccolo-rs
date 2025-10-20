@@ -3,7 +3,7 @@ use anyhow::Result;
 use nalgebra_glm::{Vec2, Vec3};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{interface::{vulkan::vulkan_rhi::{self, VulkanRHI}}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_type::{MeshVertexDataDefinition, RenderMaterialData, RenderMeshData}};
+use crate::function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RenderMaterialData, RenderMeshData}};
 
 #[derive(Default)]
 struct IBLResource {
@@ -15,8 +15,10 @@ struct IBLResourceData {
 }
 
 #[derive(Default)]
-struct ColorGradingResource {
-
+pub struct ColorGradingResource {
+    pub _color_grading_lut_texture_image: vk::Image,
+    pub _color_grading_lut_texture_image_view: vk::ImageView,
+    pub _color_grading_lut_texture_image_allocation: vk::DeviceMemory,
 }
 
 struct ColorGradingResourceData {
@@ -41,7 +43,7 @@ pub struct StorageBuffer {
 #[derive(Default)]
 pub struct GlobalRenderResource {
     _ibl_resource: IBLResource,
-    _color_grading_resource: ColorGradingResource,
+    pub _color_grading_resource: ColorGradingResource,
     pub _storage_buffer: StorageBuffer,
 }
 
@@ -66,7 +68,24 @@ impl RenderResource {
             resource._storage_buffer._global_upload_ringbuffers_begin[current_frame_index];
     }
 
-    pub fn upload_global_render_resource(&mut self, rhi: &VulkanRHI) {
+    pub fn upload_global_render_resource(&mut self, rhi: &VulkanRHI, level_resource_desc: &LevelResourceDesc) {
+        let color_grading_map = RenderResourceBase::load_texture(
+            &level_resource_desc.m_color_grading_resource_desc.m_color_grading_map,
+            false
+        ).unwrap();
+
+        (
+            self.m_global_render_resource.borrow_mut()._color_grading_resource._color_grading_lut_texture_image,
+            self.m_global_render_resource.borrow_mut()._color_grading_resource._color_grading_lut_texture_image_allocation,
+            self.m_global_render_resource.borrow_mut()._color_grading_resource._color_grading_lut_texture_image_view,
+        ) = rhi.create_texture_image(
+            color_grading_map.m_width,
+            color_grading_map.m_height,
+            &color_grading_map.m_pixels,
+            color_grading_map.m_format,
+            0,
+        ).unwrap();
+
         self.create_and_map_storage_buffer(rhi);
     }
     

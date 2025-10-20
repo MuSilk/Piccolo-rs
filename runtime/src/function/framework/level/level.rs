@@ -1,6 +1,6 @@
 use std::{any::{Any, TypeId}, cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::{MeshComponent}, transform::transform_component::TransformComponent}, object::{object::{WrappedGObject}, object_id_allocator::{self, GObjectID}}}}, resource::res_type::{common::object::ObjectInstanceRes, components::mesh::{SubMeshRes}}};
+use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::{MeshComponent}, transform::transform_component::TransformComponent}, object::{object::{WrappedGObject}, object_id_allocator::{self, GObjectID}}}}, resource::res_type::{ components::mesh::{SubMeshRes}}};
 
 #[derive(Default)]
 struct ComponentTable {

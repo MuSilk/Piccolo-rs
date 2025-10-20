@@ -46,8 +46,7 @@ impl ApplicationHandler for WinitApp {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
         {
-            let global = RuntimeGlobalContext::global().borrow();
-            let render_system = global.m_render_system.borrow();
+            let render_system = RuntimeGlobalContext::get_render_system().borrow();
             render_system.handle_event(&Event::<()>::WindowEvent{
                 window_id,
                 event: event.clone(),
@@ -75,18 +74,15 @@ impl ApplicationHandler for WinitApp {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
-                let global = RuntimeGlobalContext::global().borrow();
-                let window_system = global.m_window_system.borrow();
+                let window_system = RuntimeGlobalContext::get_window_system().borrow();
                 window_system.on_key(device_id, &event, is_synthetic);
             }
             WindowEvent::MouseInput { device_id, state, button } => {
-                let global = RuntimeGlobalContext::global().borrow();
-                let mut window_system = global.m_window_system.borrow_mut();
+                let mut window_system = RuntimeGlobalContext::get_window_system().borrow_mut();
                 window_system.on_mouse_button(device_id, state, button);
             }
             WindowEvent::CursorMoved { device_id, position } => {
-                let global = RuntimeGlobalContext::global().borrow();
-                let window_system = global.m_window_system.borrow();
+                let window_system = RuntimeGlobalContext::get_window_system().borrow();
                 window_system.on_cursor_pos(device_id, position);
             }
             _ => {}
@@ -94,7 +90,7 @@ impl ApplicationHandler for WinitApp {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        RuntimeGlobalContext::global().borrow().m_window_system.borrow().request_redraw();
+        RuntimeGlobalContext::get_window_system().borrow().request_redraw();
     }
 
 }
