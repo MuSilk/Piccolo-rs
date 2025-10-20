@@ -1,16 +1,22 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{combine_ui_pass::CombineUIPass, main_camera_pass::MainCameraPass}, render_resource::RenderResource}};
+use imgui_winit_support::WinitPlatform;
+
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{combine_ui_pass::CombineUIPass, main_camera_pass::MainCameraPass, ui_pass::UIPass}, render_resource::RenderResource}};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
     pub render_resource : &'a Rc<RefCell<RenderResource>>,
+    pub enable_fxaa : bool,
+    pub imgui_context : &'a Rc<RefCell<imgui::Context>>,
+    pub imgui_platform : &'a Rc<RefCell<WinitPlatform>>,
 }
 
 pub struct RenderPipelineBase{
     pub m_rhi : Weak<RefCell<VulkanRHI>>,
 
     pub m_main_camera_pass: MainCameraPass,
+    pub m_ui_pass: UIPass,
     pub m_combine_ui_pass: CombineUIPass,
 }
 

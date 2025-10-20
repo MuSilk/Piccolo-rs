@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use runtime::engine::Engine;
 use runtime::function::global::global_context::RuntimeGlobalContext;
 use winit::application::ApplicationHandler;
-use winit::event::{WindowEvent};
+use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{WindowId};
 
@@ -44,7 +44,16 @@ impl ApplicationHandler for WinitApp {
         self.editor.initialize(&self.engine);
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+        {
+            let global = RuntimeGlobalContext::global().borrow();
+            let render_system = global.m_render_system.borrow();
+            render_system.handle_event(&Event::<()>::WindowEvent{
+                window_id,
+                event: event.clone(),
+            });
+        }
+
         match event {
             WindowEvent::RedrawRequested 
                 if !event_loop.exiting() &&!self.minimized => {

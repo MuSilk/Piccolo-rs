@@ -9,6 +9,7 @@ pub struct CombineUIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
     pub scene_input_attachment: vk::ImageView,
+    pub ui_input_attachment: vk::ImageView,
 }
 
 #[derive(Default)]
@@ -22,7 +23,7 @@ impl CombineUIPass {
         self.setup_descriptor_layout(&info.rhi.borrow())?;
         self.setup_pipelines(&info.rhi.borrow())?;
         self.setup_descriptor_set(&info.rhi.borrow())?;
-        self.update_after_framebuffer_recreate(&info.rhi.borrow(), info.scene_input_attachment)?;
+        self.update_after_framebuffer_recreate(&info.rhi.borrow(), info.scene_input_attachment, info.ui_input_attachment)?;
         Ok(())
     }
     pub fn draw(&self) {
@@ -46,10 +47,14 @@ impl CombineUIPass {
         rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
         rhi.pop_event(command_buffer);
     }
-    pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, scene_input_attachment: vk::ImageView) -> Result<()> {
+    pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, scene_input_attachment: vk::ImageView, ui_input_attachment: vk::ImageView) -> Result<()> {
         let per_frame_scene_input_attachment_info = vk::DescriptorImageInfo::builder()
             .sampler(*rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Nearest)?)
             .image_view(scene_input_attachment)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let per_frame_ui_input_attachment_info = vk::DescriptorImageInfo::builder()
+            .sampler(*rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Nearest)?)
+            .image_view(ui_input_attachment)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
         let post_process_descriptor_writes_info = [
@@ -59,6 +64,12 @@ impl CombineUIPass {
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .image_info(&[per_frame_scene_input_attachment_info])
                 .build(),
+            vk::WriteDescriptorSet::builder()
+                .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .image_info(&[per_frame_ui_input_attachment_info])
+                .build(),
         ];
         rhi.update_descriptor_sets(&post_process_descriptor_writes_info)?;
         Ok(())
@@ -66,7 +77,7 @@ impl CombineUIPass {
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
-static INPUT_ATTACHMENT_COUNT: u32 = 1;
+static INPUT_ATTACHMENT_COUNT: u32 = 2;
 
 impl CombineUIPass {
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
@@ -74,6 +85,12 @@ impl CombineUIPass {
         let post_process_global_layout_bindings = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT)
@@ -169,7 +186,7 @@ impl CombineUIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(1)
+            .subpass(2)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

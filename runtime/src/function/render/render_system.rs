@@ -1,8 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use anyhow::Result;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use vulkanalia::window;
+use winit::event::{Event, WindowEvent};
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::RenderSwapContext, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::RenderSwapContext, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::{self, WindowSystem}}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -10,6 +13,8 @@ pub struct RenderSystemCreateInfo<'a>{
 
 pub struct RenderSystem{
     pub m_rhi: Rc<RefCell<VulkanRHI>>,
+    m_imgui_context: Rc<RefCell<imgui::Context>>,
+    pub m_imgui_platform: Rc<RefCell<WinitPlatform>>,
     m_swap_context: RenderSwapContext,
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
@@ -26,6 +31,12 @@ impl RenderSystem {
         let vulkan_rhi = VulkanRHI::create(&rhi_create_info)?;
         let vulkan_rhi = Rc::new(RefCell::new(vulkan_rhi));
 
+        let mut imgui_context = imgui::Context::create();
+        let mut platform = WinitPlatform::new(&mut imgui_context);
+        platform.attach_window(imgui_context.io_mut(), create_info.window_system.get_window(), HiDpiMode::Rounded);
+        let imgui_context = Rc::new(RefCell::new(imgui_context));
+        let imgui_platform = Rc::new(RefCell::new(platform));
+
         let swap_context = RenderSwapContext::default();
 
         let mut render_camera = RenderCamera::default();
@@ -41,14 +52,19 @@ impl RenderSystem {
         let create_info = RenderPipelineCreateInfo {
             rhi : &vulkan_rhi,
             render_resource: &render_resource,
+            enable_fxaa: true,
+            imgui_context: &imgui_context,
+            imgui_platform: &imgui_platform,
         };
         let render_pipeline = RenderPipeline::create(&create_info)?;
 
         render_resource.borrow_mut().m_material_descriptor_set_layout = 
-            render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[1].layout;
+            render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout;
 
         Ok(Self {
             m_rhi: vulkan_rhi, 
+            m_imgui_context: imgui_context,
+            m_imgui_platform: imgui_platform,
             m_swap_context: swap_context,
             m_render_pipeline_type: RenderPipelineType::ForwardPipeline,
             m_render_camera: Rc::new(RefCell::new(render_camera)),
@@ -57,6 +73,7 @@ impl RenderSystem {
             m_render_pipeline: render_pipeline
         })
     }
+    
     pub fn tick(&mut self, delta_time: f32) -> Result<()>{
         self.process_swap_data();
         self.m_rhi.borrow_mut().prepare_context();
@@ -64,6 +81,10 @@ impl RenderSystem {
         self.m_render_scene.update_visible_objects(&self.m_render_resource.borrow(), &self.m_render_camera.borrow());
         self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
         RuntimeGlobalContext::global().borrow().m_debugdraw_manager.borrow_mut().tick(delta_time);
+        let global = RuntimeGlobalContext::global().borrow();
+        let window_system = &global.m_window_system.borrow();
+        self.m_imgui_context.borrow_mut().io_mut().update_delta_time(Duration::from_secs_f32(delta_time));
+        self.m_imgui_platform.borrow_mut().prepare_frame(self.m_imgui_context.borrow_mut().io_mut(), window_system.get_window()).unwrap();
         match self.m_render_pipeline_type {
             RenderPipelineType::ForwardPipeline => {
                 self.m_render_pipeline.forward_render(&mut self.m_render_resource.borrow_mut())?;
@@ -81,6 +102,7 @@ impl RenderSystem {
         self.m_rhi.borrow_mut().destroy();
         Ok(())
     }
+    
     pub fn clear(&mut self){
         // if let Some(rhi) = &self.m_rhi {
         //     let mut rhi_borrow = rhi.borrow_mut();
@@ -113,6 +135,14 @@ impl RenderSystem {
 
     pub fn get_rhi(&self) -> &Rc<RefCell<VulkanRHI>> {
         &self.m_rhi
+    }
+
+    pub fn handle_event<T>(&self, event: &Event<T>) {
+        self.m_imgui_platform.borrow_mut().handle_event(
+            self.m_imgui_context.borrow_mut().io_mut(), 
+            RuntimeGlobalContext::global().borrow().m_window_system.borrow().get_window(), 
+            event
+        );
     }
 }
 
@@ -162,10 +192,15 @@ impl RenderSystem {
                             render_entity.m_joint_matrices[i] = game_object_part.m_skeleton_animation_result.m_transforms[i].m_matrix;
                         }
 
-                        //todo material
                         let mut material_source = MaterialSourceDesc::default();
                         if game_object_part.m_material_desc.m_with_texture {
-                            //todo
+                            material_source = MaterialSourceDesc {
+                                m_base_color_file: game_object_part.m_material_desc.m_base_color_texture_file.clone(),
+                                m_metallic_roughness_file: game_object_part.m_material_desc.m_metallic_roughness_texture_file.clone(),
+                                m_normal_file: game_object_part.m_material_desc.m_normal_texture_file.clone(),
+                                m_emissive_file: game_object_part.m_material_desc.m_emissive_texture_file.clone(),
+                                m_occlusion_file: game_object_part.m_material_desc.m_occlusion_texture_file.clone(),
+                            }
                         }
                         else{
                             material_source.m_base_color_file = "asset/texture/default/albedo.jpg".to_string();

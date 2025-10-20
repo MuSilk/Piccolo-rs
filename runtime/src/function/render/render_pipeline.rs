@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, main_camera_pass::{MainCameraPass, MainCameraPassInitInfo}}, render_pass::_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, main_camera_pass::{MainCameraPass, MainCameraPassInitInfo}, ui_pass::{UIPass, UIPassInitInfo}}, render_pass::{_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}};
 
 
 pub struct RenderPipeline {
@@ -12,29 +12,41 @@ pub struct RenderPipeline {
 impl RenderPipeline {
     pub fn create(create_info: &RenderPipelineCreateInfo) -> Result<Self> {
         let mut m_main_camera_pass = MainCameraPass::default();
+        let mut m_ui_pass = UIPass::default();
         let mut m_combine_ui_pass = CombineUIPass::default();
 
-        let render_pass_common_info = RenderPassCommonInfo {
+        let common_info = RenderPassCommonInfo {
             rhi: create_info.rhi,
             render_resource: create_info.render_resource,
         };
-        m_main_camera_pass.m_render_pass.set_common_info(&render_pass_common_info);
-        m_combine_ui_pass.m_render_pass.set_common_info(&render_pass_common_info);
+        m_main_camera_pass.m_render_pass.set_common_info(&common_info);
+        m_ui_pass.m_render_pass.set_common_info(&common_info);
+        m_combine_ui_pass.m_render_pass.set_common_info(&common_info);
 
         m_main_camera_pass.initialize(&MainCameraPassInitInfo {
-            rhi: create_info.rhi
+            rhi: create_info.rhi,
+            enable_fxaa: create_info.enable_fxaa,
+        })?;
+
+        m_ui_pass.initialize(&UIPassInitInfo {
+            rhi: create_info.rhi,
+            render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
+            ctx: create_info.imgui_context,
+            platform: create_info.imgui_platform,
         })?;
 
         m_combine_ui_pass.initialize(&CombineUIPassInitInfo {
             rhi: create_info.rhi,
             render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            scene_input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
+            scene_input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
+            ui_input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
         })?;
 
         Ok(RenderPipeline {
             m_base: RefCell::new(RenderPipelineBase {
                 m_rhi: Rc::downgrade(create_info.rhi),
-                m_main_camera_pass,
+                m_main_camera_pass,                
+                m_ui_pass,
                 m_combine_ui_pass,
             })
         })
@@ -57,6 +69,7 @@ impl RenderPipeline {
             let rhi = rhi.borrow();
             let global = RuntimeGlobalContext::global().borrow();
             self.m_base.borrow().m_main_camera_pass.draw(
+                &self.m_base.borrow().m_ui_pass,
                 &self.m_base.borrow().m_combine_ui_pass,
                 rhi.get_current_swapchain_image_index()
             )?;
@@ -104,7 +117,8 @@ impl RenderPipeline {
         let image_views = self.m_base.borrow().m_main_camera_pass.m_render_pass.get_framebuffer_image_views();
         self.m_base.borrow_mut().m_combine_ui_pass.update_after_framebuffer_recreate(
             rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
+            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
+            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
         ).unwrap();
         RuntimeGlobalContext::global().borrow().m_debugdraw_manager.borrow_mut().update_after_recreate_swap_chain(rhi);
     }

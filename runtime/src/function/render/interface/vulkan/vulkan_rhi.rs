@@ -445,18 +445,6 @@ impl VulkanRHI {
         }
     }
     
-    pub fn cmd_set_viewport(&self, command_buffer: vk::CommandBuffer, first_viewport: u32, viewports: &[vk::Viewport]) {
-        unsafe {
-            self.m_device.cmd_set_viewport(command_buffer, first_viewport, viewports);
-        }
-    }
-
-    pub fn cmd_set_scissor(&self, command_buffer: vk::CommandBuffer, first_scissor: u32, scissors: &[vk::Rect2D]) {
-        unsafe {
-            self.m_device.cmd_set_scissor(command_buffer, first_scissor, scissors);
-        }
-    }
-
     pub fn cmd_bind_vertex_buffers(&self, command_buffer: vk::CommandBuffer, first_binding: u32, buffers: &[vk::Buffer], offsets: &[vk::DeviceSize]) {
         unsafe {
             self.m_device.cmd_bind_vertex_buffers(command_buffer, first_binding, buffers, offsets);
@@ -482,6 +470,30 @@ impl VulkanRHI {
         }
     }
     
+    pub fn cmd_push_constants(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, size: u32, values: &[u8]) {
+        unsafe {
+            self.m_device.cmd_push_constants(
+                command_buffer, 
+                layout, 
+                stage_flags, 
+                offset, 
+                values,
+            );
+        }
+    }
+
+    pub fn cmd_set_viewport(&self, command_buffer: vk::CommandBuffer, first_viewport: u32, viewports: &[vk::Viewport]) {
+        unsafe {
+            self.m_device.cmd_set_viewport(command_buffer, first_viewport, viewports);
+        }
+    }
+
+    pub fn cmd_set_scissor(&self, command_buffer: vk::CommandBuffer, first_scissor: u32, scissors: &[vk::Rect2D]) {
+        unsafe {
+            self.m_device.cmd_set_scissor(command_buffer, first_scissor, scissors);
+        }
+    }
+
     pub fn cmd_draw(&self, command_buffer: vk::CommandBuffer, vertex_count: u32, instance_count: u32, first_vertex: u32, first_instance: u32){
         unsafe {
             self.m_device.cmd_draw(

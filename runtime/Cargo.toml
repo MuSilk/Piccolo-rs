@@ -18,6 +18,8 @@ tobj = {version = "4.0.3", features = ["log"]}
 vulkanalia = {version = "0.29.0", features = ["libloading", "provisional", "window"]}
 winit = "0.30"
 image = "0.25.8"
+imgui = "0.12.0"
+imgui-winit-support = "0.13.0"
 
 [lib]
 path = "src/lib.rs"
