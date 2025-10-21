@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use imgui_winit_support::WinitPlatform;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -28,6 +28,10 @@ impl RenderPipelineBase{
         self.m_main_camera_pass.prepare_pass_data(render_resource);
         RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().prepare_pass_data(render_resource);
     }   
+
+    pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
+        self.m_ui_pass.initialize_ui_render_backend(window_ui);
+    }
 
     pub fn destroy(&self) {
         self.m_main_camera_pass.destroy();

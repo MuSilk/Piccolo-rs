@@ -5,10 +5,18 @@ use runtime::{engine::{Engine, G_IS_EDITOR_MODE}, function::{global::global_cont
 use crate::editor::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, editor_ui::EditorUI};
 
 
-#[derive(Default)]
 pub struct Editor {
-    m_editor_ui: EditorUI,
+    m_editor_ui: Rc<RefCell<dyn WindowUI>>,
     m_engine_runtime: Weak<RefCell<Engine>>,
+}
+
+impl Default for Editor {
+    fn default() -> Self {
+        Self {
+            m_editor_ui: Rc::new(RefCell::new(EditorUI::default())),
+            m_engine_runtime: Weak::new(),
+        }
+    }
 }
 
 impl Editor {
@@ -26,9 +34,11 @@ impl Editor {
             RuntimeGlobalContext::get_render_system().borrow().get_render_camera()
         );
 
-        self.m_editor_ui.initialize(WindowUIInitInfo{
+        self.m_editor_ui.borrow_mut().initialize(WindowUIInitInfo{
             window_system: &RuntimeGlobalContext::get_window_system(),
             render_system: &RuntimeGlobalContext::get_render_system(),
         });
+
+        RuntimeGlobalContext::get_render_system().borrow_mut().initialize_ui_render_backend(&self.m_editor_ui);
     }
 }

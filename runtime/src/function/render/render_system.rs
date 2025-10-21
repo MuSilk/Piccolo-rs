@@ -4,7 +4,7 @@ use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -140,6 +140,10 @@ impl RenderSystem {
 
     pub fn get_rhi(&self) -> &Rc<RefCell<VulkanRHI>> {
         &self.m_rhi
+    }
+
+    pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
+        self.m_render_pipeline.m_base.borrow_mut().initialize_ui_render_backend(window_ui);
     }
 
     pub fn handle_event<T>(&self, event: &Event<T>) {

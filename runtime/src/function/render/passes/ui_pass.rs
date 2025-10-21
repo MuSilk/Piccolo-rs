@@ -5,7 +5,7 @@ use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -24,6 +24,7 @@ struct Texture {
 #[derive(Default)]
 pub struct UIPass {
     pub m_render_pass: RenderPass,
+    m_window_ui: Option<Weak<RefCell<dyn WindowUI>>>,
 
     ctx: Weak<RefCell<Context>>,
     platform: Weak<RefCell<WinitPlatform>>,
@@ -54,9 +55,11 @@ impl UIPass {
         let ctx = self.ctx.upgrade().unwrap();
         let mut ctx = ctx.borrow_mut();
 
-        let ui = ctx.new_frame();
-        
-        ui.show_demo_window(&mut true);
+        let mut ui = ctx.new_frame();
+
+        if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
+            window_ui.borrow_mut().pre_render(&mut ui);
+        }
 
         let color = [1.0;4];
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
@@ -75,6 +78,10 @@ impl UIPass {
     
     pub fn update_after_framebuffer_recreate(&mut self, _rhi: &VulkanRHI) -> Result<()> {
         Ok(())
+    }
+
+    pub fn initialize_ui_render_backend(&mut self, _window_ui: &Rc<RefCell<dyn WindowUI>>) {
+        self.m_window_ui = Some(Rc::downgrade(_window_ui));
     }
 
     pub fn reload_font_texture(&mut self, ctx: &mut imgui::Context) -> Result<()> {
