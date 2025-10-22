@@ -131,19 +131,13 @@ impl RenderResource {
             let index_buffer_size = mesh_data.m_static_mesh_data.m_index_buffer.m_data.len();
             let index_buffer_data = &mesh_data.m_static_mesh_data.m_index_buffer.m_data;
 
-            let vertex_buffer_size = mesh_data.m_static_mesh_data.m_vertex_buffer.m_data.len();
             let vertex_buffer_data = &mesh_data.m_static_mesh_data.m_vertex_buffer.m_data;
 
             if mesh_data.m_skeleton_binding_buffer.m_data.len() > 0{
                 unimplemented!();
             }
             else{
-                let vertex_buffer_data: &[MeshVertexDataDefinition] = unsafe{
-                    std::slice::from_raw_parts(
-                        vertex_buffer_data.as_ptr().cast(),
-                        vertex_buffer_size / std::mem::size_of::<MeshVertexDataDefinition>(),
-                    )
-                };
+                let vertex_buffer_data: &[MeshVertexDataDefinition] = bytemuck::cast_slice(&vertex_buffer_data);
                 Self::update_mesh_data(
                     rhi,
                     false,

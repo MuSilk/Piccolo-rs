@@ -1,5 +1,7 @@
 use std::ops::{Mul, Index, IndexMut};
 
+use serde::{Deserialize, Serialize};
+
 use crate::core::math::vector4::Vector4;
 /*
 [ m[0][0]  m[1][0]  m[2][0]  m[3][0] ]   {x}
@@ -7,7 +9,7 @@ use crate::core::math::vector4::Vector4;
 | m[0][2]  m[1][2]  m[2][2]  m[3][2] |   {z}
 [ m[0][3]  m[1][3]  m[2][3]  m[3][3] ]   {w}
 */
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Matrix4x4 {
     m_mat: [[f32; 4]; 4],

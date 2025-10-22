@@ -1,8 +1,9 @@
 use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::PathBuf};
 
+use itertools::Itertools;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}};
+use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::render_type::{BufferData, ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}, resource::{asset_manager, res_type::data::mesh_data::MeshData}};
 
 
 #[derive(Clone, Default)]
@@ -39,6 +40,34 @@ impl RenderResourceBase {
         let mut ret = RenderMeshData::default();
         if PathBuf::from(&source.m_mesh_file).extension().unwrap() == "obj" {
             ret.m_static_mesh_data = Self::load_static_mesh(&source.m_mesh_file, bounding_box);
+        }
+        else if PathBuf::from(&source.m_mesh_file).extension().unwrap() == "json" {
+            let mesh_data: MeshData = {
+                let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+                asset_manager.load_asset(&source.m_mesh_file).unwrap()
+            };
+
+            let vertices = mesh_data.vertices
+                .iter()
+                .map(|vertex| MeshVertexDataDefinition {
+                    x: vertex.px, y: vertex.py, z: vertex.pz,
+                    nx: vertex.nx, ny: vertex.ny, nz: vertex.nz,
+                    tx: vertex.tx, ty: vertex.ty, tz: vertex.tz,
+                    u: vertex.u, v: vertex.v,
+                })
+                .collect_vec();
+
+            ret.m_static_mesh_data.m_vertex_buffer.m_data = bytemuck::pod_collect_to_vec(&vertices);
+
+            let indices = mesh_data.indices
+                .iter()
+                .map(|indice| *indice as u16)
+                .collect_vec();
+
+            ret.m_static_mesh_data.m_index_buffer.m_data = bytemuck::pod_collect_to_vec(&indices);
+    
+
+            //todo: skeleton bindings
         }
         else {
             panic!("Unsupported mesh format: {}", source.m_mesh_file);

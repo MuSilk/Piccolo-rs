@@ -1,9 +1,8 @@
-use std::{cell::RefCell, ptr::null};
+use std::{cell::RefCell};
 
-use imgui::{sys::{igBegin, igDockBuilderAddNode, igDockBuilderDockWindow, igDockBuilderFinish, igDockBuilderGetNode, igDockBuilderRemoveNode, igDockBuilderSetNodePos, igDockBuilderSetNodeSize, igDockBuilderSplitNode, igDockSpace, igEnd, igGetID_Str, igGetMainViewport, igSetNextWindowPos, igSetNextWindowSize, igSetNextWindowViewport, ImGuiCond_Always, ImGuiConfigFlags_NoMouseCursorChange, ImGuiDir_Down, ImGuiDir_Left, ImGuiDir_Right, ImGuiDockNodeFlags_DockSpace, ImGuiWindowFlags_MenuBar, ImGuiWindowFlags_NoBackground, ImGuiWindowFlags_NoBringToFrontOnFocus, ImGuiWindowFlags_NoCollapse, ImGuiWindowFlags_NoMove, ImGuiWindowFlags_NoResize, ImGuiWindowFlags_NoTitleBar, ImVec2}, CollapsingHeader, Condition, TreeNodeFlags, WindowFlags};
+use imgui::{Condition, WindowFlags};
 use runtime::function::{ui::window_ui::{WindowUI, WindowUIInitInfo}};
 
-use crate::{editor::editor_global_context::EditorGlobalContext, main};
 
 #[derive(Default)]
 pub struct EditorUI {

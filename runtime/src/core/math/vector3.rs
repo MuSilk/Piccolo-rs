@@ -1,9 +1,11 @@
 use std::{f32::consts::PI, ops::{Add, AddAssign, Mul, MulAssign, Sub}};
 
+use serde::{Deserialize, Serialize};
+
 use crate::core::math::{matrix4::Matrix4x4, quaternion::Quaternion, vector4::Vector4};
 
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Vector3 {
     pub x: f32,

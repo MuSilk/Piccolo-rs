@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::{Rc, Weak}};
 
 use anyhow::Result;
 use log::info;
-use crate::{function::{framework::level::level::{Level, LevelExt}, global::global_context::RuntimeGlobalContext}, resource::{config_manager, res_type::common::world::WorldRes}};
+use crate::{function::{framework::level::level::{Level, LevelExt}, global::global_context::RuntimeGlobalContext}, resource::{res_type::common::world::WorldRes}};
 
 #[derive(Default)]
 pub struct WorldManager {
@@ -46,7 +46,7 @@ impl WorldManager {
 
     fn load_level(&mut self, level_url: &str) -> Result<()> {
         let mut level = Level::new();
-        level.load(level_url);
+        level.load(level_url)?;
         self.m_current_level = Rc::downgrade(&level);
         self.m_loaded_levels.insert(level_url.to_string(), level);
         Ok(())

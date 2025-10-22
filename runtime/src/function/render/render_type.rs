@@ -1234,6 +1234,7 @@ pub struct TextureData {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MeshVertexDataDefinition {
     pub x: f32, pub y: f32, pub z: f32,
     pub nx: f32,pub ny: f32, pub nz: f32,

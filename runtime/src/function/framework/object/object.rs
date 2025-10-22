@@ -1,9 +1,8 @@
-use std::{cell::RefCell, rc::{Rc, Weak}};
+use std::{cell::RefCell, rc::Rc};
 
-use crate::{function::framework::{level::level::Level, object::object_id_allocator::GObjectID}};
+use crate::{function::framework::{object::object_id_allocator::GObjectID}};
 
 pub struct GObject {
-    m_parent_level: Weak<RefCell<Level>>,
     m_id: GObjectID,
     m_name: String,
     m_definition_url: String,
@@ -11,9 +10,8 @@ pub struct GObject {
 
 impl GObject {
 
-    pub fn new(id: GObjectID, parent_level: &Rc<RefCell<Level>>) -> Rc<RefCell<GObject>> {
+    pub fn new(id: GObjectID) -> Rc<RefCell<GObject>> {
         Rc::new(RefCell::new(GObject {
-            m_parent_level: Rc::downgrade(parent_level),
             m_id: id,
             m_name: String::new(),
             m_definition_url: String::new(),
@@ -32,4 +30,11 @@ impl GObject {
         self.m_name.as_str()
     }
 
+    pub fn set_definition_url(&mut self, url: &str) {
+        self.m_definition_url = url.to_string();
+    }
+
+    pub fn get_definition_url(&self) -> &str {
+        self.m_definition_url.as_str()
+    }
 }

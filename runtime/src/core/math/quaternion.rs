@@ -1,8 +1,10 @@
 use std::ops::Mul;
+use serde::{Deserialize, Serialize};
+
 use crate::core::math::{matrix4::Matrix4x4, vector3::Vector3};
 
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Quaternion {
     pub x: f32,

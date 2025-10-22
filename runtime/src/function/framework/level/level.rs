@@ -1,10 +1,10 @@
-use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, iter::FlatMap, rc::Rc};
+use std::{any::{Any, TypeId}, cell::{RefCell}, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
 
 use anyhow::Result;
 use itertools::Itertools;
 use log::info;
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::components::mesh::SubMeshRes};
+use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::{common::{level::LevelRes, object::ObjectInstanceRes}}};
 
 type ComponentColumn = Vec<Box<RefCell<dyn Any>>>;
 
@@ -41,6 +41,13 @@ impl Archetype {
         self.m_entities.len() - 1
     }
 
+    fn get_entity(&self, index: GObjectID) -> impl Iterator<Item = &Box<RefCell<dyn Any>>> {
+        self.m_columns.iter()
+            .map(move |(_type_id, column)| {
+                column.get(index as usize).unwrap()
+            })
+    }
+
     fn get_column<T: 'static + ComponentTrait>(&self) -> Option<&ComponentColumn> {
         self.m_columns.get(&TypeId::of::<T>())
     }
@@ -50,6 +57,7 @@ impl Archetype {
 #[derive(Default)]
 pub struct Level {
     m_is_loaded: bool,
+    m_level_res_url: String,
     m_archetypes: HashMap<usize, Archetype>,
     m_entity_location: HashMap<GObjectID, (usize, usize)>,
     m_entities: HashMap<GObjectID, Rc<RefCell<GObject>>>,
@@ -178,34 +186,92 @@ impl Level {
 pub trait LevelExt {
     fn spawn(&mut self) -> GObjectID;
     fn load(&mut self, level_res_url: &str) -> Result<()>;
+    fn save(&self) -> Result<()>;
 }
 
 impl LevelExt for Rc<RefCell<Level>> {
     fn spawn(&mut self) -> GObjectID {
         let object_id = object_id_allocator::alloc();
-        let gobject = GObject::new(object_id, &self);
+        let gobject = GObject::new(object_id);
         self.borrow_mut().m_entities.insert(object_id, gobject);
         object_id
     }
 
     fn load(&mut self, level_res_url: &str) -> Result<()> {
         info!("Loading level: {}", level_res_url);
-        let object_id = self.spawn();
-        let mesh_component = Box::new(RefCell::new(MeshComponent::default()));
-        mesh_component.borrow_mut().m_mesh_res.m_sub_meshs.push(SubMeshRes{
-            m_obj_file_ref: "asset/bunny_200.obj".to_string(),
-            ..Default::default()
+        let level_res = {
+            let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+            assert_manager.load_asset::<LevelRes>(level_res_url)?
+        };
+        level_res.m_objects.iter().for_each(|obj| {
+            let object_id = object_id_allocator::alloc();
+            let gobject = GObject::new(object_id);
+            gobject.borrow_mut().set_name(&obj.m_name);
+            gobject.borrow_mut().set_definition_url(&obj.m_definition);
+            self.borrow_mut().m_entities.insert(object_id, gobject);
+
+            let components = obj.m_instanced_components.iter().map(|component| {
+                let component = component.as_any();
+                if component.is::<MeshComponent>() {
+                        let mesh_component = component.downcast_ref::<MeshComponent>().unwrap();
+                        let component = Box::new(RefCell::new(mesh_component.clone()));
+                        component.borrow_mut().post_load_resource(&self,object_id);
+                        let component = component as Box<RefCell<dyn Any>>;
+                        (mesh_component.type_id(), component)
+                    } else if component.is::<TransformComponent>() {
+                        let transform_component = component.downcast_ref::<TransformComponent>().unwrap();
+                        let component = Box::new(RefCell::new(transform_component.clone()));
+                        component.borrow_mut().post_load_resource(&self,object_id);
+                        (transform_component.type_id(),component as Box<RefCell<dyn Any>>)
+                    } else {
+                        panic!("Unknown component type!");
+                    }
+            }).collect::<HashMap<_, _>>();
+            self.borrow_mut().create_object(object_id, components);
         });
-        mesh_component.borrow_mut().post_load_resource(&self,  object_id);
-        let transform_component = Box::new(RefCell::new(TransformComponent::default()));
-        transform_component.borrow_mut().post_load_resource(&self, object_id);
-        let components: HashMap<TypeId, Box<RefCell<dyn Any>>> = vec![
-            (TypeId::of::<MeshComponent>(), mesh_component as Box<RefCell<dyn Any>>),
-            (TypeId::of::<TransformComponent>(), transform_component as Box<RefCell<dyn Any>>),
-        ].into_iter().collect();
-        self.borrow_mut().create_object(object_id, components);
+        self.borrow_mut().m_level_res_url = level_res_url.to_string();
         self.borrow_mut().m_is_loaded = true;
         info!("Level load succeed!");
         Ok(())
     }
+
+    fn save(&self) -> Result<()> {
+        info!("Saving level: {}", self.borrow().m_level_res_url);
+        let mut output_level_res = LevelRes::default();
+
+        self.borrow().m_entities.iter().for_each(|(object_id, entity)|{
+            let mut output_object = ObjectInstanceRes::default();
+            output_object.m_name = entity.borrow().get_name().to_string();
+            output_object.m_definition = entity.borrow().get_definition_url().to_string();
+
+            let borrowed_level = self.borrow();
+            let index = borrowed_level.m_entity_location.get(object_id).unwrap();
+            let components = 
+                borrowed_level.m_archetypes.get(&index.0).unwrap().get_entity(index.1)
+                .map(|component| {
+                    if component.borrow().is::<MeshComponent>() {
+                        let mesh_component = component.borrow();
+                        let mesh_component = mesh_component.downcast_ref::<MeshComponent>().unwrap();
+                        Box::new(mesh_component.clone()) as Box<dyn ComponentTrait>
+                    } else if component.borrow().is::<TransformComponent>() {
+                        let transform_component = component.borrow();
+                        let transform_component = transform_component.downcast_ref::<TransformComponent>().unwrap();
+                        Box::new(transform_component.clone()) as Box<dyn ComponentTrait>
+                    } else {
+                        panic!("Unknown component type!");
+                    }
+                })
+                .collect::<Vec<_>>();
+            output_object.m_instanced_components = components;
+
+            output_level_res.m_objects.push(output_object);
+        });
+
+        let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+        assert_manager.save_asset(&self.borrow().m_level_res_url, output_level_res)?;
+
+        info!("Level save succeed!");
+        Ok(())
+    }
+
 }
