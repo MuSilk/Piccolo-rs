@@ -1,43 +1,58 @@
-use std::{any::{Any, TypeId}, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, iter::FlatMap, rc::Rc};
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::{MeshComponent}, transform::transform_component::TransformComponent}, object::{object::{WrappedGObject}, object_id_allocator::{self, GObjectID}}}}, resource::res_type::{ components::mesh::{SubMeshRes}}};
+use anyhow::Result;
+use itertools::Itertools;
+use log::info;
+
+use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::components::mesh::SubMeshRes};
+
+type ComponentColumn = Vec<Box<RefCell<dyn Any>>>;
 
 #[derive(Default)]
-struct ComponentTable {
-    m_components: Vec<Box<RefCell<dyn Any>>>,
-    m_entity_to_index: HashMap<GObjectID, usize>,
-    m_index_to_entity: Vec<GObjectID>,
+struct Archetype {
+    m_columns: HashMap<TypeId, ComponentColumn>,
+    m_entities: Vec<GObjectID>,
 }
 
-impl ComponentTable {
-    fn insert(&mut self, object_id: GObjectID, component: Box<RefCell<dyn Any>>){
-        if let Some(&index) = self.m_entity_to_index.get(&object_id) {
-            self.m_components[index] = component;
-        }
-        else {
-            let index = self.m_index_to_entity.len();
-            self.m_entity_to_index.insert(object_id, index);
-            self.m_index_to_entity.push(object_id);
-            self.m_components.push(component);
-        }
+
+impl Archetype {
+
+    fn has_component<T: 'static + ComponentTrait>(&self) -> bool {
+        self.m_columns.contains_key(&TypeId::of::<T>())
     }
 
-    fn get(&self, object_id: GObjectID) -> Option<&Box<RefCell<dyn Any>>> {
-        if let Some(&index) = self.m_entity_to_index.get(&object_id) {
-            return Some(&self.m_components[index]);
+    fn add_component_type<T: 'static + ComponentTrait>(&mut self) {
+        self.m_columns.insert(TypeId::of::<T>(), Vec::new());
+    }
+
+    fn add_component_type_by_id(&mut self, type_id: TypeId) {
+        self.m_columns.insert(type_id, Vec::new());
+    }
+    
+    fn add_entity(&mut self, object_id: GObjectID, components: HashMap<TypeId, Box<RefCell<dyn Any>>>) -> usize {
+        assert_eq!(components.keys().collect::<HashSet<_>>(), 
+            self.m_columns.keys().sorted().collect::<HashSet<_>>(), 
+            "Components do not match archetype!"
+        );
+        for (type_id, component) in components {
+            self.m_columns.get_mut(&type_id).unwrap().push(component);
         }
-        None
+        self.m_entities.push(object_id);
+        self.m_entities.len() - 1
+    }
+
+    fn get_column<T: 'static + ComponentTrait>(&self) -> Option<&ComponentColumn> {
+        self.m_columns.get(&TypeId::of::<T>())
     }
 
 }
-
-pub type LevelObjectMap = HashMap<GObjectID, WrappedGObject>;
 
 #[derive(Default)]
 pub struct Level {
     m_is_loaded: bool,
-    m_gobjects: LevelObjectMap,
-    m_components: HashMap<TypeId, ComponentTable>,
+    m_archetypes: HashMap<usize, Archetype>,
+    m_entity_location: HashMap<GObjectID, (usize, usize)>,
+    m_entities: HashMap<GObjectID, Rc<RefCell<GObject>>>,
 }
 
 impl Level {
@@ -47,97 +62,134 @@ impl Level {
         level
     }
     
-    pub fn tick(&self, delta_time: f32) {
+    pub fn tick(&mut self, delta_time: f32) {
         if !self.m_is_loaded {
             return;
         }
-        for (_, mut mesh_component) in self.query_mut::<MeshComponent>() {
-            mesh_component.tick(delta_time);
+        self.tick_mesh_components(delta_time);
+    }
+
+    fn query<T: 'static + ComponentTrait>(&'_ mut self) -> impl Iterator<Item = std::cell::Ref<'_, T>> {
+        self.m_archetypes
+            .iter()
+            .filter(|(_type_id, archetype)| archetype.has_component::<T>())
+            .flat_map(|(_type_id, archetype)| {
+                let column = archetype.get_column::<T>().unwrap();
+                column.iter().map(|any_box| {
+                    std::cell::Ref::map(any_box.borrow(), |b| b.downcast_ref::<T>().unwrap())
+                })
+            })
+    }
+
+    fn query_mut<T: 'static + ComponentTrait>(&'_ mut self) -> impl Iterator<Item = std::cell::RefMut<'_, T>> {
+        self.m_archetypes
+            .iter_mut()
+            .filter(|(_type_id, archetype)| archetype.has_component::<T>())
+            .flat_map(|(_type_id, archetype)| {
+                let column = archetype.get_column::<T>().unwrap();
+                column.iter().map(|any_box| {
+                    std::cell::RefMut::map(any_box.borrow_mut(), |b| b.downcast_mut::<T>().unwrap())
+                })
+            })
+    }
+
+    fn query_pair<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
+        -> impl Iterator<Item = (std::cell::Ref<'_, T>, std::cell::Ref<'_, U>)> 
+    {
+        self.m_archetypes
+            .iter()
+            .filter(|(_type_id, archetype)| archetype.has_component::<T>() && archetype.has_component::<U>())
+            .flat_map(|(_type_id, archetype)| {
+                let column_t = archetype.get_column::<T>().unwrap();
+                let column_u = archetype.get_column::<U>().unwrap();
+                column_t.iter().zip(column_u.iter()).map(|(any_box_t, any_box_u)| {
+                    (
+                        std::cell::Ref::map(any_box_t.borrow(), |b| b.downcast_ref::<T>().unwrap()),
+                        std::cell::Ref::map(any_box_u.borrow(), |b| b.downcast_ref::<U>().unwrap()),
+                    )
+                })
+            })
+    }
+
+    fn query_pair_mut<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
+        -> impl Iterator<Item = (std::cell::RefMut<'_, T>, std::cell::RefMut<'_, U>)> 
+    {
+        self.m_archetypes
+            .iter_mut()
+            .filter(|(_type_id, archetype)| archetype.has_component::<T>() && archetype.has_component::<U>())
+            .flat_map(|(_type_id, archetype)| {
+                let column_t = archetype.get_column::<T>().unwrap();
+                let column_u = archetype.get_column::<U>().unwrap();
+                column_t.iter().zip(column_u.iter()).map(|(any_box_t, any_box_u)| {
+                    (
+                        std::cell::RefMut::map(any_box_t.borrow_mut(), |b| b.downcast_mut::<T>().unwrap()),
+                        std::cell::RefMut::map(any_box_u.borrow_mut(), |b| b.downcast_mut::<U>().unwrap()),
+                    )
+                })
+            })
+    }
+    
+    pub fn create_object(&mut self, object_id: GObjectID, components: HashMap<TypeId, Box<RefCell<dyn Any>>>) {
+        let archetype_type_id: usize = {
+            let mut ids: Vec<_> = components.keys().cloned().collect();
+            ids.sort();
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            ids.hash(&mut hasher);
+            hasher.finish() as usize
+        };
+        if self.m_archetypes.get(&archetype_type_id).is_none() {
+            let mut archetype = Archetype::default();
+            for type_id in components.keys() {
+                archetype.add_component_type_by_id(*type_id);
+            }
+            self.m_archetypes.insert(archetype_type_id, archetype);
         }
+        let entity_index = self.m_archetypes.get_mut(&archetype_type_id).unwrap().add_entity(object_id, components);
+        self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
-    fn table_for<T: 'static + ComponentTrait>(&mut self) -> &mut ComponentTable {
-        self.m_components.entry(TypeId::of::<T>()).or_insert_with(ComponentTable::default)
-    }
+    fn tick_mesh_components(&mut self, delta_time: f32) {
+        self.query_pair_mut::<MeshComponent, TransformComponent>()
+            .for_each(|(mut mesh, mut transform)| 
+        {
+            // if transform_component.is_dirty() {
+                let mut dirty_mesh_parts = vec![];
+                for mesh_part in &mut mesh.m_raw_meshes {
+                    let object_transform_matrix = mesh_part.m_transform_desc.m_transform_matrix;
 
-    pub fn insert<C: 'static + ComponentTrait>(&mut self, object_id: GObjectID, component: Box<RefCell<C>>) {
-        let table = self.table_for::<C>();
-        table.insert(object_id, component);
-    }
+                    mesh_part.m_transform_desc.m_transform_matrix = transform.get_matrix() * object_transform_matrix;
+                    dirty_mesh_parts.push(mesh_part.clone());
 
-    pub fn get_component<C: 'static + ComponentTrait>(&self, object_id: GObjectID) -> Option<std::cell::Ref<'_, C>> {
-        self.m_components
-            .get(&TypeId::of::<C>())
-            .and_then(|table| table.get(object_id))
-            .and_then(|boxed| {
-                let borrowed = boxed.as_ref().borrow();
-                if borrowed.is::<C>() {
-                    Some(std::cell::Ref::map(borrowed, |b| b.downcast_ref::<C>().unwrap()))
-                } else {
-                    None
+                    mesh_part.m_transform_desc.m_transform_matrix = object_transform_matrix;
                 }
-            }
-        )
+
+                let render_system = RuntimeGlobalContext::get_render_system().borrow();
+                let render_swap_context = render_system.get_swap_context();
+                let logic_swap_data = render_swap_context.get_logic_swap_data();
+                transform.set_dirty_flag(false);
+                logic_swap_data.borrow_mut().add_dirty_game_object(&GameObjectDesc::new(mesh.m_component.m_parent_object, dirty_mesh_parts));
+            // }
+        });
+        
     }
 
-    pub fn get_component_mut<C: 'static + ComponentTrait>(&self, object_id: GObjectID) -> Option<std::cell::RefMut<'_, C>> {
-        self.m_components
-            .get(&TypeId::of::<C>())
-            .and_then(|table| table.get(object_id))
-            .and_then(|boxed| {
-                let borrowed = boxed.as_ref().borrow_mut();
-                if borrowed.is::<C>() {
-                    Some(std::cell::RefMut::map(borrowed, |b| b.downcast_mut::<C>().unwrap()))
-                } else {
-                    None
-                }
-            }
-        )
-    }
-
-    pub fn query<C: 'static + ComponentTrait>(&self) -> Vec<(GObjectID, std::cell::Ref<'_, C>)> {
-        let mut result = Vec::new();
-        if let Some(table) = self.m_components.get(&TypeId::of::<C>()) {
-            for &object_id in &table.m_index_to_entity {
-                if let Some(component) = table.get(object_id).and_then(|boxed| {
-                    Some(std::cell::Ref::map(boxed.borrow(), |b| b.downcast_ref::<C>().unwrap()))
-                }) {
-                    result.push((self.m_gobjects.get(&object_id).unwrap().borrow().get_id(), component));
-                }
-            }
-        }
-        result
-    }
-
-    pub fn query_mut<C: 'static + ComponentTrait>(&self) -> Vec<(GObjectID, std::cell::RefMut<'_, C>)> {
-        let mut result = Vec::new();
-        if let Some(table) = self.m_components.get(&TypeId::of::<C>()) {
-            for &object_id in &table.m_index_to_entity {
-                if let Some(component) = table.get(object_id).and_then(|boxed| {
-                    Some(std::cell::RefMut::map(boxed.borrow_mut(), |b| b.downcast_mut::<C>().unwrap()))
-                }) {
-                    result.push((self.m_gobjects.get(&object_id).unwrap().borrow().get_id(), component));
-                }
-            }
-        }
-        result
-    }
 }
 
 pub trait LevelExt {
-    fn spawn(&self) -> GObjectID;
-    fn load(&self);
+    fn spawn(&mut self) -> GObjectID;
+    fn load(&mut self, level_res_url: &str) -> Result<()>;
 }
 
 impl LevelExt for Rc<RefCell<Level>> {
-    fn spawn(&self) -> GObjectID {
+    fn spawn(&mut self) -> GObjectID {
         let object_id = object_id_allocator::alloc();
-        let gobject = WrappedGObject::new(object_id, &self);
-        self.borrow_mut().m_gobjects.insert(object_id, gobject);
+        let gobject = GObject::new(object_id, &self);
+        self.borrow_mut().m_entities.insert(object_id, gobject);
         object_id
     }
 
-    fn load(&self) {
+    fn load(&mut self, level_res_url: &str) -> Result<()> {
+        info!("Loading level: {}", level_res_url);
         let object_id = self.spawn();
         let mesh_component = Box::new(RefCell::new(MeshComponent::default()));
         mesh_component.borrow_mut().m_mesh_res.m_sub_meshs.push(SubMeshRes{
@@ -147,8 +199,13 @@ impl LevelExt for Rc<RefCell<Level>> {
         mesh_component.borrow_mut().post_load_resource(&self,  object_id);
         let transform_component = Box::new(RefCell::new(TransformComponent::default()));
         transform_component.borrow_mut().post_load_resource(&self, object_id);
-        self.borrow_mut().insert(object_id, mesh_component);
-        self.borrow_mut().insert(object_id, transform_component);
+        let components: HashMap<TypeId, Box<RefCell<dyn Any>>> = vec![
+            (TypeId::of::<MeshComponent>(), mesh_component as Box<RefCell<dyn Any>>),
+            (TypeId::of::<TransformComponent>(), transform_component as Box<RefCell<dyn Any>>),
+        ].into_iter().collect();
+        self.borrow_mut().create_object(object_id, components);
         self.borrow_mut().m_is_loaded = true;
+        info!("Level load succeed!");
+        Ok(())
     }
 }

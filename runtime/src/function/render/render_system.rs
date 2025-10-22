@@ -256,7 +256,7 @@ impl RenderSystem {
                 self.m_render_camera.borrow_mut().set_fov_x(*m_fov_x);
             }
             if let Some(m_view_matrix) = &camera_swap_data.m_view_matrix {
-                self.m_render_camera.borrow_mut().set_main_view_matrix(m_view_matrix,RenderCameraType::Editor);
+                self.m_render_camera.borrow_mut().set_main_view_matrix(m_view_matrix.clone(),RenderCameraType::Editor);
             }
             if let Some(m_camera_type) = &camera_swap_data.m_camera_type {
                 self.m_render_camera.borrow_mut().set_current_camera_type(*m_camera_type);

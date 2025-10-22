@@ -213,7 +213,6 @@ impl UIPass {
                 self.m_render_pass.m_render_pipeline[0].layout,
                 vk::ShaderStageFlags::VERTEX, 
                 (std::mem::size_of::<f32>() * 0) as u32, 
-                (std::mem::size_of::<f32>() * 2) as u32, 
                 unsafe {
                     std::slice::from_raw_parts(scale.as_ptr() as *const u8, scale.len() * std::mem::size_of::<f32>())
                 }
@@ -222,7 +221,6 @@ impl UIPass {
                 command_buffer, 
                 self.m_render_pass.m_render_pipeline[0].layout,
                 vk::ShaderStageFlags::VERTEX, 
-                (std::mem::size_of::<f32>() * 2) as u32, 
                 (std::mem::size_of::<f32>() * 2) as u32, 
                 unsafe {
                     std::slice::from_raw_parts(translate.as_ptr() as *const u8, translate.len() * std::mem::size_of::<f32>())

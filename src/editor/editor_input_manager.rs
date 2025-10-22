@@ -1,8 +1,7 @@
 use std::{cell::RefCell, rc::{Rc}};
 
 use bitflags::bitflags;
-use nalgebra_glm::{Vec2, Vec3};
-use runtime::{engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
+use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
 use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton}, keyboard::{KeyCode, PhysicalKey}};
 
 use crate::{editor::{editor_global_context::EditorGlobalContext}};
@@ -27,8 +26,8 @@ bitflags! {
 
 #[derive(Default)]
 pub struct EditorInputManager {
-    m_engine_window_pos: Vec2,
-    m_engine_window_size: Vec2,
+    m_engine_window_pos: Vector2,
+    m_engine_window_size: Vector2,
     m_mouse_x: f32,
     m_mouse_y: f32,
     m_camera_speed: f32,
@@ -50,7 +49,7 @@ impl EditorInputManager {
                 let scene_manager = editor_global.m_scene_manager.borrow();
                 let camera = scene_manager.get_editor_camera();
                 let camera = camera.upgrade().unwrap();
-                camera.borrow_mut().rotate_camera(&(Vec2::new(
+                camera.borrow_mut().rotate_camera(&(Vector2::new(
                     position.y as f32 - self.m_mouse_y,
                     position.x as f32 - self.m_mouse_x
                 ) * angular_velocity));
@@ -161,7 +160,7 @@ pub struct  WrappedEditorInputManager(Rc<RefCell<EditorInputManager>>);
 
 impl WrappedEditorInputManager {
     pub fn initialize(&self) {
-        self.0.borrow_mut().m_engine_window_size = Vec2::new(1024.0, 768.0);
+        self.0.borrow_mut().m_engine_window_size = Vector2::new(1024.0, 768.0);
         self.0.borrow_mut().m_camera_speed = 0.05;
         self.register_input();
     }
@@ -194,25 +193,25 @@ impl WrappedEditorInputManager {
         let camera = camera.upgrade().unwrap();
         let mut editor_camera =  camera.borrow_mut();
         let camera_rotate = editor_camera.rotation().conjugate();
-        let mut camera_relative_pos = Vec3::new(0.0, 0.0, 0.0);
+        let mut camera_relative_pos = Vector3::new(0.0, 0.0, 0.0);
         
         if self.0.borrow().m_editor_command.contains(EditorCommand::camera_forward) {
-            camera_relative_pos += nalgebra_glm::quat_rotate_vec3(&camera_rotate, &Vec3::new(0.0, camera_speed, 0.0)); 
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, camera_speed, 0.0); 
         }
         if self.0.borrow().m_editor_command.contains(EditorCommand::camera_back) {
-            camera_relative_pos += nalgebra_glm::quat_rotate_vec3(&camera_rotate, &Vec3::new(0.0, -camera_speed, 0.0)); 
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, -camera_speed, 0.0);
         }
         if self.0.borrow().m_editor_command.contains(EditorCommand::camera_left) {
-            camera_relative_pos += nalgebra_glm::quat_rotate_vec3(&camera_rotate, &Vec3::new(-camera_speed, 0.0, 0.0)); 
+            camera_relative_pos += camera_rotate * Vector3::new(-camera_speed, 0.0, 0.0);
         }
         if self.0.borrow().m_editor_command.contains(EditorCommand::camera_right) {
-            camera_relative_pos += nalgebra_glm::quat_rotate_vec3(&camera_rotate, &Vec3::new(camera_speed, 0.0, 0.0)); 
+            camera_relative_pos += camera_rotate * Vector3::new(camera_speed, 0.0, 0.0);
         }
         if self.0.borrow().m_editor_command.contains(EditorCommand::camera_up) {
-            camera_relative_pos += nalgebra_glm::quat_rotate_vec3(&camera_rotate, &Vec3::new(0.0, 0.0, camera_speed)); 
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, 0.0, camera_speed);
         }
         if self.0.borrow().m_editor_command.contains(EditorCommand::camera_down) {
-            camera_relative_pos += nalgebra_glm::quat_rotate_vec3(&camera_rotate, &Vec3::new(0.0, 0.0, -camera_speed)); 
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, 0.0, -camera_speed);
         }
         editor_camera.move_camera(&camera_relative_pos);
     }

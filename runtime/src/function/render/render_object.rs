@@ -1,30 +1,27 @@
-use nalgebra_glm::Mat4;
-use reflection::reflection_derive::{ReflectFields, ReflectWhiteListFields};
-
-use crate::function::framework::object::object_id_allocator::{GObjectID, K_INVALID_GOBJECT_ID};
+use crate::{core::math::matrix4::Matrix4x4, function::framework::object::object_id_allocator::{GObjectID, K_INVALID_GOBJECT_ID}};
 
 
-#[derive(Clone, Default, ReflectFields)]
+#[derive(Clone, Default)]
 pub struct GameObjectMeshDesc {
     pub m_mesh_file: String,
 }
 
-#[derive(Clone, Default, ReflectFields)]
+#[derive(Clone, Default)]
 pub struct SkeletonBindingDesc {
     pub m_skeleton_binding_file: String,
 }
 
-#[derive(Clone, Default, ReflectWhiteListFields)]
+#[derive(Clone, Default)]
 pub struct SkeletonAnimationResultTransform {
-    pub m_matrix: Mat4,
+    pub m_matrix: Matrix4x4,
 }
 
-#[derive(Clone, Default, ReflectFields)]
+#[derive(Clone, Default)]
 pub struct SkeletonAnimationResult {
     pub m_transforms: Vec<SkeletonAnimationResultTransform>,
 }
 
-#[derive(Clone, Default, ReflectFields)]
+#[derive(Clone, Default)]
 pub struct GameObjectMaterialDesc{
     pub m_base_color_texture_file: String,
     pub m_metallic_roughness_texture_file: String,
@@ -34,12 +31,12 @@ pub struct GameObjectMaterialDesc{
     pub m_with_texture: bool
 }
 
-#[derive(Clone, Default, ReflectWhiteListFields)]
+#[derive(Clone, Default)]
 pub struct GameObjectTransformDesc {
-    pub m_transform_matrix: Mat4,
+    pub m_transform_matrix: Matrix4x4,
 }
 
-#[derive(Clone, Default, ReflectFields)]
+#[derive(Clone, Default)]
 pub struct GameObjectPartDesc {
     pub m_mesh_desc: GameObjectMeshDesc,
     pub m_material_desc: GameObjectMaterialDesc,

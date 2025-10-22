@@ -1,5 +1,6 @@
-use nalgebra_glm::{Quat, Vec2, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
+
+use crate::core::math::{quaternion::Quaternion, vector2::Vector2, vector3::Vector3, vector4::Vector4};
 
 pub const K_DEBUG_DRAW_INFINITY_LIFE_TIME: f32 = -2.0;
 pub const K_DEBUG_DRAW_ONE_FRAME: f32 = 0.0;
@@ -35,23 +36,23 @@ pub enum FillMode {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct DebugDrawVertex {
-    pub pos: Vec3,
-    pub color: Vec4,
-    pub texcoord: Vec2,
+    pub pos: Vector3,
+    pub color: Vector4,
+    pub texcoord: Vector2,
 }
 
 impl Default for DebugDrawVertex {
     fn default() -> Self {
         Self::new(
-            Vec3::default(),
-            Vec4::default(),
-            Vec2::new(-1.0, -1.0),
+            Vector3::default(),
+            Vector4::default(),
+            Vector2::new(-1.0, -1.0),
         )
     }
 }
 
 impl DebugDrawVertex {
-    pub const fn new(pos: Vec3, color: Vec4, texcoord: Vec2) -> Self {
+    pub const fn new(pos: Vector3, color: Vector4, texcoord: Vector2) -> Self {
         Self { pos, color, texcoord }
     }
 
@@ -74,13 +75,13 @@ impl DebugDrawVertex {
             .binding(0)
             .location(1)
             .format(vk::Format::R32G32B32A32_SFLOAT)
-            .offset(size_of::<Vec3>() as u32)
+            .offset(size_of::<Vector3>() as u32)
             .build();
         let texcoord = vk::VertexInputAttributeDescription::builder()
             .binding(0)
             .location(2)
             .format(vk::Format::R32G32_SFLOAT)
-            .offset((size_of::<Vec3>() + size_of::<Vec4>()) as u32)
+            .offset((size_of::<Vector3>() + size_of::<Vector4>()) as u32)
             .build();
         [pos, color, texcoord]
     }
@@ -165,47 +166,47 @@ pub struct DebugDrawQuad {
 #[derive(Clone, Default)]
 pub struct DebugDrawBox { 
     pub m_base: DebugDrawPrimitive,
-    pub m_center_point: Vec3,
-    pub m_half_extent: Vec3,
-    pub m_color: Vec4,
-    pub m_rotate: Quat
+    pub m_center_point: Vector3,
+    pub m_half_extent: Vector3,
+    pub m_color: Vector4,
+    pub m_rotate: Quaternion
 }
 
 #[derive(Clone, Default)]
 pub struct DebugDrawCylinder { 
     pub m_base: DebugDrawPrimitive,
-    pub m_center: Vec3,
-    pub m_rotate: Quat,
+    pub m_center: Vector3,
+    pub m_rotate: Quaternion,
     pub m_radius: f32,
     pub m_height: f32,
-    pub m_color: Vec4,
+    pub m_color: Vector4,
 }
 
 #[derive(Clone, Default)]
 pub struct DebugDrawSphere { 
     pub m_base: DebugDrawPrimitive,
-    pub m_center: Vec3,
+    pub m_center: Vector3,
     pub m_radius: f32,
-    pub m_color: Vec4,
+    pub m_color: Vector4,
 }
 
 #[derive(Clone, Default)]
 pub struct DebugDrawCapsule { 
     pub m_base: DebugDrawPrimitive,
-    pub m_center: Vec3,
-    pub m_rotate: Quat,
-    pub m_scale: Vec3,
+    pub m_center: Vector3,
+    pub m_rotate: Quaternion,
+    pub m_scale: Vector3,
     pub m_radius: f32,
     pub m_height: f32,
-    pub m_color: Vec4,
+    pub m_color: Vector4,
 }
 
 #[derive(Clone, Default)]
 pub struct DebugDrawText {
     pub m_base: DebugDrawPrimitive,
     pub m_content: String,
-    pub m_color: Vec4,
-    pub m_coordinate: Vec3,
+    pub m_color: Vector4,
+    pub m_coordinate: Vector3,
     pub m_size: i32,
     pub m_is_screen_text: bool,
 }

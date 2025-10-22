@@ -470,7 +470,7 @@ impl VulkanRHI {
         }
     }
     
-    pub fn cmd_push_constants(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, size: u32, values: &[u8]) {
+    pub fn cmd_push_constants(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, values: &[u8]) {
         unsafe {
             self.m_device.cmd_push_constants(
                 command_buffer, 

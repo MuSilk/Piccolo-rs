@@ -1,15 +1,9 @@
-use std::cell::RefCell;
-
-use nalgebra_glm::Mat4;
-use reflection::reflection_derive::ReflectWhiteListFields;
-
-use crate::{core::math::transform::Transform, function::framework::component::component::{Component, ComponentTrait}};
+use crate::{core::math::{matrix4::Matrix4x4, transform::Transform}, function::framework::component::component::{Component, ComponentTrait}};
 
 
-#[derive(Clone, Default, ReflectWhiteListFields)]
+#[derive(Clone, Default)]
 pub struct TransformComponent {
     m_component: Component,
-    #[meta]
     m_transform: Transform,
     m_transform_buffer: [Transform; 2],
     m_current_index: usize,
@@ -26,7 +20,7 @@ impl ComponentTrait for TransformComponent {
 }
 
 impl TransformComponent {
-    pub fn get_matrix(&self) -> Mat4 {
+    pub fn get_matrix(&self) -> Matrix4x4 {
         self.m_transform_buffer[self.m_current_index].get_matrix()
     }
 }

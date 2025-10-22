@@ -1,7 +1,5 @@
 use std::{ cell::RefCell, rc::{Rc, Weak}};
 
-use reflection::{reflection_derive::ReflectWhiteListFields};
-
 use crate::function::framework::{level::level::Level, object::{object_id_allocator::GObjectID}};
 
 pub trait ComponentTrait {
@@ -23,7 +21,7 @@ pub trait ComponentTrait {
     fn get_component_mut(&mut self) -> &mut Component;
 }
 
-#[derive(Clone, Default, ReflectWhiteListFields)]
+#[derive(Clone, Default)]
 pub struct Component {
     pub m_parent_object : GObjectID,
     pub m_parent_level: Weak<RefCell<Level>>,

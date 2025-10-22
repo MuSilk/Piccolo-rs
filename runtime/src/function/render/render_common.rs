@@ -1,7 +1,8 @@
 use std::{array, rc::{Weak}};
 
-use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
+
+use crate::core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4};
 
 
 const S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT: usize = 64;
@@ -10,34 +11,34 @@ const S_MAX_POINT_LIGHT_COUNT: usize                = 15;
 
 #[derive(Clone ,Default)]
 pub struct VulkanSceneDirectionalLight {
-    pub direction : Vec3,
+    pub direction : Vector3,
     pub _padding_direction: f32,
-    pub color : Vec3,
+    pub color : Vector3,
     pub _padding_color: f32,
 }
 
 pub struct VulkanScenePointLight {
-    pub position : Vec3,
+    pub position : Vector3,
     pub radius: f32,
-    pub intensity: Vec3,
+    pub intensity: Vector3,
     pub _padding_intensity: f32,
 }
 
 #[repr(C)]
 #[derive(Clone, Default)]
 pub struct MeshPerframeStorageBufferObject {
-    pub proj_view_matrix : Mat4,
-    pub camera_position : Vec3,
+    pub proj_view_matrix : Matrix4x4,
+    pub camera_position : Vector3,
     pub _padding_camera_position: f32,
-    pub ambient_light : Vec3,
+    pub ambient_light : Vector3,
     pub _padding_ambient_light: f32,
     pub point_light_num: u32,
     pub _padding_point_light_num_1: u32,
     pub _padding_point_light_num_2: u32,
     pub _padding_point_light_num_3: u32,
-    pub scene_point_lights: [Vec4; S_MAX_POINT_LIGHT_COUNT],
+    pub scene_point_lights: [Vector4; S_MAX_POINT_LIGHT_COUNT],
     pub scene_directional_light: VulkanSceneDirectionalLight,
-    pub directional_light_proj_view: Mat4
+    pub directional_light_proj_view: Matrix4x4
 }
 #[repr(C)]
 #[derive(Clone, Default)]
@@ -46,7 +47,7 @@ pub struct VulkanMeshInstance {
     pub _padding_enable_vertex_blending_1: f32,
     pub _padding_enable_vertex_blending_2: f32,
     pub _padding_enable_vertex_blending_3: f32,
-    pub model_matrix: Mat4,
+    pub model_matrix: Matrix4x4,
 }
 
 #[repr(C)]
@@ -65,14 +66,14 @@ impl Default for MeshPerdrawcallStorageBufferObject {
 
 #[repr(C)]
 pub struct MeshPerMaterialUniformBufferObject {
-    pub base_color_factor: Vec4,
+    pub base_color_factor: Vector4,
 
     pub metallic_factor: f32,
     pub roughness_factor: f32,
     pub normal_scale: f32,
     pub occlusion_strength: f32,
 
-    pub emissive_factor: Vec3,
+    pub emissive_factor: Vector3,
     pub is_blend: u32,
     pub id_double_sided: u32,
 }
@@ -133,8 +134,8 @@ pub struct VulkanPBRMaterial {
 
 #[derive(Clone, Default)]
 pub struct RenderMeshNode {
-    pub model_matrix: Mat4,
-    pub joint_matrices: Vec<Mat4>,
+    pub model_matrix: Matrix4x4,
+    pub joint_matrices: Vec<Matrix4x4>,
     pub ref_mesh: Weak<VulkanMesh>,
     pub ref_material: Weak<VulkanPBRMaterial>,
     pub node_id: u32,

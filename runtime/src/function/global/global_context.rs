@@ -7,8 +7,8 @@ use crate::{function::{framework::world::world_manager::WorldManager, render::{d
 
 #[derive(Default)]
 pub struct RuntimeGlobalContext {
-    pub m_asset_manager: Rc<RefCell<AssetManager>>,
-    pub m_config_manager: Rc<RefCell<ConfigManager>>,
+    m_asset_manager: Rc<RefCell<AssetManager>>,
+    m_config_manager: Rc<RefCell<ConfigManager>>,
     pub m_world_manager: Rc<RefCell<WorldManager>>,
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<Rc<RefCell<RenderSystem>>>,
@@ -34,7 +34,7 @@ impl RuntimeGlobalContext {
             G_RUNTIME_GLOBAL_CONTEXT = Some(RuntimeGlobalContext::default());
             let ctx = G_RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap();
             ctx.m_config_manager.borrow_mut().initialize(config_file_path);
-            ctx.m_world_manager.borrow_mut().initialize(&ctx.m_config_manager.borrow().get_default_world_url());
+            ctx.m_world_manager.borrow_mut().initialize();
             ctx.m_window_system.borrow_mut().initialize(event_loop, WindowCreateInfo::default())?;
 
             let render_system = RenderSystem::create(&RenderSystemCreateInfo {
@@ -67,5 +67,13 @@ impl RuntimeGlobalContext {
 
     pub fn get_debugdraw_manager() -> &'static Rc<RefCell<DebugDrawManager>> {
         &Self::global().m_debugdraw_manager.as_ref().unwrap()
+    }
+
+    pub fn get_config_manager() -> &'static Rc<RefCell<ConfigManager>> {
+        &Self::global().m_config_manager
+    }
+
+    pub fn get_asset_manager() -> &'static Rc<RefCell<AssetManager>> {
+        &Self::global().m_asset_manager
     }
 }

@@ -1,7 +1,6 @@
 use std::{path::Path, time::Instant};
 
 use anyhow::Result;
-use reflection::reflection_register;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::{function::global::global_context::RuntimeGlobalContext};
@@ -31,7 +30,6 @@ impl Default for Engine {
 impl Engine {
 
     pub fn start_engine(&self, event_loop: &ActiveEventLoop, config_file_path: &Path) -> Result<()> {
-        reflection_register::meta_register();
         RuntimeGlobalContext::start_systems(event_loop, config_file_path)?;
         Ok(())  
     }
@@ -41,7 +39,6 @@ impl Engine {
 
     pub fn shutdown_engine(&self){
         RuntimeGlobalContext::global().shutdown_systems();
-        reflection_register::meta_unregister();
     }
 
     pub fn calculate_delta_time(&mut self) -> f32 {

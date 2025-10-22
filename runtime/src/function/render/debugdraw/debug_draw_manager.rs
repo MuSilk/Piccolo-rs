@@ -1,10 +1,9 @@
 use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, slice, sync::Mutex};
 
 use anyhow::Result;
-use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::{K_DEBUG_DRAW_ONE_FRAME}}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource};
+use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4}, function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::K_DEBUG_DRAW_ONE_FRAME}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource}};
 
 pub struct DebugDrawManagerCreateInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
@@ -38,7 +37,7 @@ pub struct DebugDrawManager {
     m_debug_context : DebugDrawContext,
     m_debug_draw_group_for_render: DebugDrawGroup,
     m_font: DebugDrawFont,
-    m_proj_view_matrix: Mat4,
+    m_proj_view_matrix: Matrix4x4,
 
     m_base : DebugDrawManagerBase,
 }
@@ -65,7 +64,7 @@ impl DebugDrawManager {
             m_debug_context: DebugDrawContext::default(),
             m_debug_draw_group_for_render : DebugDrawGroup::default(),
             m_font,
-            m_proj_view_matrix: Mat4::identity(),
+            m_proj_view_matrix: Matrix4x4::identity(),
             m_base: DebugDrawManagerBase::default(),
         })
     }
@@ -92,23 +91,23 @@ impl DebugDrawManager {
         static mut TOTAL_TIME: f32 = 0.0;
         unsafe{TOTAL_TIME += delta_time;}
         group.borrow_mut().add_sphere(
-            &Vec3::new(0.5, 0.0, 0.0), 
+            &Vector3::new(0.5, 0.0, 0.0), 
             unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.3, unsafe{TOTAL_TIME.cos()} , 1.0), 
+            &Vector4::new(unsafe{TOTAL_TIME.sin()} , 0.3, unsafe{TOTAL_TIME.cos()} , 1.0), 
             K_DEBUG_DRAW_ONE_FRAME, 
             true
         );
         group.borrow_mut().add_sphere(
-            &Vec3::new(0.0, 0.5, 0.0), 
+            &Vector3::new(0.0, 0.5, 0.0), 
             unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.6, unsafe{TOTAL_TIME.cos()} , 1.0), 
+            &Vector4::new(unsafe{TOTAL_TIME.sin()} , 0.6, unsafe{TOTAL_TIME.cos()} , 1.0), 
             K_DEBUG_DRAW_ONE_FRAME, 
             true
         );
         group.borrow_mut().add_sphere(
-            &Vec3::new(0.0, 0.0, 0.5), 
+            &Vector3::new(0.0, 0.0, 0.5), 
             unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vec4::new(unsafe{TOTAL_TIME.sin()} , 0.9, unsafe{TOTAL_TIME.cos()} , 1.0), 
+            &Vector4::new(unsafe{TOTAL_TIME.sin()} , 0.9, unsafe{TOTAL_TIME.cos()} , 1.0), 
             K_DEBUG_DRAW_ONE_FRAME, 
             true
         );
@@ -201,7 +200,7 @@ impl DebugDrawManager {
         self.m_base.m_text_start_offset = self.m_buffer_allocator.cache_vertices(&vertices);
         self.m_base.m_text_end_offset = self.m_buffer_allocator.get_vertex_cache_offset();
 
-        self.m_buffer_allocator.cache_uniform_object(&self.m_proj_view_matrix);
+        self.m_buffer_allocator.cache_uniform_object(self.m_proj_view_matrix);
 
         let dynamic_objects = self.m_debug_draw_group_for_render.write_uniform_dynamic_data_to_cache();
         self.m_buffer_allocator.cache_uniform_dynamic_object(&dynamic_objects);

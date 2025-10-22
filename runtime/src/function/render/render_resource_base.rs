@@ -1,9 +1,8 @@
 use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::PathBuf};
 
 use vulkanalia::prelude::v1_0::*;
-use nalgebra_glm::{Vec2, Vec3};
 
-use crate::{core::math::axis_aligned::AxisAlignedBox, function::{global::global_context::RuntimeGlobalContext, render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}};
+use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}};
 
 
 #[derive(Clone, Default)]
@@ -14,8 +13,7 @@ pub struct RenderResourceBase{
 impl RenderResourceBase {
 
     pub fn load_texture(file: &str, is_srgb: bool) -> Option<TextureData> {
-        let global = RuntimeGlobalContext::global();
-        let asset_manager = global.m_asset_manager.borrow();
+        let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
 
         let image = image::open(asset_manager.get_full_path(file)).ok()?;
         let image = image.to_rgba8();
@@ -80,11 +78,11 @@ impl RenderResourceBase {
             for index in 0..model.mesh.indices.len()/3 {
                 let mut with_normal = true;
                 let mut with_texcoord = true;
-                let mut vertex = [Vec3::default(); 3];
-                let mut normal = [Vec3::default(); 3];
-                let mut uv = [Vec2::default(); 3];
+                let mut vertex = [Vector3::default(); 3];
+                let mut normal = [Vector3::default(); 3];
+                let mut uv = [Vector2::default(); 3];
                 for i in 0..3 {
-                    vertex[i] = Vec3::new(
+                    vertex[i] = Vector3::new(
                         model.mesh.positions[model.mesh.indices[index * 3 + i] as usize * 3 + 0],
                         model.mesh.positions[model.mesh.indices[index * 3 + i] as usize * 3 + 1],
                         model.mesh.positions[model.mesh.indices[index * 3 + i] as usize * 3 + 2],
@@ -93,7 +91,7 @@ impl RenderResourceBase {
                     bounding_box.merge(&vertex[i]);
 
                     if !model.mesh.normals.is_empty() {
-                        normal[i] = Vec3::new(
+                        normal[i] = Vector3::new(
                             model.mesh.normals[model.mesh.normal_indices[index * 3 + i] as usize * 3 + 0],
                             model.mesh.normals[model.mesh.normal_indices[index * 3 + i] as usize * 3 + 1],
                             model.mesh.normals[model.mesh.normal_indices[index * 3 + i] as usize * 3 + 2],
@@ -103,7 +101,7 @@ impl RenderResourceBase {
                     } 
 
                     if !model.mesh.texcoords.is_empty() {
-                        uv[i] = Vec2::new(
+                        uv[i] = Vector2::new(
                             model.mesh.texcoords[model.mesh.texcoord_indices[(index + i) * 2 + 0] as usize],
                             model.mesh.texcoords[model.mesh.texcoord_indices[(index + i) * 2 + 1] as usize],
                         );
@@ -121,12 +119,12 @@ impl RenderResourceBase {
                 }
 
                 if !with_texcoord {
-                    uv[0] = Vec2::new(0.5, 0.5);
-                    uv[1] = Vec2::new(0.5, 0.5);
-                    uv[2] = Vec2::new(0.5, 0.5);
+                    uv[0] = Vector2::new(0.5, 0.5);
+                    uv[1] = Vector2::new(0.5, 0.5);
+                    uv[2] = Vector2::new(0.5, 0.5);
                 }
 
-                let mut tangent = Vec3::new(1.0, 0.0, 0.0);
+                let mut tangent = Vector3::new(1.0, 0.0, 0.0);
                 {
                     let edge1 = vertex[1] - vertex[0];
                     let edge2 = vertex[2] - vertex[0];

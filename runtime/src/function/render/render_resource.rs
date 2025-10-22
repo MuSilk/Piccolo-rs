@@ -1,9 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
-use nalgebra_glm::{Vec2, Vec3};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RenderMaterialData, RenderMeshData}};
+use crate::{core::math::{vector2::Vector2, vector3::Vector3}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RenderMaterialData, RenderMeshData}}};
 
 #[derive(Default)]
 struct IBLResource {
@@ -464,17 +463,17 @@ impl RenderResource {
             };
 
             for vertex_index in 0..vertex_buffer_data.len() {
-                let normal = Vec3::new(
+                let normal = Vector3::new(
                     vertex_buffer_data[vertex_index].nx,
                     vertex_buffer_data[vertex_index].ny,
                     vertex_buffer_data[vertex_index].nz,
                 );
-                let tangent = Vec3::new(
+                let tangent = Vector3::new(
                     vertex_buffer_data[vertex_index].tx,
                     vertex_buffer_data[vertex_index].ty,
                     vertex_buffer_data[vertex_index].tz,
                 );
-                mesh_vertex_positions[vertex_index].position = Vec3::new(
+                mesh_vertex_positions[vertex_index].position = Vector3::new(
                     vertex_buffer_data[vertex_index].x,
                     vertex_buffer_data[vertex_index].y,
                     vertex_buffer_data[vertex_index].z,
@@ -482,7 +481,7 @@ impl RenderResource {
                 mesh_vertex_blending_varyings[vertex_index].normal = normal;
                 mesh_vertex_blending_varyings[vertex_index].tangent = tangent;
 
-                mesh_vertex_varyings[vertex_index].texcoord = Vec2::new(
+                mesh_vertex_varyings[vertex_index].texcoord = Vector2::new(
                     vertex_buffer_data[vertex_index].u,
                     vertex_buffer_data[vertex_index].v,
                 )

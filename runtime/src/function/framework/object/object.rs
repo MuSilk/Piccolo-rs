@@ -10,6 +10,16 @@ pub struct GObject {
 }
 
 impl GObject {
+
+    pub fn new(id: GObjectID, parent_level: &Rc<RefCell<Level>>) -> Rc<RefCell<GObject>> {
+        Rc::new(RefCell::new(GObject {
+            m_parent_level: Rc::downgrade(parent_level),
+            m_id: id,
+            m_name: String::new(),
+            m_definition_url: String::new(),
+        }))
+    }
+    
     pub fn get_id(&self) -> GObjectID {
         self.m_id
     }
@@ -22,33 +32,4 @@ impl GObject {
         self.m_name.as_str()
     }
 
-}
-
-pub struct WrappedGObject(Rc<RefCell<GObject>>);
-
-impl std::ops::Deref for WrappedGObject {
-    type Target = Rc<RefCell<GObject>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for WrappedGObject {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl WrappedGObject {
-
-    pub fn new(id: GObjectID, parent_level: &Rc<RefCell<Level>>) -> Self {
-        Self(
-            Rc::new(RefCell::new(GObject {
-                m_parent_level: Rc::downgrade(parent_level),
-                m_id: id,
-                m_name: String::new(),
-                m_definition_url: String::new(),
-            }))
-        )
-    }
 }

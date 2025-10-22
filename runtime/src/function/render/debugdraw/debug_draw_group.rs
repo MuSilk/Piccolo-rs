@@ -1,8 +1,6 @@
 use std::sync::Mutex;
 
-use nalgebra_glm::{quat_to_mat4, Mat4, Quat, Vec2, Vec3, Vec4};
-
-use crate::function::render::debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::{DebugDrawBox, DebugDrawCapsule, DebugDrawCylinder, DebugDrawLine, DebugDrawPoint, DebugDrawQuad, DebugDrawSphere, DebugDrawText, DebugDrawTriangle, DebugDrawVertex, FillMode}};
+use crate::{core::math::{matrix4::{Matrix4x4, ToScaleMatrix4x4}, quaternion::Quaternion, vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::{DebugDrawBox, DebugDrawCapsule, DebugDrawCylinder, DebugDrawLine, DebugDrawPoint, DebugDrawQuad, DebugDrawSphere, DebugDrawText, DebugDrawTriangle, DebugDrawVertex, FillMode}}};
 
 #[derive(Default)]
 pub struct DebugDrawGroup {
@@ -50,7 +48,7 @@ impl DebugDrawGroup {
         &self.m_name
     }
 
-    pub fn add_point(&mut self, position: &Vec3, color: &Vec4, life_time: f32, no_depth_test: bool) {
+    pub fn add_point(&mut self, position: &Vector3, color: &Vector4, life_time: f32, no_depth_test: bool) {
         let _guard = self.m_mutex.lock();
         let mut point = DebugDrawPoint::default();
         point.m_base.set_time(life_time);
@@ -62,7 +60,7 @@ impl DebugDrawGroup {
         self.m_points.push(point);
     }
 
-    pub fn add_line(&mut self, point0: &Vec3, point1: &Vec3, color0: &Vec4, color1: &Vec4, life_time: f32, no_depth_test: bool) {
+    pub fn add_line(&mut self, point0: &Vector3, point1: &Vector3, color0: &Vector4, color1: &Vector4, life_time: f32, no_depth_test: bool) {
         let _guard = self.m_mutex.lock();
         let mut line = DebugDrawLine::default();
         line.m_base.set_time(life_time);
@@ -77,8 +75,8 @@ impl DebugDrawGroup {
     }
 
     pub fn add_triangle(&mut self, 
-        point0: &Vec3, point1: &Vec3, point2: &Vec3,
-        color0: &Vec4, color1: &Vec4, color2: &Vec4, 
+        point0: &Vector3, point1: &Vector3, point2: &Vector3,
+        color0: &Vector4, color1: &Vector4, color2: &Vector4, 
         life_time: f32, no_depth_test: bool, fill_mode: FillMode,
     ) {
         let _guard = self.m_mutex.lock();
@@ -97,8 +95,8 @@ impl DebugDrawGroup {
     }
 
     pub fn add_quad(&mut self, 
-        point0: &Vec3, point1: &Vec3, point2: &Vec3, point3: &Vec3,
-        color0: &Vec4, color1: &Vec4, color2: &Vec4, color3: &Vec4,
+        point0: &Vector3, point1: &Vector3, point2: &Vector3, point3: &Vector3,
+        color0: &Vector4, color1: &Vector4, color2: &Vector4, color3: &Vector4,
         life_time: f32, no_depth_test: bool, fill_mode: FillMode,
     ) {
         let _guard = self.m_mutex.lock();
@@ -153,10 +151,10 @@ impl DebugDrawGroup {
 
     pub fn add_box(
         &mut self, 
-        center_point: &Vec3, 
-        half_extends: &Vec3, 
-        rotate: &Quat, 
-        color: &Vec4, 
+        center_point: &Vector3, 
+        half_extends: &Vector3, 
+        rotate: &Quaternion, 
+        color: &Vector4, 
         life_time: f32, 
         no_depth_test: bool, 
     ) {
@@ -174,7 +172,7 @@ impl DebugDrawGroup {
 
     }
 
-    pub fn add_sphere(&mut self, center_point: &Vec3, radius: f32, color: &Vec4, life_time: f32, no_depth_test: bool) {
+    pub fn add_sphere(&mut self, center_point: &Vector3, radius: f32, color: &Vector4, life_time: f32, no_depth_test: bool) {
         let _guard = self.m_mutex.lock();
         let mut debug_sphere = DebugDrawSphere::default();
         debug_sphere.m_base.set_time(life_time);
@@ -187,7 +185,7 @@ impl DebugDrawGroup {
         self.m_spheres.push(debug_sphere);
     }
 
-    pub fn add_cylinder(&mut self,center: &Vec3, radius: f32, height: f32, rotate: &Quat, color: &Vec4, life_time: f32, no_depth_test: bool) {
+    pub fn add_cylinder(&mut self,center: &Vector3, radius: f32, height: f32, rotate: &Quaternion, color: &Vector4, life_time: f32, no_depth_test: bool) {
         let _guard = self.m_mutex.lock();
         let mut debug_cylinder = DebugDrawCylinder::default();
         debug_cylinder.m_base.set_time(life_time);
@@ -202,7 +200,7 @@ impl DebugDrawGroup {
         self.m_cylinders.push(debug_cylinder);
     }
 
-    pub fn add_capsule(&mut self, center: &Vec3, rotate: &Quat, scale: &Vec3, radius: f32, height: f32, color: &Vec4, life_time: f32, no_depth_test: bool) {
+    pub fn add_capsule(&mut self, center: &Vector3, rotate: &Quaternion, scale: &Vector3, radius: f32, height: f32, color: &Vector4, life_time: f32, no_depth_test: bool) {
         let _guard = self.m_mutex.lock();
         let mut debug_capsule = DebugDrawCapsule::default();
         debug_capsule.m_base.set_time(life_time);
@@ -218,7 +216,7 @@ impl DebugDrawGroup {
         self.m_capsules.push(debug_capsule);
     }
 
-    pub fn add_text(&mut self, content: &str, color: &Vec4, coordinate: &Vec3, size: i32, is_screen_text: bool, life_time: f32) {
+    pub fn add_text(&mut self, content: &str, color: &Vector4, coordinate: &Vector3, size: i32, is_screen_text: bool, life_time: f32) {
         let _guard = self.m_mutex.lock();
         let mut text = DebugDrawText::default();
         text.m_base.set_time(life_time);
@@ -341,12 +339,12 @@ impl DebugDrawGroup {
                 let mut verts_4d = [DebugDrawVertex::default();8];
                 let f = [-1.0,1.0];
                 for i in 0..8 {
-                    let v = Vec3::new(
+                    let v = Vector3::new(
                         f[i&1] * b.m_half_extent.x,
                         f[(i>>1)&1] * b.m_half_extent.y,
                         f[(i>>2)&1] * b.m_half_extent.z,
                     );
-                    let qvec = Vec3::new(b.m_rotate[0],b.m_rotate[1],b.m_rotate[2]);
+                    let qvec = Vector3::new(b.m_rotate.x, b.m_rotate.y, b.m_rotate.z);
                     let uv = qvec.cross(&v);
                     let uuv = qvec.cross(&uv);
                     verts_4d[i].pos = v + uv + uuv + b.m_center_point;
@@ -368,7 +366,7 @@ impl DebugDrawGroup {
         }).collect()
     }
 
-    pub fn write_text_data(&self, _font: &DebugDrawFont, m_proj_view_matrix: &Mat4, screen_width: f32, screen_height: f32) -> Vec<DebugDrawVertex>{
+    pub fn write_text_data(&self, _font: &DebugDrawFont, m_proj_view_matrix: &Matrix4x4, screen_width: f32, screen_height: f32) -> Vec<DebugDrawVertex>{
 
         let mut vertices = Vec::with_capacity(self.get_text_character_count() * 6);
         for text in &self.m_texts{
@@ -378,9 +376,9 @@ impl DebugDrawGroup {
             let h = absolute_h / (screen_height / 2.0);
             let mut coordinate = text.m_coordinate;
             if ! text.m_is_screen_text {
-                let temp_coord = Vec4::new(coordinate.x,coordinate.y,coordinate.z,1.0);
+                let temp_coord = Vector4::new(coordinate.x,coordinate.y,coordinate.z,1.0);
                 let temp_coord = m_proj_view_matrix * temp_coord;
-                coordinate = Vec3::new(temp_coord.x / temp_coord.w, temp_coord.y / temp_coord.w,0.0);
+                coordinate = Vector3::new(temp_coord.x / temp_coord.w, temp_coord.y / temp_coord.w,0.0);
             }
             let mut x = coordinate.x;
             let mut y = coordinate.y;
@@ -394,24 +392,24 @@ impl DebugDrawGroup {
                     let (cx1, cx2,cy1,cy2) = (x, w+x, y, h+y);
 
                     let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx1, cy1, 0.0);
+                    vertex.pos = Vector3::new(cx1, cy1, 0.0);
                     vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x1,y1);
+                    vertex.texcoord = Vector2::new(x1,y1);
                     vertices.push(vertex);
                     let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx1, cy2, 0.0);
+                    vertex.pos = Vector3::new(cx1, cy2, 0.0);
                     vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x1,y2);
+                    vertex.texcoord = Vector2::new(x1,y2);
                     vertices.push(vertex);
                     let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx2, cy2, 0.0);
+                    vertex.pos = Vector3::new(cx2, cy2, 0.0);
                     vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x2,y2);
+                    vertex.texcoord = Vector2::new(x2,y2);
                     vertices.push(vertex);
                     let mut vertex = DebugDrawVertex::default();
-                    vertex.pos = Vec3::new(cx1, cx1, 0.0);
+                    vertex.pos = Vector3::new(cx1, cx1, 0.0);
                     vertex.color = text.m_color;
-                    vertex.texcoord = Vec2::new(x1,y1);
+                    vertex.texcoord = Vector2::new(x1,y1);
                     vertices.push(vertex);
 
                     x += w;
@@ -421,7 +419,7 @@ impl DebugDrawGroup {
         vertices
     }
 
-    pub fn write_uniform_dynamic_data_to_cache(&self) -> Vec<(Mat4,Vec4)>{
+    pub fn write_uniform_dynamic_data_to_cache(&self) -> Vec<(Matrix4x4,Vector4)>{
         let mut res = Vec::with_capacity(self.get_uniform_dynamic_data_count()*3);
         let no_depth_tests = [false,true];
         for i in 0..2 {
@@ -430,35 +428,27 @@ impl DebugDrawGroup {
             res.extend(self.m_spheres.iter().filter(|obj|{
                 obj.m_base.m_no_depth_test == no_depth_test 
             }).map(|obj|{
-                let trans = Mat4::new_translation(&obj.m_center);
-                let scale = Mat4::new_scaling(obj.m_radius);
+                let trans = obj.m_center.to_translate_matrix();
+                let scale = obj.m_radius.to_scale_matrix();
                 (trans * scale, obj.m_color)
             }));
             res.extend(self.m_cylinders.iter().filter(|obj|{
                 obj.m_base.m_no_depth_test == no_depth_test 
             }).map(|obj|{
-                let trans = Mat4::new_translation(&obj.m_center);
-                let scale = Mat4::new_nonuniform_scaling(
-                    &Vec3::new(obj.m_radius,obj.m_radius, obj.m_height * 0.5)
-                );
-                let rotate = quat_to_mat4(&obj.m_rotate);
+                let trans = obj.m_center.to_translate_matrix();
+                let scale = Vector3::new(obj.m_radius,obj.m_radius, obj.m_height * 0.5).to_scale_matrix();
+                let rotate = obj.m_rotate.to_rotation_matrix();
                 (trans * rotate * scale, obj.m_color)
             }));
             res.extend(self.m_capsules.iter().filter(|obj|{
                 obj.m_base.m_no_depth_test == no_depth_test 
             }).flat_map(|obj|{
-                let trans = Mat4::new_translation(&obj.m_center);
-                let scale = Mat4::new_nonuniform_scaling(&obj.m_scale);
-                let rotate = quat_to_mat4(&obj.m_rotate);
-                let trans1 = Mat4::new_translation(
-                    &Vec3::new(0.0,0.0,obj.m_height*0.5 - obj.m_radius)
-                );
-                let scale2 = Mat4::new_nonuniform_scaling(
-                    &Vec3::new(1.0,1.0,obj.m_height / (obj.m_radius * 2.0))
-                );
-                let trans3 = Mat4::new_translation(
-                    &Vec3::new(0.0,0.0,-(obj.m_height*0.5 - obj.m_radius))
-                );
+                let trans = obj.m_center.to_translate_matrix();
+                let scale = obj.m_scale.to_scale_matrix();
+                let rotate = obj.m_rotate.to_rotation_matrix();
+                let trans1 = Vector3::new(0.0,0.0,obj.m_height*0.5 - obj.m_radius).to_translate_matrix();
+                let scale2 = Vector3::new(1.0,1.0,obj.m_height / (obj.m_radius * 2.0)).to_scale_matrix();
+                let trans3 = Vector3::new(0.0,0.0,-(obj.m_height*0.5 - obj.m_radius)).to_translate_matrix();
                 [(trans1 * trans  * scale * rotate, obj.m_color),
                  (trans  * scale2 * scale * rotate, obj.m_color),
                  (trans3 * trans  * scale * rotate, obj.m_color)]

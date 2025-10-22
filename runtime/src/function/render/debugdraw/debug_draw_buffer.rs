@@ -2,23 +2,22 @@ use std::{cell::RefCell, collections::VecDeque, f32::consts::TAU, ptr::copy_nono
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use nalgebra_glm::{Mat4, Vec3, Vec4};
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::DebugDrawVertex}, interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC}, render_type::RHIDefaultSamplerType};
+use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4}, function::render::{debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::DebugDrawVertex}, interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC}, render_type::RHIDefaultSamplerType}};
 
 
 #[derive(Default)]
 struct UniformBufferObject{
-    proj_view_matrix: Mat4,
+    proj_view_matrix: Matrix4x4,
 }
 
 #[repr(align(64))]
 #[repr(C)]
 #[derive(Debug)]
 struct UniformBufferDynamicObject{
-    model_matrix: Mat4,
-    color: Vec4
+    model_matrix: Matrix4x4,
+    color: Vector4
 }
 
 #[derive(Default)]
@@ -136,11 +135,11 @@ impl DebugDrawAllocator {
         return offset;
     }
 
-    pub fn cache_uniform_object(&mut self,proj_view_matrix: &Mat4){
-        self.m_uniform_buffer_object.proj_view_matrix = *proj_view_matrix;
+    pub fn cache_uniform_object(&mut self,proj_view_matrix: Matrix4x4){
+        self.m_uniform_buffer_object.proj_view_matrix = proj_view_matrix;
     }
 
-    pub fn cache_uniform_dynamic_object(&mut self, model_colors: &[(Mat4,Vec4)]) -> usize{
+    pub fn cache_uniform_dynamic_object(&mut self, model_colors: &[(Matrix4x4, Vector4)]) -> usize{
         let offset = self.m_uniform_buffer_dynamic_object_cache.len();
         self.m_uniform_buffer_dynamic_object_cache.reserve(model_colors.len());
         for i in 0..model_colors.len(){
@@ -226,7 +225,7 @@ impl DebugDrawAllocator {
     pub fn clear(&mut self){
         self.clear_buffer();
         self.m_vertex_cache.clear();
-        self.m_uniform_buffer_object.proj_view_matrix = Mat4::identity();
+        self.m_uniform_buffer_object.proj_view_matrix = Matrix4x4::identity();
         self.m_uniform_buffer_dynamic_object_cache.clear();
     }
 
@@ -436,12 +435,12 @@ impl DebugDrawAllocator {
             let r = (1.0 - h * h).sqrt();
             let r1 = (1.0 - h1 * h1).sqrt();
             for j in 0..(2 * param) {
-                let p = Vec3::new(
+                let p = Vector3::new(
                     (TAU / (2.0 * param as f32) * j as f32).cos() * r,
                     (TAU / (2.0 * param as f32) * j as f32).sin() * r,
                     h, 
                 );
-                let p1 = Vec3::new(
+                let p1 = Vector3::new(
                     (TAU / (2.0 * param as f32) * j as f32).cos() * r1,
                     (TAU / (2.0 * param as f32) * j as f32).sin() * r1,
                     h1, 
@@ -457,12 +456,12 @@ impl DebugDrawAllocator {
             }
             if i != -param - 1 {
                 for j in 0..(2 * param) {
-                    let p = Vec3::new(
+                    let p = Vector3::new(
                         (TAU / (2.0 * param as f32) * j as f32).cos() * r,
                         (TAU / (2.0 * param as f32) * j as f32).sin() * r,
                         h, 
                     );
-                    let p1 = Vec3::new(
+                    let p1 = Vector3::new(
                         (TAU / (2.0 * param as f32) * (j + 1) as f32).cos() * r,
                         (TAU / (2.0 * param as f32) * (j + 1) as f32).sin() * r,
                         h, 
@@ -511,22 +510,22 @@ impl DebugDrawAllocator {
         vertices.reserve(vertex_count as usize);
 
         for i in 0..2*param {
-            let p = Vec3::new(
+            let p = Vector3::new(
                 TAU / (2.0 * param as f32) * (i as f32).cos(),
                 TAU / (2.0 * param as f32) * (i as f32).sin(),
                 1.0
             );
-            let p_ = Vec3::new(
+            let p_ = Vector3::new(
                 TAU / (2.0 * param as f32) * ((i + 1) as f32).cos(),
                 TAU / (2.0 * param as f32) * ((i + 1) as f32).sin(),
                 1.0
             );
-            let p1 = Vec3::new(
+            let p1 = Vector3::new(
                 TAU / (2.0 * param as f32) * (i as f32).cos(),
                 TAU / (2.0 * param as f32) * (i as f32).sin(),
                 -1.0
             );
-            let p1_ = Vec3::new(
+            let p1_ = Vector3::new(
                 TAU / (2.0 * param as f32) * ((i + 1) as f32).cos(),
                 TAU / (2.0 * param as f32) * ((i + 1) as f32).sin(),
                 -1.0
@@ -596,17 +595,17 @@ impl DebugDrawAllocator {
             let r1 = (1.0 - h1 * h1).sqrt();
             for j in 0..2*param {
 
-                let p = Vec3::new(
+                let p = Vector3::new(
                     TAU / (2.0 * param as f32) * (j as f32).cos() * r,
                     TAU / (2.0 * param as f32) * (j as f32).sin() * r,
                     h + 1.0
                 );
-                let p_ = Vec3::new(
+                let p_ = Vector3::new(
                     TAU / (2.0 * param as f32) * ((j + 1) as f32).cos() * r,
                     TAU / (2.0 * param as f32) * ((j + 1) as f32).sin() * r,
                     h + 1.0
                 );
-                let p1 = Vec3::new(
+                let p1 = Vector3::new(
                     TAU / (2.0 * param as f32) * (j as f32).cos() * r1,
                     TAU / (2.0 * param as f32) * (j as f32).sin() * r1,
                     h1 + 1.0
@@ -620,12 +619,12 @@ impl DebugDrawAllocator {
         }
 
         for j in 0..2*param {
-            let p = Vec3::new(
+            let p = Vector3::new(
                 TAU / (2.0 * param as f32) * (j as f32).cos(),
                 TAU / (2.0 * param as f32) * (j as f32).sin(),
                 1.0
             );
-            let p1 = Vec3::new(
+            let p1 = Vector3::new(
                 TAU / (2.0 * param as f32) * (j as f32).cos(),
                 TAU / (2.0 * param as f32) * (j as f32).sin(),
                 -1.0
@@ -640,17 +639,17 @@ impl DebugDrawAllocator {
             let r = (1.0 - h * h).sqrt();
             let r1 = (1.0 - h1 * h1).sqrt();
             for j in 0..2*param {
-                let p = Vec3::new(
+                let p = Vector3::new(
                     TAU / (2.0 * param as f32) * (j as f32).cos() * r,
                     TAU / (2.0 * param as f32) * (j as f32).sin() * r,
                     h - 1.0
                 );
-                let p_ = Vec3::new(
+                let p_ = Vector3::new(
                     TAU / (2.0 * param as f32) * ((j + 1) as f32).cos() * r,
                     TAU / (2.0 * param as f32) * ((j + 1) as f32).sin() * r,
                     h - 1.0
                 );
-                let p1 = Vec3::new(
+                let p1 = Vector3::new(
                     TAU / (2.0 * param as f32) * (j as f32).cos() * r1,
                     TAU / (2.0 * param as f32) * (j as f32).sin() * r1,
                     h1 - 1.0

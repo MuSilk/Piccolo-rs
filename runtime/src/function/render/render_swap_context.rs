@@ -1,8 +1,6 @@
 use std::{cell::RefCell, collections::VecDeque};
 
-use nalgebra_glm::Mat4;
-
-use crate::function::render::{render_camera::RenderCameraType, render_object::GameObjectDesc};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{render_camera::RenderCameraType, render_object::GameObjectDesc}};
 
 pub struct LevelIBLResourceDesc{
     // m_skybox_irradiance_map: SkyBoxIrradianceMap,
@@ -23,7 +21,7 @@ pub struct LevelResourceDesc {
 pub struct CameraSwapData{
     pub m_fov_x: Option<f32>,
     pub m_camera_type: Option<RenderCameraType>,
-    pub m_view_matrix: Option<Mat4>,
+    pub m_view_matrix: Option<Matrix4x4>,
 }
 
 #[derive(Default, Clone)]

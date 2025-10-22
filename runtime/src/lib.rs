@@ -1,4 +1,4 @@
-mod core;
+pub mod core;
 pub mod engine;
 pub mod function;
 mod resource;
