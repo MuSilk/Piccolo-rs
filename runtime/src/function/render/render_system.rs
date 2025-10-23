@@ -4,7 +4,7 @@ use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -44,10 +44,19 @@ impl RenderSystem {
         let render_scene = RenderScene::default();
         render_scene.set_visible_nodes_reference();
 
+        let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+        let config_manager = RuntimeGlobalContext::get_config_manager().borrow();
+        let global_rendering_res_url = config_manager.get_global_rendering_res_url();
+        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(global_rendering_res_url).unwrap();
+
         let level_resource_desc = LevelResourceDesc{
-            m_ibl_resource_desc: LevelIBLResourceDesc{},
+            m_ibl_resource_desc: LevelIBLResourceDesc{
+                m_skybox_irradiance_map: global_rendering_res.skybox_irradiance_map,
+                m_skybox_specular_map: global_rendering_res.skybox_specular_map,
+                m_brdf_map: global_rendering_res.brdf_map,
+            },
             m_color_grading_resource_desc: LevelColorGradingResourceDesc{
-                m_color_grading_map: "asset/texture/lut/color_grading_LUT.jpg".to_string(),
+                m_color_grading_map: global_rendering_res.color_grading_map,
             }
         };
 
@@ -58,7 +67,7 @@ impl RenderSystem {
         let create_info = RenderPipelineCreateInfo {
             rhi : &vulkan_rhi,
             render_resource: &render_resource,
-            enable_fxaa: true,
+            enable_fxaa: global_rendering_res.enable_fxaa,
             imgui_context: &imgui_context,
             imgui_platform: &imgui_platform,
         };

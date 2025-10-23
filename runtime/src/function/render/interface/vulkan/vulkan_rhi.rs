@@ -5,7 +5,7 @@ use vulkanalia::{loader::{LibloadingLoader, LIBRARY}, prelude::v1_0::*, vk::{Ext
 use winit::window::Window;
 use log::*;
 
-use crate::function::render::{interface::{rhi::RHICreateInfo, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}}, render_type::RHIDefaultSamplerType};
+use crate::function::render::{interface::{rhi::{self, RHICreateInfo}, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}}, render_type::RHISamplerType};
 
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
@@ -74,7 +74,7 @@ pub struct VulkanRHIData {
 
     m_linear_sampler: OnceCell<vk::Sampler>,
     m_nearest_sampler: OnceCell<vk::Sampler>,
-    m_mipmap_sampler_map: RefCell<HashMap<u32, vk::Sampler>>,
+    m_mipmap_sampler_map: RefCell<HashMap<(u32, RHISamplerType), vk::Sampler>>,
 
     m_enable_validation_layers: bool,
     m_enable_debug_utils_label: bool,
@@ -229,9 +229,9 @@ impl VulkanRHI {
         Ok(())
     }
 
-    pub fn get_or_create_default_sampler(&self, sampler_type: RHIDefaultSamplerType) -> Result<&vk::Sampler> {
+    pub fn get_or_create_default_sampler(&self, sampler_type: RHISamplerType) -> Result<&vk::Sampler> {
         match sampler_type {
-            RHIDefaultSamplerType::Linear => {
+            RHISamplerType::Linear => {
                 Ok(self.m_data.m_linear_sampler.get_or_init(|| {
                     let properties = unsafe{self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)};
                     let create_info = vk::SamplerCreateInfo::builder()
@@ -256,7 +256,7 @@ impl VulkanRHI {
                     }
                 }))
             }
-            RHIDefaultSamplerType::Nearest => {
+            RHISamplerType::Nearest => {
                 Ok(self.m_data.m_nearest_sampler.get_or_init(||{
                     let properties = unsafe{self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)};
                     let create_info = vk::SamplerCreateInfo::builder()
@@ -284,22 +284,27 @@ impl VulkanRHI {
         }
     }
 
-    pub fn get_or_create_mipmap_sampler(&self, width: u32, height: u32) -> Result<vk::Sampler> {
+    pub fn get_or_create_mipmap_sampler(&self, width: u32, height: u32, sampler_type: RHISamplerType) -> Result<vk::Sampler> {
         let mip_levels = (width.max(height) as f32).log2().floor() as u32 + 1;
-        if let Some(sampler) = self.m_data.m_mipmap_sampler_map.borrow().get(&mip_levels) {
+        if let Some(sampler) = self.m_data.m_mipmap_sampler_map.borrow().get(&(mip_levels, sampler_type)) {
             return Ok(*sampler);
         }
 
         let physical_device_properties = unsafe {
             self.m_instance.get_physical_device_properties(self.m_data.m_physical_device)
         };
+        let filter = match sampler_type {
+            RHISamplerType::Nearest => vk::Filter::NEAREST,
+            RHISamplerType::Linear => vk::Filter::LINEAR,
+        };
+        let anisotropy_enable = sampler_type == RHISamplerType::Linear;
         let sampler_info = vk::SamplerCreateInfo::builder()
-            .mag_filter(vk::Filter::LINEAR)
-            .min_filter(vk::Filter::LINEAR)
+            .mag_filter(filter)
+            .min_filter(filter)
             .address_mode_u(vk::SamplerAddressMode::REPEAT)
             .address_mode_v(vk::SamplerAddressMode::REPEAT)
             .address_mode_w(vk::SamplerAddressMode::REPEAT)
-            .anisotropy_enable(true)
+            .anisotropy_enable(anisotropy_enable)
             .max_anisotropy(physical_device_properties.limits.max_sampler_anisotropy)
             .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
             .unnormalized_coordinates(false)
@@ -314,7 +319,7 @@ impl VulkanRHI {
             self.m_device.create_sampler(&sampler_info, None)?
         };
         
-        self.m_data.m_mipmap_sampler_map.borrow_mut().insert(mip_levels, sampler);
+        self.m_data.m_mipmap_sampler_map.borrow_mut().insert((mip_levels, sampler_type), sampler);
         Ok(sampler)
     }
 
@@ -350,6 +355,12 @@ impl VulkanRHI {
         Ok(())
     }
 
+    pub fn create_cube_map(&self, width: u32, height: u32, pixels: &[&[u8]; 6], format: vk::Format, mip_levels: u32) 
+        -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> 
+    {    
+        Ok(vulkan_util::create_cube_map(self, width, height, pixels, format, mip_levels)?)
+    }
+    
     pub fn create_image(
         &self, width: u32, height: u32, format: vk::Format, 
         tiling: vk::ImageTiling, usage: vk::ImageUsageFlags, properties: vk::MemoryPropertyFlags,
@@ -421,6 +432,10 @@ impl VulkanRHI {
         Ok(unsafe{self.m_device.create_render_pass(create_info, None)?})
     }
     
+    pub fn create_sampler(&self, create_info: &vk::SamplerCreateInfo) -> Result<vk::Sampler> {
+        Ok(unsafe{self.m_device.create_sampler(create_info, None)?})
+    }
+
     pub fn cmd_begin_render_pass(&self, command_buffer: vk::CommandBuffer, begin_info: &vk::RenderPassBeginInfo, contents: vk::SubpassContents) {
         unsafe{
             self.m_device.cmd_begin_render_pass(command_buffer, &begin_info, vk::SubpassContents::from_raw(contents.as_raw()));
@@ -793,6 +808,12 @@ impl VulkanRHI {
     pub fn destroy_buffer(&self, buffer: vk::Buffer) {
         unsafe {
             self.m_device.destroy_buffer(buffer, None);
+        }
+    }
+
+    pub fn destroy_sampler(&self, sampler: vk::Sampler) {
+        unsafe {
+            self.m_device.destroy_sampler(sampler, None);
         }
     }
 

@@ -1,9 +1,11 @@
 use std::{collections::HashMap, fs::File, io::{BufReader, Read}, path::PathBuf};
 
+use image::EncodableLayout;
+use log::error;
 use itertools::Itertools;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::render_type::{BufferData, ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}, resource::{asset_manager, res_type::data::mesh_data::MeshData}};
+use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}, resource::{res_type::data::mesh_data::MeshData}};
 
 
 #[derive(Clone, Default)]
@@ -12,6 +14,32 @@ pub struct RenderResourceBase{
 }
 
 impl RenderResourceBase {
+
+    pub fn load_texture_hdr(file: &str, desired_channels: u32) -> Option<TextureData> {
+        let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+
+        let image = image::open(asset_manager.get_full_path(file)).ok()?;
+        let mut texture = TextureData::default();
+        match desired_channels {
+            4 => {
+                let image = image.to_rgba32f();
+                texture.m_pixels = image.as_bytes().to_vec();
+                texture.m_width = image.width();
+                texture.m_height = image.height();
+                texture.m_format = vk::Format::R32G32B32A32_SFLOAT;
+            },
+            _ => {
+                error!("Unsupported number of channels: {}", desired_channels);
+                return None;
+            }
+        }
+        texture.m_depth = 1;
+        texture.m_array_layers = 1;
+        texture.m_mip_levels = 1;
+        texture.m_type = ImageType::_2D;
+
+        Some(texture)
+    }
 
     pub fn load_texture(file: &str, is_srgb: bool) -> Option<TextureData> {
         let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();

@@ -1,12 +1,26 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
+use itertools::Itertools;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{vector2::Vector2, vector3::Vector3}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RenderMaterialData, RenderMeshData}}};
+use crate::{core::math::{vector2::Vector2, vector3::Vector3}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}};
 
 #[derive(Default)]
 struct IBLResource {
+    _brdf_lut_texture_image: vk::Image,
+    _brdf_lut_texture_image_view: vk::ImageView,
+    _brdf_lut_texture_sampler: vk::Sampler,
+    _brdf_lut_texture_image_allocation: vk::DeviceMemory,
 
+    _irradiance_texture_image: vk::Image,
+    _irradiance_texture_image_view: vk::ImageView,
+    _irradiance_texture_sampler: vk::Sampler,
+    _irradiance_texture_image_allocation: vk::DeviceMemory,
+
+    _specular_texture_image: vk::Image,
+    _specular_texture_image_view: vk::ImageView,
+    _specular_texture_sampler: vk::Sampler,
+    _specular_texture_image_allocation: vk::DeviceMemory,
 }
 
 struct IBLResourceData {
@@ -68,6 +82,59 @@ impl RenderResource {
     }
 
     pub fn upload_global_render_resource(&mut self, rhi: &VulkanRHI, level_resource_desc: &LevelResourceDesc) {
+        self.create_and_map_storage_buffer(rhi);
+        
+        let skybox_irradiance_map = &level_resource_desc.m_ibl_resource_desc.m_skybox_irradiance_map;
+        let irradiace_pos_x_map = RenderResourceBase::load_texture_hdr(&skybox_irradiance_map.positive_x_map, 4).unwrap();
+        let irradiace_neg_x_map = RenderResourceBase::load_texture_hdr(&skybox_irradiance_map.negative_x_map, 4).unwrap();
+        let irradiace_pos_y_map = RenderResourceBase::load_texture_hdr(&skybox_irradiance_map.positive_y_map, 4).unwrap();
+        let irradiace_neg_y_map = RenderResourceBase::load_texture_hdr(&skybox_irradiance_map.negative_y_map, 4).unwrap();
+        let irradiace_pos_z_map = RenderResourceBase::load_texture_hdr(&skybox_irradiance_map.positive_z_map, 4).unwrap();
+        let irradiace_neg_z_map = RenderResourceBase::load_texture_hdr(&skybox_irradiance_map.negative_z_map, 4).unwrap();
+
+        let skybox_specular_map = &level_resource_desc.m_ibl_resource_desc.m_skybox_specular_map;
+        let specular_pos_x_map = RenderResourceBase::load_texture_hdr(&skybox_specular_map.positive_x_map, 4).unwrap();
+        let specular_neg_x_map = RenderResourceBase::load_texture_hdr(&skybox_specular_map.negative_x_map, 4).unwrap();
+        let specular_pos_y_map = RenderResourceBase::load_texture_hdr(&skybox_specular_map.positive_y_map, 4).unwrap();
+        let specular_neg_y_map = RenderResourceBase::load_texture_hdr(&skybox_specular_map.negative_y_map, 4).unwrap();
+        let specular_pos_z_map = RenderResourceBase::load_texture_hdr(&skybox_specular_map.positive_z_map, 4).unwrap();
+        let specular_neg_z_map = RenderResourceBase::load_texture_hdr(&skybox_specular_map.negative_z_map, 4).unwrap();
+
+        let brdf_map = RenderResourceBase::load_texture_hdr(&level_resource_desc.m_ibl_resource_desc.m_brdf_map, 4).unwrap();
+
+        self.create_ibl_samplers(rhi);
+
+        let irradiance_maps = [
+            irradiace_pos_x_map,
+            irradiace_neg_x_map,
+            irradiace_pos_y_map,
+            irradiace_neg_y_map,
+            irradiace_pos_z_map,
+            irradiace_neg_z_map,
+        ];
+        let specular_maps = [
+            specular_pos_x_map,
+            specular_neg_x_map,
+            specular_pos_y_map,
+            specular_neg_y_map,
+            specular_pos_z_map,
+            specular_neg_z_map,
+        ];
+
+        self.create_ibl_textures(rhi, &irradiance_maps, &specular_maps);
+
+        (
+            self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_image,
+            self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_image_allocation,
+            self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_image_view,
+        ) = rhi.create_texture_image(
+            brdf_map.m_width,
+            brdf_map.m_height,
+            &brdf_map.m_pixels,
+            brdf_map.m_format,
+            0,
+        ).unwrap();
+
         let color_grading_map = RenderResourceBase::load_texture(
             &level_resource_desc.m_color_grading_resource_desc.m_color_grading_map,
             false
@@ -85,7 +152,6 @@ impl RenderResource {
             0,
         ).unwrap();
 
-        self.create_and_map_storage_buffer(rhi);
     }
     
     pub fn update_per_frame_buffer(&mut self, _render_scene: &RenderScene, camera: &RenderCamera){
@@ -307,6 +373,7 @@ impl RenderResource {
                 .sampler(rhi.get_or_create_mipmap_sampler(
                     base_color_image_width,
                     base_color_image_height,
+                    RHISamplerType::Nearest,
                 ).unwrap());
             let metallic_roughness_image_info = vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -314,6 +381,7 @@ impl RenderResource {
                 .sampler(rhi.get_or_create_mipmap_sampler(
                     metallic_roughness_image_width,
                     metallic_roughness_image_height,
+                    RHISamplerType::Linear,
                 ).unwrap());
             let normal_roughness_image_info = vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -321,6 +389,7 @@ impl RenderResource {
                 .sampler(rhi.get_or_create_mipmap_sampler(
                     normal_roughness_image_width,
                     normal_roughness_image_height,
+                    RHISamplerType::Linear,
                 ).unwrap());
             let occlusion_image_info = vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -328,6 +397,7 @@ impl RenderResource {
                 .sampler(rhi.get_or_create_mipmap_sampler(
                     occlusion_image_width,
                     occlusion_image_height,
+                    RHISamplerType::Linear,
                 ).unwrap());
             let emissive_image_info = vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -335,6 +405,7 @@ impl RenderResource {
                 .sampler(rhi.get_or_create_mipmap_sampler(
                     emissive_image_width,
                     emissive_image_height,
+                    RHISamplerType::Linear,
                 ).unwrap());
 
             let mesh_descriptor_writes_info = [
@@ -631,6 +702,68 @@ impl RenderResource {
             0,
             global_storage_buffer_size as u64, 
             vk::MemoryMapFlags::empty()
+        ).unwrap();
+    }
+
+    fn create_ibl_samplers(&mut self, rhi: &VulkanRHI) {
+        let physical_device_properties = rhi.get_physical_device_properties();
+        let sampler_info = vk::SamplerCreateInfo::builder()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .anisotropy_enable(true)
+            .max_anisotropy(physical_device_properties.limits.max_sampler_anisotropy)
+            .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+            .unnormalized_coordinates(false)
+            .compare_enable(false)
+            .compare_op(vk::CompareOp::ALWAYS)
+            .mip_lod_bias(0.0)
+            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+            .min_lod(0.0)
+            .max_lod(0.0);
+
+        if self.m_global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler != vk::Sampler::null() {
+            rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler);
+        }
+
+        self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_sampler =
+            rhi.create_sampler(&sampler_info).unwrap();
+
+        if self.m_global_render_resource.borrow()._ibl_resource._specular_texture_sampler != vk::Sampler::null() {
+            rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._specular_texture_sampler);
+        }
+
+        self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_sampler =
+            rhi.create_sampler(&sampler_info).unwrap();
+    }
+
+    fn create_ibl_textures(&mut self, rhi: &VulkanRHI, irradiance_maps: &[TextureData; 6], specular_maps: &[TextureData; 6]) {
+        let irradiance_cubemap_miplevels =
+            (irradiance_maps[0].m_width.max(irradiance_maps[0].m_height) as f32).log2().floor() as u32 + 1;
+
+        (self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_image,
+        self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_image_allocation,
+        self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_image_view) = rhi.create_cube_map(
+            irradiance_maps[0].m_width, 
+            irradiance_maps[0].m_height, 
+            &irradiance_maps.iter().map(|texture|texture.m_pixels.as_slice()).collect_array().unwrap(), 
+            irradiance_maps[0].m_format, 
+            irradiance_cubemap_miplevels
+        ).unwrap();
+
+        let specular_cubemap_miplevels =
+            (specular_maps[0].m_width.max(specular_maps[0].m_height) as f32).log2().floor() as u32 + 1;
+        
+        (self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_image,
+        self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_image_allocation,
+        self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_image_view) = rhi.create_cube_map(
+            specular_maps[0].m_width, 
+            specular_maps[0].m_height, 
+            &specular_maps.iter().map(|texture|texture.m_pixels.as_slice()).collect_array().unwrap(), 
+            specular_maps[0].m_format, 
+            specular_cubemap_miplevels
         ).unwrap();
     }
 }

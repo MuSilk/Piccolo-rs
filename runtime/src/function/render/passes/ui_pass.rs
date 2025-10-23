@@ -5,7 +5,7 @@ use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -98,7 +98,7 @@ impl UIPass {
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .image_view(self.font_texture.view)
             .sampler(*rhi.get_or_create_default_sampler(
-                RHIDefaultSamplerType::Linear
+                RHISamplerType::Linear
             ).unwrap());
 
         let descriptor_writes_info = [
@@ -428,7 +428,7 @@ impl UIPass {
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .image_view(self.font_texture.view)
             .sampler(*rhi.get_or_create_default_sampler(
-                RHIDefaultSamplerType::Linear
+                RHISamplerType::Linear
             ).unwrap());
 
         let descriptor_writes_info = [

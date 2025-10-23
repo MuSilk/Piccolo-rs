@@ -352,6 +352,94 @@ fn generate_mipmaps(
     Ok(())
 }
 
+pub fn create_cube_map(
+    rhi: &VulkanRHI, 
+    width: u32, 
+    height: u32, 
+    pixels: &[&[u8]; 6], 
+    format: vk::Format, 
+    mip_levels: u32
+) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
+
+    let device = &rhi.m_device;
+    let instance = &rhi.m_instance;
+    let physical_device = rhi.m_data.m_physical_device;
+
+    let cube_byte_size = pixels.iter().map(|p|p.len()).sum::<usize>();
+
+    let image_create_info = vk::ImageCreateInfo::builder()
+        .flags(vk::ImageCreateFlags::CUBE_COMPATIBLE)
+        .image_type(vk::ImageType::_2D)
+        .extent(vk::Extent3D {
+            width,
+            height,
+            depth: 1,
+        })
+        .mip_levels(mip_levels)
+        .array_layers(6)
+        .format(format)
+        .tiling(vk::ImageTiling::OPTIMAL)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC)
+        .samples(vk::SampleCountFlags::_1)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+    
+    unsafe {
+        let image = device.create_image(&image_create_info, None)?;
+        let requirements = device.get_image_memory_requirements(image);
+        let info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(
+                find_memory_type(instance, physical_device, requirements.memory_type_bits, vk::MemoryPropertyFlags::DEVICE_LOCAL)?
+            );
+
+        let image_memory = device.allocate_memory(&info, None)?;
+        device.bind_image_memory(image, image_memory, 0)?;
+
+        let (staging_buffer, staging_buffer_memory) = create_buffer(
+            instance, device, physical_device, cube_byte_size as u64,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )?;
+
+        let data = device.map_memory(staging_buffer_memory, 0, cube_byte_size as u64, vk::MemoryMapFlags::empty())?;
+        let mut offset = 0;
+        pixels.iter().for_each(| pixels| {
+            copy_nonoverlapping(pixels.as_ptr().cast(), data.add(offset), pixels.len());
+            offset += pixels.len();
+        });
+        device.unmap_memory(staging_buffer_memory);
+        transition_image_layout(
+            rhi, image, 
+            vk::ImageLayout::UNDEFINED, 
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
+            6, 
+            mip_levels,
+            vk::ImageAspectFlags::COLOR,
+        )?;
+        copy_buffer_to_image(
+            rhi, 
+            staging_buffer, 
+            image, 
+            width, 
+            height,
+            6
+        )?;
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+
+        generate_mipmaps(rhi, image, format, width, height, 6, mip_levels)?;
+        let image_view = create_image_view(
+            device, image, format, 
+            vk::ImageAspectFlags::COLOR,
+            vk::ImageViewType::CUBE, 
+            6, 
+            mip_levels
+        )?;
+        Ok((image, image_memory, image_view))
+    }
+}
+
 pub fn create_texture_image(
     rhi: &VulkanRHI,
     width: u32,

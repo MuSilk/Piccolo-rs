@@ -179,11 +179,6 @@ impl RHICompareOp {
     }
 }
 
-pub enum RHIDefaultSamplerType{
-    Linear,
-    Nearest,
-}
-
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct RHIDescriptorType(i32);
@@ -1202,6 +1197,12 @@ pub type RHIDeviceAddress = u64;
 pub type RHIDeviceSize = u64;
 pub type RHIFlags = u32;
 pub type RHISampleMask = u32;
+
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+pub enum RHISamplerType{
+    Linear,
+    Nearest,
+}
 
 #[derive(Default)]
 pub enum ImageType{

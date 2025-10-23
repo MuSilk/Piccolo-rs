@@ -1,11 +1,11 @@
 use std::{cell::RefCell, collections::VecDeque};
 
-use crate::{core::math::matrix4::Matrix4x4, function::render::{render_camera::RenderCameraType, render_object::GameObjectDesc}};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{render_camera::RenderCameraType, render_object::GameObjectDesc}, resource::res_type::global::global_rendering::{SkyBoxIrradianceMap, SkyBoxSpecularMap}};
 
 pub struct LevelIBLResourceDesc{
-    // m_skybox_irradiance_map: SkyBoxIrradianceMap,
-    // m_skybox_specular_map: SkyBoxSpecularMap,
-    // m_brdf_map: String,
+    pub m_skybox_irradiance_map: SkyBoxIrradianceMap,
+    pub m_skybox_specular_map: SkyBoxSpecularMap,
+    pub m_brdf_map: String,
 }
 
 pub struct LevelColorGradingResourceDesc {

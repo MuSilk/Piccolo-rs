@@ -2,7 +2,7 @@ use std::{any::Any};
 
 use anyhow::Result;
 
-use crate::function::render::{interface::rhi_struct::{RHIBuffer, RHICommandBuffer, RHIDepthImageDesc, RHIDescriptorPool, RHIDescriptorSet, RHIDescriptorSetAllocateInfo, RHIDescriptorSetLayout, RHIDescriptorSetLayoutCreateInfo, RHIDeviceMemory, RHIFramebuffer, RHIFramebufferCreateInfo, RHIGraphicsPipelineCreateInfo, RHIImage, RHIImageView, RHIPipeline, RHIPipelineLayout, RHIPipelineLayoutCreateInfo, RHIRect2D, RHIRenderPass, RHIRenderPassBeginInfo, RHIRenderPassCreateInfo, RHISampler, RHIShader, RHISwapChainDesc, RHIViewport, RHIWriteDescriptorSet}, render_type::{RHIBufferUsageFlags, RHIDefaultSamplerType, RHIDeviceSize, RHIFormat, RHIMemoryMapFlags, RHIMemoryPropertyFlags, RHIPipelineBindPoint, RHISubpassContents}, window_system::WindowSystem};
+use crate::function::render::{interface::rhi_struct::{RHIBuffer, RHICommandBuffer, RHIDepthImageDesc, RHIDescriptorPool, RHIDescriptorSet, RHIDescriptorSetAllocateInfo, RHIDescriptorSetLayout, RHIDescriptorSetLayoutCreateInfo, RHIDeviceMemory, RHIFramebuffer, RHIFramebufferCreateInfo, RHIGraphicsPipelineCreateInfo, RHIImage, RHIImageView, RHIPipeline, RHIPipelineLayout, RHIPipelineLayoutCreateInfo, RHIRect2D, RHIRenderPass, RHIRenderPassBeginInfo, RHIRenderPassCreateInfo, RHISampler, RHIShader, RHISwapChainDesc, RHIViewport, RHIWriteDescriptorSet}, render_type::{RHIBufferUsageFlags, RHISamplerType, RHIDeviceSize, RHIFormat, RHIMemoryMapFlags, RHIMemoryPropertyFlags, RHIPipelineBindPoint, RHISubpassContents}, window_system::WindowSystem};
 
 pub struct RHICreateInfo<'a> {
     pub window_system : &'a WindowSystem,
@@ -17,7 +17,7 @@ pub trait RHI: Any + Send + Sync {
     fn create_swapchain(&mut self) -> Result<()>;
     fn recreate_swapchain(&mut self) -> Result<()>;
     fn create_swapchain_image_views(&mut self) -> Result<()>;
-    fn get_or_create_default_sampler(&self, sampler_type: RHIDefaultSamplerType) -> Result<&Box<dyn RHISampler>>;
+    fn get_or_create_default_sampler(&self, sampler_type: RHISamplerType) -> Result<&Box<dyn RHISampler>>;
     fn create_shader_module(&self, data: &[u8]) -> Result<Box<dyn RHIShader>>;
     fn create_buffer(&self,size: RHIDeviceSize, usage: RHIBufferUsageFlags, properties: RHIMemoryPropertyFlags) -> Result<(Box<dyn RHIBuffer>, Box<dyn RHIDeviceMemory>)>;
     fn copy_buffer(&self, src: &Box<dyn RHIBuffer>, dst: &Box<dyn RHIBuffer>, src_offset: RHIDeviceSize, dst_offset: RHIDeviceSize, size: RHIDeviceSize) -> Result<()>;

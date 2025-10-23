@@ -4,7 +4,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4}, function::render::{debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::DebugDrawVertex}, interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC}, render_type::RHIDefaultSamplerType}};
+use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4}, function::render::{debugdraw::{debug_draw_font::DebugDrawFont, debug_draw_primitive::DebugDrawVertex}, interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER_DYNAMIC}, render_type::RHISamplerType}};
 
 
 #[derive(Default)]
@@ -351,7 +351,7 @@ impl DebugDrawAllocator {
     }
 
     fn prepare_descriptor_set(&mut self, rhi: &VulkanRHI, font: &DebugDrawFont) -> Result<()> {
-        let sampler = rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Linear)?;
+        let sampler = rhi.get_or_create_default_sampler(RHISamplerType::Linear)?;
         
         let image_info = [
             vk::DescriptorImageInfo::builder()

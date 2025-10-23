@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHIDefaultSamplerType}, shader::generated::shader::{COLOR_GRADING_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{COLOR_GRADING_FRAG, POST_PROCESS_VERT}};
 
 pub struct ColorGradingPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -49,14 +49,14 @@ impl ColorGradingPass {
     }
     pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, input_attachment: vk::ImageView) -> Result<()> {
         let post_process_per_frame_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Nearest)?)
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
             .image_view(input_attachment)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
         let resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
 
         let color_grading_lut_image_info = vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHIDefaultSamplerType::Linear)?)
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Linear)?)
             .image_view(resource.borrow()._color_grading_resource._color_grading_lut_texture_image_view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
 
