@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, cell::{RefCell}, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
+use std::{any::{TypeId}, cell::{RefCell}, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -6,7 +6,7 @@ use log::info;
 
 use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::{common::{level::LevelRes, object::ObjectInstanceRes}}};
 
-type ComponentColumn = Vec<Box<RefCell<dyn Any>>>;
+type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
 #[derive(Default)]
 struct Archetype {
@@ -29,7 +29,7 @@ impl Archetype {
         self.m_columns.insert(type_id, Vec::new());
     }
     
-    fn add_entity(&mut self, object_id: GObjectID, components: HashMap<TypeId, Box<RefCell<dyn Any>>>) -> usize {
+    fn add_entity(&mut self, object_id: GObjectID, components: HashMap<TypeId, RefCell<Box<dyn ComponentTrait>>>) -> usize {
         assert_eq!(components.keys().collect::<HashSet<_>>(), 
             self.m_columns.keys().sorted().collect::<HashSet<_>>(), 
             "Components do not match archetype!"
@@ -41,7 +41,7 @@ impl Archetype {
         self.m_entities.len() - 1
     }
 
-    fn get_entity(&self, index: GObjectID) -> impl Iterator<Item = &Box<RefCell<dyn Any>>> {
+    fn get_entity(&self, index: GObjectID) -> impl Iterator<Item = &RefCell<Box<dyn ComponentTrait>>> {
         self.m_columns.iter()
             .map(move |(_type_id, column)| {
                 column.get(index as usize).unwrap()
@@ -84,7 +84,7 @@ impl Level {
             .flat_map(|(_type_id, archetype)| {
                 let column = archetype.get_column::<T>().unwrap();
                 column.iter().map(|any_box| {
-                    std::cell::Ref::map(any_box.borrow(), |b| b.downcast_ref::<T>().unwrap())
+                    std::cell::Ref::map(any_box.borrow(), |b| b.as_any().downcast_ref::<T>().unwrap())
                 })
             })
     }
@@ -96,7 +96,7 @@ impl Level {
             .flat_map(|(_type_id, archetype)| {
                 let column = archetype.get_column::<T>().unwrap();
                 column.iter().map(|any_box| {
-                    std::cell::RefMut::map(any_box.borrow_mut(), |b| b.downcast_mut::<T>().unwrap())
+                    std::cell::RefMut::map(any_box.borrow_mut(), |b| b.as_any_mut().downcast_mut::<T>().unwrap())
                 })
             })
     }
@@ -112,8 +112,8 @@ impl Level {
                 let column_u = archetype.get_column::<U>().unwrap();
                 column_t.iter().zip(column_u.iter()).map(|(any_box_t, any_box_u)| {
                     (
-                        std::cell::Ref::map(any_box_t.borrow(), |b| b.downcast_ref::<T>().unwrap()),
-                        std::cell::Ref::map(any_box_u.borrow(), |b| b.downcast_ref::<U>().unwrap()),
+                        std::cell::Ref::map(any_box_t.borrow(), |b| b.as_any().downcast_ref::<T>().unwrap()),
+                        std::cell::Ref::map(any_box_u.borrow(), |b| b.as_any().downcast_ref::<U>().unwrap()),
                     )
                 })
             })
@@ -130,14 +130,14 @@ impl Level {
                 let column_u = archetype.get_column::<U>().unwrap();
                 column_t.iter().zip(column_u.iter()).map(|(any_box_t, any_box_u)| {
                     (
-                        std::cell::RefMut::map(any_box_t.borrow_mut(), |b| b.downcast_mut::<T>().unwrap()),
-                        std::cell::RefMut::map(any_box_u.borrow_mut(), |b| b.downcast_mut::<U>().unwrap()),
+                        std::cell::RefMut::map(any_box_t.borrow_mut(), |b| b.as_any_mut().downcast_mut::<T>().unwrap()),
+                        std::cell::RefMut::map(any_box_u.borrow_mut(), |b| b.as_any_mut().downcast_mut::<U>().unwrap()),
                     )
                 })
             })
     }
     
-    pub fn create_object(&mut self, object_id: GObjectID, components: HashMap<TypeId, Box<RefCell<dyn Any>>>) {
+    pub fn create_object(&mut self, object_id: GObjectID, components: HashMap<TypeId, RefCell<Box<dyn ComponentTrait>>>) {
         let archetype_type_id: usize = {
             let mut ids: Vec<_> = components.keys().cloned().collect();
             ids.sort();
@@ -211,21 +211,10 @@ impl LevelExt for Rc<RefCell<Level>> {
             self.borrow_mut().m_entities.insert(object_id, gobject);
 
             let components = obj.m_instanced_components.iter().map(|component| {
-                let component = component.as_any();
-                if component.is::<MeshComponent>() {
-                        let mesh_component = component.downcast_ref::<MeshComponent>().unwrap();
-                        let component = Box::new(RefCell::new(mesh_component.clone()));
-                        component.borrow_mut().post_load_resource(&self,object_id);
-                        let component = component as Box<RefCell<dyn Any>>;
-                        (mesh_component.type_id(), component)
-                    } else if component.is::<TransformComponent>() {
-                        let transform_component = component.downcast_ref::<TransformComponent>().unwrap();
-                        let component = Box::new(RefCell::new(transform_component.clone()));
-                        component.borrow_mut().post_load_resource(&self,object_id);
-                        (transform_component.type_id(),component as Box<RefCell<dyn Any>>)
-                    } else {
-                        panic!("Unknown component type!");
-                    }
+                let type_id = component.as_ref().as_any().type_id();
+                let component = RefCell::new(component.clone_box());
+                component.borrow_mut().post_load_resource(&self, object_id);
+                (type_id, component)
             }).collect::<HashMap<_, _>>();
             self.borrow_mut().create_object(object_id, components);
         });
@@ -249,17 +238,7 @@ impl LevelExt for Rc<RefCell<Level>> {
             let components = 
                 borrowed_level.m_archetypes.get(&index.0).unwrap().get_entity(index.1)
                 .map(|component| {
-                    if component.borrow().is::<MeshComponent>() {
-                        let mesh_component = component.borrow();
-                        let mesh_component = mesh_component.downcast_ref::<MeshComponent>().unwrap();
-                        Box::new(mesh_component.clone()) as Box<dyn ComponentTrait>
-                    } else if component.borrow().is::<TransformComponent>() {
-                        let transform_component = component.borrow();
-                        let transform_component = transform_component.downcast_ref::<TransformComponent>().unwrap();
-                        Box::new(transform_component.clone()) as Box<dyn ComponentTrait>
-                    } else {
-                        panic!("Unknown component type!");
-                    }
+                    component.borrow().clone_box()
                 })
                 .collect::<Vec<_>>();
             output_object.m_instanced_components = components;

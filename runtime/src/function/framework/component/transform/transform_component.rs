@@ -1,9 +1,11 @@
+use std::{cell::RefCell, rc::Rc};
+
 use serde::{Deserialize, Serialize};
 
-use crate::{core::math::{matrix4::Matrix4x4, transform::Transform}, function::framework::component::component::{Component, ComponentTrait}};
+use crate::{core::math::{matrix4::Matrix4x4, transform::Transform}, function::framework::{component::component::{Component, ComponentTrait}, level::level::Level, object::object_id_allocator::GObjectID}};
 
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TransformComponent {
     #[serde(skip)]
     m_component: Component,
@@ -16,6 +18,18 @@ pub struct TransformComponent {
     m_next_index: usize,
 }
 
+impl Default for  TransformComponent {
+    fn default() -> Self {
+        Self {
+            m_component: Component::default(),
+            m_transform: Transform::default(),
+            m_transform_buffer: [Transform::default(), Transform::default()],
+            m_current_index: 0,
+            m_next_index: 1,
+        }
+    }
+}
+
 #[typetag::serde]
 impl ComponentTrait for TransformComponent {
     fn get_component(&self) -> &Component {
@@ -24,11 +38,21 @@ impl ComponentTrait for TransformComponent {
     fn get_component_mut(&mut self) -> &mut Component {
         &mut self.m_component
     }
+
+    fn post_load_resource(&mut self, _parent_level: &Rc<RefCell<Level>>, parent_object: GObjectID) {
+        self.m_component.m_parent_object = parent_object;
+        self.m_transform_buffer[0] = self.m_transform.clone();
+        self.m_transform_buffer[1] = self.m_transform.clone();
+        self.m_component.m_is_dirty = true;
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+    fn clone_box(&self) -> Box<dyn ComponentTrait> {
+        Box::new(self.clone())
     }
 }
 

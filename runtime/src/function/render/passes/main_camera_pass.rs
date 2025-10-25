@@ -1322,40 +1322,24 @@ impl MainCameraPass {
 
         let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize];
         rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-        
+
+        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+
         let perframe_dynamic_offset = round_up(
-            self.m_render_pass.m_global_render_resource
-                .upgrade().unwrap().borrow()
-                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-            self.m_render_pass.m_global_render_resource
-                .upgrade().unwrap().borrow()
-                ._storage_buffer._min_storage_buffer_offset_alignment
+            render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
         );
 
-        self.m_render_pass.m_global_render_resource
-            .upgrade().unwrap().borrow_mut()
+        render_resource.borrow_mut()
             ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
                 perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
         unsafe{
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
-                self.m_render_pass.m_global_render_resource.upgrade().unwrap().borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
+                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
                 std::mem::size_of::<MeshPerframeStorageBufferObject>()
             );
         }
-
-        let perdrawcall_dynamic_offset = round_up(
-            self.m_render_pass.m_global_render_resource
-                .upgrade().unwrap().borrow()
-                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-            self.m_render_pass.m_global_render_resource
-                .upgrade().unwrap().borrow()
-                ._storage_buffer._min_storage_buffer_offset_alignment
-        );
-        self.m_render_pass.m_global_render_resource
-            .upgrade().unwrap().borrow_mut()
-            ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                perdrawcall_dynamic_offset + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
 
         let m_visiable_nodes = RenderPass::m_visiable_nodes().borrow();
 
@@ -1364,10 +1348,18 @@ impl MainCameraPass {
             let mut object = MeshPerdrawcallStorageBufferObject::default();
             object.mesh_instances[0].model_matrix = render_mesh_node.model_matrix.clone();
 
+            let perdrawcall_dynamic_offset = round_up(
+                render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
+                render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+            );
+            render_resource.borrow_mut()
+                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+                    perdrawcall_dynamic_offset + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
+
             unsafe{
                 std::ptr::copy_nonoverlapping(
                     &object as *const _ as *const c_void,
-                    self.m_render_pass.m_global_render_resource.upgrade().unwrap().borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
+                    render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
                     std::mem::size_of::<MeshPerdrawcallStorageBufferObject>()
                 );
             }
