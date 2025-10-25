@@ -1,30 +1,26 @@
-use std::{cell::RefCell, collections::HashMap, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
 use itertools::Itertools;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{vector2::Vector2, vector3::Vector3}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}};
+use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::{RenderScene}, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}};
 
 #[derive(Default)]
-struct IBLResource {
-    _brdf_lut_texture_image: vk::Image,
-    _brdf_lut_texture_image_view: vk::ImageView,
-    _brdf_lut_texture_sampler: vk::Sampler,
-    _brdf_lut_texture_image_allocation: vk::DeviceMemory,
+pub struct IBLResource {
+    pub _brdf_lut_texture_image: vk::Image,
+    pub _brdf_lut_texture_image_view: vk::ImageView,
+    pub _brdf_lut_texture_sampler: vk::Sampler,
+    pub _brdf_lut_texture_image_allocation: vk::DeviceMemory,
 
-    _irradiance_texture_image: vk::Image,
-    _irradiance_texture_image_view: vk::ImageView,
-    _irradiance_texture_sampler: vk::Sampler,
-    _irradiance_texture_image_allocation: vk::DeviceMemory,
+    pub _irradiance_texture_image: vk::Image,
+    pub _irradiance_texture_image_view: vk::ImageView,
+    pub _irradiance_texture_sampler: vk::Sampler,
+    pub _irradiance_texture_image_allocation: vk::DeviceMemory,
 
-    _specular_texture_image: vk::Image,
-    _specular_texture_image_view: vk::ImageView,
-    _specular_texture_sampler: vk::Sampler,
-    _specular_texture_image_allocation: vk::DeviceMemory,
-}
-
-struct IBLResourceData {
-
+    pub _specular_texture_image: vk::Image,
+    pub _specular_texture_image_view: vk::ImageView,
+    pub _specular_texture_sampler: vk::Sampler,
+    pub _specular_texture_image_allocation: vk::DeviceMemory,
 }
 
 #[derive(Default)]
@@ -32,10 +28,6 @@ pub struct ColorGradingResource {
     pub _color_grading_lut_texture_image: vk::Image,
     pub _color_grading_lut_texture_image_view: vk::ImageView,
     pub _color_grading_lut_texture_image_allocation: vk::DeviceMemory,
-}
-
-struct ColorGradingResourceData {
-
 }
 
 #[derive(Default)]
@@ -51,11 +43,14 @@ pub struct StorageBuffer {
     pub _global_upload_ringbuffers_begin: Vec<u32>,
     pub _global_upload_ringbuffers_end: Vec<u32>,
     pub _global_upload_ringbuffers_size: Vec<u32>,
+
+    pub _global_null_descriptor_storage_buffer: vk::Buffer,
+    pub _global_null_descriptor_storage_buffer_memory: vk::DeviceMemory,
 }
 
 #[derive(Default)]
 pub struct GlobalRenderResource {
-    _ibl_resource: IBLResource,
+    pub _ibl_resource: IBLResource,
     pub _color_grading_resource: ColorGradingResource,
     pub _storage_buffer: StorageBuffer,
 }
@@ -67,10 +62,13 @@ pub struct RenderResource{
     pub m_global_render_resource: Rc<RefCell<GlobalRenderResource>>,
 
     pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
+    pub m_mesh_point_light_shadow_perframe_storage_buffer_object: MeshPointLightShadowPerframeStorageBufferObject,
+    pub m_mesh_directional_light_shadow_perframe_storage_buffer_object: MeshDirectionalLightShadowPerframeStorageBufferObject,
 
     pub m_vulkan_meshes: HashMap<usize, Rc<VulkanMesh>>,
     pub m_vulkan_pbr_materials: HashMap<usize, Rc<VulkanPBRMaterial>>,
 
+    pub m_mesh_descriptor_set_layout: vk::DescriptorSetLayout,
     pub m_material_descriptor_set_layout: vk::DescriptorSetLayout,
 }
 
@@ -107,18 +105,18 @@ impl RenderResource {
         let irradiance_maps = [
             irradiace_pos_x_map,
             irradiace_neg_x_map,
-            irradiace_pos_y_map,
-            irradiace_neg_y_map,
             irradiace_pos_z_map,
             irradiace_neg_z_map,
+            irradiace_pos_y_map,
+            irradiace_neg_y_map,
         ];
         let specular_maps = [
             specular_pos_x_map,
             specular_neg_x_map,
-            specular_pos_y_map,
-            specular_neg_y_map,
             specular_pos_z_map,
             specular_neg_z_map,
+            specular_pos_y_map,
+            specular_neg_y_map,
         ];
 
         self.create_ibl_textures(rhi, &irradiance_maps, &specular_maps);
@@ -154,15 +152,35 @@ impl RenderResource {
 
     }
     
-    pub fn update_per_frame_buffer(&mut self, _render_scene: &RenderScene, camera: &RenderCamera){
+    pub fn update_per_frame_buffer(&mut self, render_scene: &RenderScene, camera: &RenderCamera){
         let view_matrix = camera.get_view_matrix();
         let proj_matrix = camera.get_pers_proj_matrix();
         let camera_position = camera.position();
         let proj_view_matrix = proj_matrix * view_matrix;
 
+        let ambient_light = render_scene.m_ambient_light.m_irradiance;
+        let point_light_num = render_scene.m_point_light_list.m_lights.len();
+
         self.m_mesh_perframe_storage_buffer_object.proj_view_matrix = proj_view_matrix;
         self.m_mesh_perframe_storage_buffer_object.camera_position = *camera_position;
-        
+        self.m_mesh_perframe_storage_buffer_object.ambient_light = ambient_light;
+        self.m_mesh_perframe_storage_buffer_object.point_light_num = point_light_num as u32;
+
+        self.m_mesh_point_light_shadow_perframe_storage_buffer_object.point_light_num = point_light_num as u32;
+        render_scene.m_point_light_list.m_lights.iter().enumerate().for_each(|(i, light)| {
+            let radius = light.calculate_radius();
+            self.m_mesh_perframe_storage_buffer_object.scene_point_lights[i].position = light.m_position;
+            self.m_mesh_perframe_storage_buffer_object.scene_point_lights[i].radius = radius;
+            self.m_mesh_perframe_storage_buffer_object.scene_point_lights[i].intensity = light.m_flux / (4.0 * PI);
+
+            self.m_mesh_point_light_shadow_perframe_storage_buffer_object.point_lights_position_and_radius[i] = 
+                Vector4::new(light.m_position.x, light.m_position.y, light.m_position.z, radius);
+        });
+
+        self.m_mesh_perframe_storage_buffer_object.scene_directional_light.direction = 
+            render_scene.m_directional_light.m_direction;
+        self.m_mesh_perframe_storage_buffer_object.scene_directional_light.color = 
+            render_scene.m_directional_light.m_color;
     }
 
     pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData, material_data: &RenderMaterialData) {
@@ -205,6 +223,7 @@ impl RenderResource {
             else{
                 let vertex_buffer_data: &[MeshVertexDataDefinition] = bytemuck::cast_slice(&vertex_buffer_data);
                 Self::update_mesh_data(
+                    self,
                     rhi,
                     false,
                     index_buffer_size as u32,
@@ -462,6 +481,7 @@ impl RenderResource {
     }
     
     fn update_mesh_data(
+        &self,
         rhi: &VulkanRHI,
         enable_vertex_blending: bool,
         index_buffer_size: u32,
@@ -471,13 +491,14 @@ impl RenderResource {
     ) -> Result<()> {
         now_mesh.enable_vertex_blending = enable_vertex_blending;
         now_mesh.mesh_vertex_count = vertex_buffer_data.len() as u32;
-        Self::update_vertex_buffer(rhi, enable_vertex_blending, vertex_buffer_data, now_mesh)?;
+        Self::update_vertex_buffer(self, rhi, enable_vertex_blending, vertex_buffer_data, now_mesh)?;
         now_mesh.mesh_index_count = index_buffer_size / std::mem::size_of::<u16>() as u32;
         Self::update_index_buffer(rhi, index_buffer_size, index_buffer_data, now_mesh)?;
         Ok(())
     }
 
     fn update_vertex_buffer(
+        &self,
         rhi: &VulkanRHI,
         enable_vertex_blending: bool,
         vertex_buffer_data: &[MeshVertexDataDefinition],
@@ -573,6 +594,30 @@ impl RenderResource {
             rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_buffer, vertex_varying_buffer_offset as u64,0, vertex_varying_buffer_size as u64)?;
             rhi.destroy_buffer(staging_buffer);
             rhi.free_memory(staging_memory);
+
+            let set_layouts = [self.m_mesh_descriptor_set_layout];
+            let mesh_vertex_blending_per_mesh_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&set_layouts)
+                .build();
+
+            now_mesh.mesh_vertex_blending_descriptor_set =
+                rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info)?[0];
+
+            let mesh_vertex_joint_binding_storage_buffer_info = vk::DescriptorBufferInfo::builder()
+                .buffer(self.m_global_render_resource.borrow()._storage_buffer._global_null_descriptor_storage_buffer)
+                .range(1)
+                .build();
+
+            let descriptor_writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(now_mesh.mesh_vertex_blending_descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[mesh_vertex_joint_binding_storage_buffer_info])
+                    .build(),
+            ];
+            rhi.update_descriptor_sets(&descriptor_writes)?;
         }
         Ok(())
     } 
@@ -703,11 +748,17 @@ impl RenderResource {
             global_storage_buffer_size as u64, 
             vk::MemoryMapFlags::empty()
         ).unwrap();
+
+        (_storage_buffer._global_null_descriptor_storage_buffer, _storage_buffer._global_null_descriptor_storage_buffer_memory) = rhi.create_buffer(
+            64,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        ).unwrap();
     }
 
     fn create_ibl_samplers(&mut self, rhi: &VulkanRHI) {
         let physical_device_properties = rhi.get_physical_device_properties();
-        let sampler_info = vk::SamplerCreateInfo::builder()
+        let mut sampler_info = vk::SamplerCreateInfo::builder()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
             .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
@@ -722,13 +773,25 @@ impl RenderResource {
             .mip_lod_bias(0.0)
             .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
             .min_lod(0.0)
-            .max_lod(0.0);
+            .max_lod(0.0)
+            .build();
 
         if self.m_global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler != vk::Sampler::null() {
             rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler);
         }
 
         self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_sampler =
+            rhi.create_sampler(&sampler_info).unwrap();
+
+        sampler_info.min_lod = 0.0;
+        sampler_info.max_lod = 8.0;
+        sampler_info.mip_lod_bias = 0.0;
+
+        if self.m_global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler != vk::Sampler::null() {
+            rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler);
+        }
+
+        self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_sampler =
             rhi.create_sampler(&sampler_info).unwrap();
 
         if self.m_global_render_resource.borrow()._ibl_resource._specular_texture_sampler != vk::Sampler::null() {

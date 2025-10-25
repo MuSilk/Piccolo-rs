@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use imgui_winit_support::WinitPlatform;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -15,6 +15,8 @@ pub struct RenderPipelineCreateInfo<'a>{
 pub struct RenderPipelineBase{
     pub m_rhi : Weak<RefCell<VulkanRHI>>,
 
+    pub m_directional_light_pass: DirectionalLightShadowPass,
+    pub m_point_light_pass: PointLightShadowPass,
     pub m_main_camera_pass: MainCameraPass,
     pub m_tone_mapping_pass: ToneMappingPass,
     pub m_color_grading_pass: ColorGradingPass,

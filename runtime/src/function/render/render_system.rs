@@ -4,7 +4,7 @@ use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -36,18 +36,25 @@ impl RenderSystem {
         let imgui_context = Rc::new(RefCell::new(imgui_context));
         let imgui_platform = Rc::new(RefCell::new(platform));
 
+        let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+        let config_manager = RuntimeGlobalContext::get_config_manager().borrow();
+        let global_rendering_res_url = config_manager.get_global_rendering_res_url();
+        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(global_rendering_res_url).unwrap();
+
         let swap_context = RenderSwapContext::default();
 
         let mut render_camera = RenderCamera::default();
         render_camera.set_aspect(1024.0/768.0);
 
-        let render_scene = RenderScene::default();
+        let mut render_scene = RenderScene::default();
+        render_scene.m_ambient_light = AmbientLight{
+            m_irradiance: global_rendering_res.ambient_light
+        };
+        render_scene.m_directional_light = DirectionalLight{
+            m_direction: global_rendering_res.directional_light.direction,
+            m_color: global_rendering_res.directional_light.color
+        };
         render_scene.set_visible_nodes_reference();
-
-        let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        let config_manager = RuntimeGlobalContext::get_config_manager().borrow();
-        let global_rendering_res_url = config_manager.get_global_rendering_res_url();
-        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(global_rendering_res_url).unwrap();
 
         let level_resource_desc = LevelResourceDesc{
             m_ibl_resource_desc: LevelIBLResourceDesc{
@@ -72,6 +79,9 @@ impl RenderSystem {
             imgui_platform: &imgui_platform,
         };
         let render_pipeline = RenderPipeline::create(&create_info)?;
+
+        render_resource.borrow_mut().m_mesh_descriptor_set_layout = 
+            render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout;
 
         render_resource.borrow_mut().m_material_descriptor_set_layout = 
             render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout;
@@ -104,7 +114,7 @@ impl RenderSystem {
                 self.m_render_pipeline.forward_render(&mut self.m_render_resource.borrow_mut())?;
             },
             RenderPipelineType::DeferredPipeline => {
-                self.m_render_pipeline.defferred_render(&mut self.m_render_resource.borrow_mut())?;
+                self.m_render_pipeline.deferred_render(&mut self.m_render_resource.borrow_mut())?;
             },
             _ => {panic!("Unknown render pipeline type")}
         }

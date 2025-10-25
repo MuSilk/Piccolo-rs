@@ -5,7 +5,7 @@ use vulkanalia::{loader::{LibloadingLoader, LIBRARY}, prelude::v1_0::*, vk::{Ext
 use winit::window::Window;
 use log::*;
 
-use crate::function::render::{interface::{rhi::{self, RHICreateInfo}, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}}, render_type::RHISamplerType};
+use crate::function::render::{interface::{rhi::{RHICreateInfo}, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}}, render_type::RHISamplerType};
 
 const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
@@ -78,6 +78,7 @@ pub struct VulkanRHIData {
 
     m_enable_validation_layers: bool,
     m_enable_debug_utils_label: bool,
+    m_enable_point_light_shadow: bool,
 
     m_max_vertex_blending_mesh_count: u32,
     m_max_material_count: u32,
@@ -120,6 +121,7 @@ impl VulkanRHI {
 
         data.m_validation_layers = vec![VALIDATION_LAYER];
         data.m_device_extensions = DEVICE_EXTENSIONS.to_vec();
+        data.m_enable_point_light_shadow = true; //todo : make it configurable
 
         if cfg!(debug_assertions) {
             data.m_enable_validation_layers = true;
@@ -1101,9 +1103,12 @@ fn create_logical_device(entry: &Entry, instance: &Instance, data: &mut VulkanRH
         extensions.push(vk::KHR_PORTABILITY_SUBSET_EXTENSION.name.as_ptr());
     }
 
+    let enable_geometry_shader = data.m_enable_point_light_shadow;
+
     let features = vk::PhysicalDeviceFeatures::builder()
         .sampler_anisotropy(true)
         .fragment_stores_and_atomics(true)
+        .geometry_shader(enable_geometry_shader)
         .independent_blend(true)
         .sample_rate_shading(true);
 

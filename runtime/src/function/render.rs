@@ -1,5 +1,6 @@
 pub mod debugdraw;
 pub mod interface;
+pub mod light;
 pub mod passes;
 pub mod render_camera;
 pub mod render_common;

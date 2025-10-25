@@ -21,7 +21,7 @@ pub struct State {
 }
 
 impl WindowUI for EditorUI  {
-    fn initialize(&mut self, init_info: WindowUIInitInfo) {
+    fn initialize(&mut self, _init_info: WindowUIInitInfo) {
     
     }
 

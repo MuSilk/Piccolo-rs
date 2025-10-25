@@ -4,10 +4,13 @@ use vulkanalia::{prelude::v1_0::*};
 
 use crate::core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4};
 
+pub const S_POINT_LIGHT_SHADOW_MAP_DIMENSION: u32 = 2048;
+pub const S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION: u32 = 4096;
+
 
 const S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT: usize = 64;
 const S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT: usize = 1024;
-const S_MAX_POINT_LIGHT_COUNT: usize                = 15;
+pub const S_MAX_POINT_LIGHT_COUNT: usize                = 15;
 
 #[derive(Clone ,Default)]
 pub struct VulkanSceneDirectionalLight {
@@ -17,6 +20,7 @@ pub struct VulkanSceneDirectionalLight {
     pub _padding_color: f32,
 }
 
+#[derive(Clone ,Default)]
 pub struct VulkanScenePointLight {
     pub position : Vector3,
     pub radius: f32,
@@ -36,7 +40,7 @@ pub struct MeshPerframeStorageBufferObject {
     pub _padding_point_light_num_1: u32,
     pub _padding_point_light_num_2: u32,
     pub _padding_point_light_num_3: u32,
-    pub scene_point_lights: [Vector4; S_MAX_POINT_LIGHT_COUNT],
+    pub scene_point_lights: [VulkanScenePointLight; S_MAX_POINT_LIGHT_COUNT],
     pub scene_directional_light: VulkanSceneDirectionalLight,
     pub directional_light_proj_view: Matrix4x4
 }
@@ -65,6 +69,20 @@ impl Default for MeshPerdrawcallStorageBufferObject {
 }
 
 #[repr(C)]
+#[derive(Clone)]
+pub struct MeshPerdrawcallVertexBlendingStorageBufferObject {
+    pub joint_matrices: [VulkanMeshInstance; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+}
+
+impl Default for MeshPerdrawcallVertexBlendingStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            joint_matrices: array::from_fn(|_| VulkanMeshInstance::default()),
+        }
+    }
+}
+
+#[repr(C)]
 pub struct MeshPerMaterialUniformBufferObject {
     pub base_color_factor: Vector4,
 
@@ -76,6 +94,78 @@ pub struct MeshPerMaterialUniformBufferObject {
     pub emissive_factor: Vector3,
     pub is_blend: u32,
     pub id_double_sided: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Default)]
+pub struct MeshPointLightShadowPerframeStorageBufferObject {
+    pub point_light_num: u32,
+    _padding_point_light_num_1: u32,
+    _padding_point_light_num_2: u32,
+    _padding_point_light_num_3: u32,
+    pub point_lights_position_and_radius: [Vector4; S_MAX_POINT_LIGHT_COUNT],
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct MeshPointLightShadowPerdrawcallStorageBufferObject {
+    pub mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+}
+
+impl Default for MeshPointLightShadowPerdrawcallStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            mesh_instances: array::from_fn(|_| VulkanMeshInstance::default()),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct MeshPointLightShadowPerdrawcallVertexBlendingStorageBufferObject {
+    pub joint_matrices: [Matrix4x4; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT],
+}
+
+impl Default for MeshPointLightShadowPerdrawcallVertexBlendingStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            joint_matrices: array::from_fn(|_| Matrix4x4::default()),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Default)]
+pub struct MeshDirectionalLightShadowPerframeStorageBufferObject {
+    pub light_proj_view: Matrix4x4,
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct MeshDirectionalLightShadowPerdrawcallStorageBufferObject {
+    pub mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+}
+
+impl Default for MeshDirectionalLightShadowPerdrawcallStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            mesh_instances: array::from_fn(|_| VulkanMeshInstance::default()),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject {
+    pub joint_matrices: [Matrix4x4; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT],
+}
+
+impl Default for MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            joint_matrices: array::from_fn(|_| Matrix4x4::default()),
+        }
+    }
 }
 
 #[derive(Clone, Default)]

@@ -156,7 +156,7 @@ impl Level {
         self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
-    fn tick_mesh_components(&mut self, delta_time: f32) {
+    fn tick_mesh_components(&mut self, _delta_time: f32) {
         self.query_pair_mut::<MeshComponent, TransformComponent>()
             .for_each(|(mut mesh, mut transform)| 
         {

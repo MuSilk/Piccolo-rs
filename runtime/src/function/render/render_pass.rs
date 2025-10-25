@@ -58,6 +58,7 @@ pub struct Descriptor{
     pub descriptor_set: vk::DescriptorSet,
 }
 
+#[derive(Default)]
 pub struct RenderPipelineBase{
     pub layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,

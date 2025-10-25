@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let path = entry.path();
 
         match path.extension().and_then(|s| s.to_str()) {
-            Some("vert") | Some("frag") => {
+            Some("vert") | Some("frag") | Some("geom") => {
                 println!("cargo:warning= compiling shader: {:?}", path);
                 let generated_file_name = path.file_name().unwrap().to_str().unwrap().to_owned() + ".spv";
                 let result = Command::new(GLSLC_PATH)

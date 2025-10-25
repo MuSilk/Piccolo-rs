@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, ops::{Add, AddAssign, Mul, MulAssign, Sub}};
+use std::{f32::consts::PI, ops::{Add, AddAssign, Div, Mul, MulAssign, Sub}};
 
 use serde::{Deserialize, Serialize};
 
@@ -63,6 +63,7 @@ impl Vector3 {
     pub const fn dot(&self, rhs: &Vector3) -> f32 {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
+    
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
@@ -169,6 +170,13 @@ impl Mul<f32> for Vector3 {
     type Output = Self;
     fn mul(self, rhs: f32) -> Self::Output {
         Vector3 { x: self.x * rhs, y: self.y * rhs, z: self.z * rhs }
+    }
+}
+
+impl Div<f32> for Vector3 {
+    type Output = Self;
+    fn div(self, rhs: f32) -> Self::Output {
+        Vector3 { x: self.x / rhs, y: self.y / rhs, z: self.z / rhs }
     }
 }
 

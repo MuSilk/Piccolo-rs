@@ -1,11 +1,15 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::function::{framework::object::object_id_allocator::GObjectID, render::{render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}};
+use crate::function::{framework::object::object_id_allocator::GObjectID, render::{light::{AmbientLight, DirectionalLight, PointLightList}, render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}};
 
 
 
 #[derive(Default)]
 pub struct RenderScene{
+
+    pub m_ambient_light: AmbientLight,
+    pub m_directional_light: DirectionalLight,
+    pub m_point_light_list: PointLightList,
     
     pub m_render_entities: Vec<RenderEntity>,
 
