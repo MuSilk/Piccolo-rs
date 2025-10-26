@@ -29,7 +29,7 @@ impl RenderScene {
     }
 
     pub fn set_visible_nodes_reference(&self) {
-        RenderPass::m_visiable_nodes().borrow_mut().p_main_camera_visible_mesh_nodes = 
+        RenderPass::m_visible_nodes().borrow_mut().p_main_camera_visible_mesh_nodes = 
             Rc::downgrade(&self.m_main_camera_visible_mesh_nodes);
     }
     

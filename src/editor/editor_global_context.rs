@@ -2,7 +2,7 @@ use std::{cell::{RefCell}, rc::{Rc, Weak}};
 
 use runtime::{engine::Engine, function::render::{render_system::RenderSystem, window_system::WindowSystem}};
 
-use crate::{editor::{editor_input_manager::WrappedEditorInputManager, editor_scene_manager::EditorSceneManager}};
+use crate::editor::{editor_input_manager::{EditorInputManager, EditorInputManagerExt}, editor_scene_manager::EditorSceneManager};
 
 static mut G_EDITOR_GLOBAL_CONTEXT: Option<RefCell<EditorGlobalContext>> = None;
 
@@ -14,8 +14,8 @@ pub struct EditorGlobalContextCreateInfo<'a> {
 
 pub struct EditorGlobalContext {
     pub m_scene_manager: Rc<RefCell<EditorSceneManager>>,
-    pub m_input_manager: WrappedEditorInputManager,
-    m_render_system: Weak<RefCell<RenderSystem>>,
+    pub m_input_manager: Rc<RefCell<EditorInputManager>>,
+    pub m_render_system: Weak<RefCell<RenderSystem>>,
     pub m_window_system: Weak<RefCell<WindowSystem>>,
     m_engine_runtime: Weak<RefCell<Engine>>,
 }
@@ -33,7 +33,7 @@ impl EditorGlobalContext {
         unsafe{
             let ctx = EditorGlobalContext {
                 m_scene_manager: Rc::new(RefCell::new(EditorSceneManager::default())),
-                m_input_manager: WrappedEditorInputManager::default(),
+                m_input_manager: Rc::new(RefCell::new(EditorInputManager::default())),
                 m_render_system: Rc::downgrade(init_info.render_system),
                 m_window_system: Rc::downgrade(init_info.window_system),
                 m_engine_runtime: Rc::downgrade(init_info.engine_runtime),

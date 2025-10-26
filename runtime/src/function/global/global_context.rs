@@ -9,7 +9,7 @@ use crate::{function::{framework::world::world_manager::WorldManager, render::{d
 pub struct RuntimeGlobalContext {
     m_asset_manager: Rc<RefCell<AssetManager>>,
     m_config_manager: Rc<RefCell<ConfigManager>>,
-    pub m_world_manager: Rc<RefCell<WorldManager>>,
+    m_world_manager: Rc<RefCell<WorldManager>>,
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<Rc<RefCell<RenderSystem>>>,
     m_debugdraw_manager: Option<Rc<RefCell<DebugDrawManager>>>,
@@ -75,5 +75,9 @@ impl RuntimeGlobalContext {
 
     pub fn get_asset_manager() -> &'static Rc<RefCell<AssetManager>> {
         &Self::global().m_asset_manager
+    }
+
+    pub fn get_world_manager() -> &'static Rc<RefCell<WorldManager>> {
+        &Self::global().m_world_manager
     }
 }

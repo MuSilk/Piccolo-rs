@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_COMBINE_UI}, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
 
 pub struct CombineUIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -187,7 +187,7 @@ impl CombineUIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(6)
+            .subpass(_MAIN_CAMERA_SUBPASS_COMBINE_UI)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

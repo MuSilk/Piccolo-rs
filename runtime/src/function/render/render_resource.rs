@@ -3,7 +3,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::{RenderScene}, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}};
+use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}};
 
 #[derive(Default)]
 pub struct IBLResource {
@@ -64,6 +64,7 @@ pub struct RenderResource{
     pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
     pub m_mesh_point_light_shadow_perframe_storage_buffer_object: MeshPointLightShadowPerframeStorageBufferObject,
     pub m_mesh_directional_light_shadow_perframe_storage_buffer_object: MeshDirectionalLightShadowPerframeStorageBufferObject,
+    pub m_mesh_inefficient_pick_perframe_storage_buffer_object: MeshInefficientPickPerframeStorageBufferObject,
 
     pub m_vulkan_meshes: HashMap<usize, Rc<VulkanMesh>>,
     pub m_vulkan_pbr_materials: HashMap<usize, Rc<VulkanPBRMaterial>>,
@@ -181,6 +182,8 @@ impl RenderResource {
             render_scene.m_directional_light.m_direction;
         self.m_mesh_perframe_storage_buffer_object.scene_directional_light.color = 
             render_scene.m_directional_light.m_color;
+
+        self.m_mesh_inefficient_pick_perframe_storage_buffer_object.proj_view_matrix = proj_view_matrix;
     }
 
     pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData, material_data: &RenderMaterialData) {

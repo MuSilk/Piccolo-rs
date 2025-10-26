@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{FXAA_FRAG, FXAA_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_FXAA}, render_type::RHISamplerType}, shader::generated::shader::{FXAA_FRAG, FXAA_VERT}};
 
 pub struct FXAAPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -161,7 +161,7 @@ impl FXAAPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(4)
+            .subpass(_MAIN_CAMERA_SUBPASS_FXAA)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

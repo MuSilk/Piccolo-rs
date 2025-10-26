@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_TONE_MAPPING}, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
 
 pub struct ToneMappingInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -161,7 +161,7 @@ impl ToneMappingPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(2)
+            .subpass(_MAIN_CAMERA_SUBPASS_TONE_MAPPING)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

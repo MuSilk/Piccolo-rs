@@ -3,6 +3,7 @@ pub mod combine_ui_pass;
 pub mod directional_light_pass;
 pub mod fxaa_pass;
 pub mod main_camera_pass;
+pub mod pick_pass;
 pub mod point_light_pass;
 pub mod tone_mapping_pass;
 pub mod ui_pass;

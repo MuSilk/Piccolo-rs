@@ -63,8 +63,7 @@ impl Engine {
     }
 
     fn logical_tick(delta_time: f32) {
-        let ctx = RuntimeGlobalContext::global();
-        ctx.m_world_manager.borrow_mut().tick(delta_time);
+        RuntimeGlobalContext::get_world_manager().borrow_mut().tick(delta_time);
     }
 
     const S_FPS_ALPHA: f32 = 1.0 / 100.0;

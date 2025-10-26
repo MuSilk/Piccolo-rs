@@ -1,8 +1,6 @@
-
-
 use std::{cell::RefCell, os::raw::c_void, rc::Rc, slice};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase, _MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, _MAIN_CAMERA_SUBPASS_BASEPASS, _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING}, render_resource::RenderResource, render_type::RHISamplerType}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_GBUFFER_FRAG, MESH_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase, _MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, _MAIN_CAMERA_SUBPASS_BASEPASS, _MAIN_CAMERA_SUBPASS_COLOR_GRADING, _MAIN_CAMERA_SUBPASS_COMBINE_UI, _MAIN_CAMERA_SUBPASS_COUNT, _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING, _MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING, _MAIN_CAMERA_SUBPASS_FXAA, _MAIN_CAMERA_SUBPASS_TONE_MAPPING, _MAIN_CAMERA_SUBPASS_UI}, render_resource::RenderResource, render_type::RHISamplerType}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_GBUFFER_FRAG, MESH_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -135,6 +133,8 @@ impl MainCameraPass {
         rhi.push_event(command_buffer, "DeferredLighting", [1.0;4]);
         self.draw_deferred_lighting()?;
         rhi.pop_event(command_buffer);
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
@@ -396,7 +396,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
             .build();    
 
-        let mut subpasses = [vk::SubpassDescription::default(); 7];
+        let mut subpasses = [vk::SubpassDescription::default(); _MAIN_CAMERA_SUBPASS_COUNT as usize];
 
         //gbuffer subpass
         {
@@ -417,7 +417,7 @@ impl MainCameraPass {
                     .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                     .build(),
             ];
-            subpasses[0] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_BASEPASS as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&color_attachment_refs)
                 .depth_stencil_attachment(&depth_stencil_attachment_ref)
@@ -450,10 +450,28 @@ impl MainCameraPass {
                     .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                     .build(),
             ];
-            subpasses[1] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&color_attachment_refs)
                 .input_attachments(&input_attachment_refs)
+                .build();
+        }
+
+        //forward lighting subpass
+        {
+            let color_attachment_refs = [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .build(),
+            ];
+            let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            subpasses[_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING as usize] = vk::SubpassDescription::builder()
+                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+                .color_attachments(&color_attachment_refs)
+                .depth_stencil_attachment(&depth_stencil_attachment_ref)
                 .build();
         }
 
@@ -471,7 +489,7 @@ impl MainCameraPass {
                     .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
             ];
 
-            subpasses[2] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_TONE_MAPPING as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&color_attachment_ref)
                 .input_attachments(&input_attachment_ref)
@@ -501,7 +519,7 @@ impl MainCameraPass {
                 ]
             };
 
-            subpasses[3] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_COLOR_GRADING as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&color_attachment_ref)
                 .input_attachments(&input_attachment_ref)
@@ -529,7 +547,7 @@ impl MainCameraPass {
                 .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
                 .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
-            subpasses[4] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_FXAA as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&[color_attachment_ref])
                 .input_attachments(&input_attachment_ref)
@@ -542,7 +560,7 @@ impl MainCameraPass {
                 .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
                 .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
             let preserve_attachments = [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32];
-            subpasses[5] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_UI as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&[color_attachment_ref])
                 .preserve_attachments(&preserve_attachments)
@@ -562,7 +580,7 @@ impl MainCameraPass {
             let color_attachment_ref = vk::AttachmentReference::builder()
                 .attachment(_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE as u32)
                 .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-            subpasses[6] = vk::SubpassDescription::builder()
+            subpasses[_MAIN_CAMERA_SUBPASS_COMBINE_UI as usize] = vk::SubpassDescription::builder()
                 .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                 .color_attachments(&[color_attachment_ref])
                 .input_attachments(&input_attachment_ref)
@@ -572,15 +590,15 @@ impl MainCameraPass {
         let dependencies = [
             vk::SubpassDependency::builder()
                 .src_subpass(vk::SUBPASS_EXTERNAL)
-                .dst_subpass(0)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
                 .dst_stage_mask(vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(0)
-                .dst_subpass(1)
+                .src_subpass(_MAIN_CAMERA_SUBPASS_BASEPASS)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -590,8 +608,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(1)
-                .dst_subpass(2)
+                .src_subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -601,8 +619,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(2)
-                .dst_subpass(3)
+                .src_subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_TONE_MAPPING)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -612,8 +630,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(3)
-                .dst_subpass(4)
+                .src_subpass(_MAIN_CAMERA_SUBPASS_TONE_MAPPING)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_COLOR_GRADING)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -623,8 +641,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(4)
-                .dst_subpass(5)
+                .src_subpass(_MAIN_CAMERA_SUBPASS_COLOR_GRADING)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_FXAA)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -634,8 +652,19 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(5)
-                .dst_subpass(6)
+                .src_subpass(_MAIN_CAMERA_SUBPASS_FXAA)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_UI)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(_MAIN_CAMERA_SUBPASS_UI)
+                .dst_subpass(_MAIN_CAMERA_SUBPASS_COMBINE_UI)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -1341,10 +1370,9 @@ impl MainCameraPass {
             );
         }
 
-        let m_visiable_nodes = RenderPass::m_visiable_nodes().borrow();
+        let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
 
-
-        for render_mesh_node in m_visiable_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap().borrow().iter() {
+        for render_mesh_node in m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap().borrow().iter() {
             let mut object = MeshPerdrawcallStorageBufferObject::default();
             object.mesh_instances[0].model_matrix = render_mesh_node.model_matrix.clone();
 

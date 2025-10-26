@@ -169,6 +169,33 @@ impl Default for MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBuffe
 }
 
 #[derive(Clone, Default)]
+pub struct MeshInefficientPickPerframeStorageBufferObject {
+    pub proj_view_matrix: Matrix4x4,
+    pub rt_width: u32,
+    pub rt_height: u32,
+}
+
+pub struct MeshInefficientPickPerdrawcallStorageBufferObject {
+    pub model_matrix: [Matrix4x4; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
+    pub node_ids: [u32; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
+    pub enable_vertex_blending: [i32; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
+}
+
+impl Default for MeshInefficientPickPerdrawcallStorageBufferObject {
+    fn default() -> Self {
+        Self {
+            model_matrix: array::from_fn(|_| Matrix4x4::default()),
+            node_ids: array::from_fn(|_| 0),
+            enable_vertex_blending: array::from_fn(|_| 0),
+        }
+    }
+}
+
+pub struct MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject {
+    pub joint_matrices: [Matrix4x4; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT],
+}
+
+#[derive(Clone, Default)]
 pub struct VulkanMesh {
     pub enable_vertex_blending: bool,
 

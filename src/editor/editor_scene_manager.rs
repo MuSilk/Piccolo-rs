@@ -1,6 +1,8 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use runtime::function::render::render_camera::RenderCamera;
+use runtime::{core::math::vector2::Vector2, function::render::{render_camera::RenderCamera}};
+
+use crate::editor::editor_global_context::EditorGlobalContext;
 
 #[derive(Default)]
 pub struct EditorSceneManager {
@@ -18,5 +20,11 @@ impl EditorSceneManager {
 
     pub fn get_editor_camera(&self) -> &Weak<RefCell<RenderCamera>> {
         &self.m_camera
+    }
+
+    pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
+        let global = EditorGlobalContext::global();
+        let render_system = global.borrow().m_render_system.upgrade().unwrap();
+        render_system.borrow().get_guid_of_picked_mesh(picked_uv)
     }
 }

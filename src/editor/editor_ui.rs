@@ -1,7 +1,9 @@
 use std::{cell::RefCell};
 
 use imgui::{Condition, WindowFlags};
-use runtime::function::{ui::window_ui::{WindowUI, WindowUIInitInfo}};
+use runtime::{core::math::vector2::Vector2, function::{render::window_system, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
+
+use crate::editor::editor_global_context::EditorGlobalContext;
 
 
 #[derive(Default)]
@@ -27,6 +29,11 @@ impl WindowUI for EditorUI  {
 
     fn pre_render(&mut self, ui: &mut imgui::Ui) {
         self.show_editor_ui(ui);
+        let global = EditorGlobalContext::global().borrow();
+        let window_system = global.m_window_system.upgrade().unwrap();
+        let window_size = window_system.borrow().get_window_size();
+        let mut input_manager = global.m_input_manager.borrow_mut();
+        input_manager.set_engine_window_size(Vector2::new(window_size.0 as f32, window_size.1 as f32));
     }
 }
 

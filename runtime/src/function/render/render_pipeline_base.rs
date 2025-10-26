@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use imgui_winit_support::WinitPlatform;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI};
+use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, pick_pass::PickPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -23,11 +23,15 @@ pub struct RenderPipelineBase{
     pub m_fxaa_pass: FXAAPass,
     pub m_ui_pass: UIPass,
     pub m_combine_ui_pass: CombineUIPass,
+    pub m_pick_pass: PickPass,
 }
 
 impl RenderPipelineBase{
     pub fn prepare_pass_data(&mut self, render_resource : &RenderResource){
+        self.m_directional_light_pass.prepare_pass_data(render_resource);
+        self.m_point_light_pass.prepare_pass_data(render_resource);
         self.m_main_camera_pass.prepare_pass_data(render_resource);
+        self.m_pick_pass.prepare_pass_data(render_resource);
         RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().prepare_pass_data(render_resource);
     }   
 

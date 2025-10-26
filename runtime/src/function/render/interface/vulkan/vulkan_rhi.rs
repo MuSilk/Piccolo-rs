@@ -487,6 +487,18 @@ impl VulkanRHI {
         }
     }
     
+    pub fn cmd_copy_image_to_buffer(&self, command_buffer: vk::CommandBuffer, image: vk::Image, image_layout: vk::ImageLayout, buffer: vk::Buffer, regions: &[vk::BufferImageCopy]) {
+        unsafe {
+            self.m_device.cmd_copy_image_to_buffer(
+                command_buffer, 
+                image, 
+                image_layout, 
+                buffer, 
+                regions,
+            );
+        }
+    }
+
     pub fn cmd_push_constants(&self, command_buffer: vk::CommandBuffer, layout: vk::PipelineLayout, stage_flags: vk::ShaderStageFlags, offset: u32, values: &[u8]) {
         unsafe {
             self.m_device.cmd_push_constants(
@@ -546,6 +558,28 @@ impl VulkanRHI {
         }
     }
 
+    pub fn cmd_pipeline_barrier(
+        &self, 
+        command_buffer: vk::CommandBuffer,
+        src_stage_mask: vk::PipelineStageFlags,
+        dst_stage_mask: vk::PipelineStageFlags,
+        dependency_flags: vk::DependencyFlags,
+        memory_barriers: &[vk::MemoryBarrier],
+        buffer_memory_barriers: &[vk::BufferMemoryBarrier],
+        image_memory_barriers: &[vk::ImageMemoryBarrier],
+    ) {
+        unsafe {
+            self.m_device.cmd_pipeline_barrier(
+                command_buffer,
+                src_stage_mask,
+                dst_stage_mask,
+                dependency_flags,
+                memory_barriers,
+                buffer_memory_barriers,
+                image_memory_barriers,
+            );
+        }
+    }
     pub fn update_descriptor_sets(&self, writes: &[vk::WriteDescriptorSet]) -> Result<()> {
 
         unsafe {
@@ -620,6 +654,10 @@ impl VulkanRHI {
         self.m_data.m_current_swapchain_image_index
     }
 
+    pub fn get_queue_family_indices(&self) -> &QueueFamilyIndices {
+        &self.m_data.m_queue_indices
+    }
+
     pub fn begin_single_time_commands(&self) -> Result<vk::CommandBuffer> {
         let allocate_info = vk::CommandBufferAllocateInfo::builder()
             .level(vk::CommandBufferLevel::PRIMARY)
@@ -647,6 +685,20 @@ impl VulkanRHI {
             self.m_device.queue_submit(graphics_queue, &[submit_info], vk::Fence::null())?;
             self.m_device.queue_wait_idle(graphics_queue)?;
             self.m_device.free_command_buffers(self.m_data.m_command_pool, &command_buffers);
+        }
+        Ok(())
+    }
+
+    pub fn begin_command_buffer(&self, command_buffer: vk::CommandBuffer, begin_info: &vk::CommandBufferBeginInfo) -> Result<()> {
+        unsafe{
+            self.m_device.begin_command_buffer(command_buffer, begin_info)?;
+        }
+        Ok(())
+    }
+
+    pub fn end_command_buffer(&self, command_buffer: vk::CommandBuffer) -> Result<()> {
+        unsafe{
+            self.m_device.end_command_buffer(command_buffer)?;
         }
         Ok(())
     }
@@ -735,6 +787,35 @@ impl VulkanRHI {
             }
             _=>{}
         }
+
+        self.m_current_frame_index = (self.m_current_frame_index + 1) % K_MAX_FRAMES_IN_FLIGHT;
+        Ok(())
+    }
+
+    pub fn prepare_frame(&self) -> Result<()> {
+        let info = vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        unsafe{
+            self.m_device.begin_command_buffer(self.m_data.m_current_command_buffer, &info)?;
+        }
+        Ok(())
+    }
+
+    pub fn submit_frame(&mut self) -> Result<()> {
+        let command_buffer = self.m_data.m_current_command_buffer;
+        unsafe{ 
+            self.m_device.end_command_buffer(command_buffer)?;
+        } 
+        
+        let command_buffers = &[command_buffer];
+        let submit_info = vk::SubmitInfo::builder()
+            .command_buffers(command_buffers)
+            .build();
+
+        let in_flight_fence = self.m_data.m_is_frame_in_flight_fences[self.m_current_frame_index];
+        unsafe { self.m_device.reset_fences(&[in_flight_fence]) }?;
+
+        unsafe { self.m_device
+            .queue_submit(self.m_data.m_graphics_queue, &[submit_info], in_flight_fence) }?;
 
         self.m_current_frame_index = (self.m_current_frame_index + 1) % K_MAX_FRAMES_IN_FLIGHT;
         Ok(())

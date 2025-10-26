@@ -13,6 +13,7 @@ use winit::window::{WindowId};
 pub mod editor;
 use crate::editor::editor::Editor;
 use crate::editor::editor_global_context::EditorGlobalContext;
+use crate::editor::editor_input_manager::EditorInputManagerExt;
 
 fn main() -> Result<()> {
     pretty_env_logger::init();

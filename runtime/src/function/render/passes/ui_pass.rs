@@ -5,7 +5,7 @@ use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_UI}, render_type::RHISamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -235,14 +235,14 @@ impl UIPass {
         let mut global_idx_offset = 0;
 
         for draw_list in draw_data.draw_lists() {
-            for (index, cmd) in draw_list.commands().enumerate() {
+            for (_index, cmd) in draw_list.commands().enumerate() {
                 match cmd {
                     DrawCmd::Elements {
                         count,
                         cmd_params:
                             DrawCmdParams {
                                 clip_rect,
-                                texture_id: id,
+                                texture_id: _id,
                                 vtx_offset,
                                 idx_offset,
                             },
@@ -400,7 +400,7 @@ impl UIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(5)
+            .subpass(_MAIN_CAMERA_SUBPASS_UI)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

@@ -19,7 +19,7 @@ pub const _MAIN_CAMERA_PASS_ATTACHMENT_COUNT:usize = 9;
 
 pub const _MAIN_CAMERA_SUBPASS_BASEPASS: u32 = 0;
 pub const _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING: u32 = 1;
-pub const _MAIN_CAMERA_SUBPASS_FORWARD_PROCESS: u32 = 2;
+pub const _MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING: u32 = 2;
 pub const _MAIN_CAMERA_SUBPASS_TONE_MAPPING: u32 = 3;
 pub const _MAIN_CAMERA_SUBPASS_COLOR_GRADING: u32 = 4;
 pub const _MAIN_CAMERA_SUBPASS_FXAA: u32 = 5;
@@ -108,7 +108,7 @@ impl RenderPass{
     }
 
     #[allow(static_mut_refs)]
-    pub fn m_visiable_nodes() -> &'static RefCell<VisiableNodes>{
+    pub fn m_visible_nodes() -> &'static RefCell<VisiableNodes>{
         unsafe { &M_VISIABLE_NODES }
     }
 } 
