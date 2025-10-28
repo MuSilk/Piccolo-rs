@@ -1,0 +1,139 @@
+{
+  "block_type": "Dirt",
+  "m_mesh_res": {
+    "m_sub_meshs": [
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/top.json",
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/material/dirt.material.json"
+        },
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/bottom.json",
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/material/dirt.material.json"
+        },
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/left.json",
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/material/dirt.material.json"
+        },
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/right.json",
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/material/dirt.material.json"
+        },
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/front.json",
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/material/dirt.material.json"
+        },
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/back.json",
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/material/dirt.material.json"
+        }
+    ]
+  }
+}

@@ -217,7 +217,7 @@ impl RenderResource {
 
             let index_buffer_size = mesh_data.m_static_mesh_data.m_index_buffer.m_data.len();
             let index_buffer_data = &mesh_data.m_static_mesh_data.m_index_buffer.m_data;
-
+           
             let vertex_buffer_data = &mesh_data.m_static_mesh_data.m_vertex_buffer.m_data;
 
             if mesh_data.m_skeleton_binding_buffer.m_data.len() > 0{
@@ -233,7 +233,7 @@ impl RenderResource {
                     index_buffer_data,
                     vertex_buffer_data,
                     &mut now_mesh
-                ).unwrap();
+                );
             }
 
             self.m_vulkan_meshes.insert(assetid, Rc::new(now_mesh));
@@ -491,13 +491,12 @@ impl RenderResource {
         index_buffer_data: &[u8],
         vertex_buffer_data: &[MeshVertexDataDefinition],
         now_mesh: &mut VulkanMesh,
-    ) -> Result<()> {
+    ) {
         now_mesh.enable_vertex_blending = enable_vertex_blending;
         now_mesh.mesh_vertex_count = vertex_buffer_data.len() as u32;
-        Self::update_vertex_buffer(self, rhi, enable_vertex_blending, vertex_buffer_data, now_mesh)?;
+        Self::update_vertex_buffer(self, rhi, enable_vertex_blending, vertex_buffer_data, now_mesh);
         now_mesh.mesh_index_count = index_buffer_size / std::mem::size_of::<u16>() as u32;
-        Self::update_index_buffer(rhi, index_buffer_size, index_buffer_data, now_mesh)?;
-        Ok(())
+        Self::update_index_buffer(rhi, index_buffer_size, index_buffer_data, now_mesh).unwrap();
     }
 
     fn update_vertex_buffer(
@@ -506,7 +505,7 @@ impl RenderResource {
         enable_vertex_blending: bool,
         vertex_buffer_data: &[MeshVertexDataDefinition],
         now_mesh: &mut VulkanMesh,
-    ) -> Result<()> {
+    ) {
         if enable_vertex_blending{
             unimplemented!();
         }
@@ -527,10 +526,10 @@ impl RenderResource {
                 staging_buffer_size as u64, 
                 vk::BufferUsageFlags::TRANSFER_SRC, 
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            )?;
+            ).unwrap();
             let staging_buffer_data = rhi.map_memory(
                 staging_memory, 0, staging_buffer_size as u64, vk::MemoryMapFlags::empty()
-            )?;
+            ).unwrap();
 
             let mesh_vertex_positions = unsafe{
                 std::slice::from_raw_parts_mut::<VulkanMeshVertexPosition>(
@@ -581,20 +580,20 @@ impl RenderResource {
                 vertex_position_buffer_size as u64, 
                 vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
                 vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            )?;
+            ).unwrap();
             (now_mesh.mesh_vertex_varying_enable_blending_buffer, now_mesh.mesh_vertex_varying_enable_blending_buffer_allocation) = rhi.create_buffer(
                 vertex_varying_enable_blending_buffer_size as u64, 
                 vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
                 vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            )?;
+            ).unwrap();
             (now_mesh.mesh_vertex_varying_buffer, now_mesh.mesh_vertex_varying_buffer_allocation) = rhi.create_buffer(
                 vertex_varying_buffer_size as u64, 
                 vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
                 vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            )?;
-            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_position_buffer,vertex_position_buffer_offset as u64,0, vertex_position_buffer_size as u64)?;
-            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_enable_blending_buffer,vertex_varying_enable_blending_buffer_offset as u64,0, vertex_varying_enable_blending_buffer_size as u64)?;
-            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_buffer, vertex_varying_buffer_offset as u64,0, vertex_varying_buffer_size as u64)?;
+            ).unwrap();
+            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_position_buffer,vertex_position_buffer_offset as u64,0, vertex_position_buffer_size as u64).unwrap();
+            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_enable_blending_buffer,vertex_varying_enable_blending_buffer_offset as u64,0, vertex_varying_enable_blending_buffer_size as u64).unwrap();
+            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_buffer, vertex_varying_buffer_offset as u64,0, vertex_varying_buffer_size as u64).unwrap();
             rhi.destroy_buffer(staging_buffer);
             rhi.free_memory(staging_memory);
 
@@ -605,7 +604,7 @@ impl RenderResource {
                 .build();
 
             now_mesh.mesh_vertex_blending_descriptor_set =
-                rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info)?[0];
+                rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info).unwrap()[0];
 
             let mesh_vertex_joint_binding_storage_buffer_info = vk::DescriptorBufferInfo::builder()
                 .buffer(self.m_global_render_resource.borrow()._storage_buffer._global_null_descriptor_storage_buffer)
@@ -620,9 +619,8 @@ impl RenderResource {
                     .buffer_info(&[mesh_vertex_joint_binding_storage_buffer_info])
                     .build(),
             ];
-            rhi.update_descriptor_sets(&descriptor_writes)?;
+            rhi.update_descriptor_sets(&descriptor_writes).unwrap();
         }
-        Ok(())
     } 
     
     fn update_index_buffer(rhi: &VulkanRHI, index_buffer_size: u32, index_buffer_data: &[u8], now_mesh: &mut VulkanMesh) -> Result<()>{

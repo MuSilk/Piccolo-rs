@@ -28,4 +28,8 @@ impl Transform {
         let scale_matrix = self.m_scale.to_scale_matrix();
         translation_matrix * rotation_matrix * scale_matrix
     }
+
+    pub fn set_position(&mut self, position: Vector3) {
+        self.m_position = position;
+    }
 }

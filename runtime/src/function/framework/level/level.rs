@@ -4,7 +4,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use log::info;
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::{common::{level::LevelRes, object::ObjectInstanceRes}}};
+use crate::{core::math::transform, function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::{self, MeshComponent}, transform::transform_component::TransformComponent}, minecraft::{block::Block, chunk::{Chunk, CHUNK_DIM}}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::common::{level::LevelRes, object::ObjectInstanceRes}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -29,14 +29,15 @@ impl Archetype {
         self.m_columns.insert(type_id, Vec::new());
     }
     
-    fn add_entity(&mut self, object_id: GObjectID, components: HashMap<TypeId, RefCell<Box<dyn ComponentTrait>>>) -> usize {
-        assert_eq!(components.keys().collect::<HashSet<_>>(), 
-            self.m_columns.keys().sorted().collect::<HashSet<_>>(), 
+    fn add_entity(&mut self, object_id: GObjectID, components: Vec<RefCell<Box<dyn ComponentTrait>>>) -> usize {
+        assert_eq!(components.iter().map(|c| c.borrow().as_any().type_id()).collect::<HashSet<_>>(),
+            self.m_columns.keys().copied().sorted().collect::<HashSet<_>>(),
             "Components do not match archetype!"
         );
-        for (type_id, component) in components {
+        components.into_iter().for_each(|component|{
+            let type_id = component.borrow().as_any().type_id(); 
             self.m_columns.get_mut(&type_id).unwrap().push(component);
-        }
+        });
         self.m_entities.push(object_id);
         self.m_entities.len() - 1
     }
@@ -137,9 +138,9 @@ impl Level {
             })
     }
     
-    pub fn create_object(&mut self, object_id: GObjectID, components: HashMap<TypeId, RefCell<Box<dyn ComponentTrait>>>) {
+    pub fn create_object(&mut self, object_id: GObjectID, components: Vec<RefCell<Box<dyn ComponentTrait>>>) {
         let archetype_type_id: usize = {
-            let mut ids: Vec<_> = components.keys().cloned().collect();
+            let mut ids: Vec<_> = components.iter().map(|c| c.borrow().as_any().type_id()).collect();
             ids.sort();
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             ids.hash(&mut hasher);
@@ -147,8 +148,8 @@ impl Level {
         };
         if self.m_archetypes.get(&archetype_type_id).is_none() {
             let mut archetype = Archetype::default();
-            for type_id in components.keys() {
-                archetype.add_component_type_by_id(*type_id);
+            for component in &components {
+                archetype.add_component_type_by_id(component.borrow().as_any().type_id());
             }
             self.m_archetypes.insert(archetype_type_id, archetype);
         }
@@ -211,13 +212,39 @@ impl LevelExt for Rc<RefCell<Level>> {
             self.borrow_mut().m_entities.insert(object_id, gobject);
 
             let components = obj.m_instanced_components.iter().map(|component| {
-                let type_id = component.as_ref().as_any().type_id();
                 let component = RefCell::new(component.clone_box());
                 component.borrow_mut().post_load_resource(&self, object_id);
-                (type_id, component)
-            }).collect::<HashMap<_, _>>();
+                component
+            }).collect::<Vec<_>>();
             self.borrow_mut().create_object(object_id, components);
         });
+
+        let object_id = object_id_allocator::alloc();
+        let gobject = GObject::new(object_id);
+
+        let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+        let mut dirt_block: Block = assert_manager.load_asset("asset/minecraft/dirt.block.json").unwrap();
+        dirt_block.post_load_resource(&self, object_id);
+        let dirt_block = Rc::new(dirt_block);
+        
+        self.borrow_mut().m_entities.insert(object_id, gobject);
+        let mut chunk = Chunk::new_box();
+
+        // chunk.fill(0, 0, 0, CHUNK_DIM.0, CHUNK_DIM.1, CHUNK_DIM.2, &dirt_block);
+        chunk.fill(0, 0, 0, 16, 16, 16, &dirt_block);
+
+        let mut mesh_component = Box::new(MeshComponent::default());
+        chunk.update_mesh_component(&mut mesh_component);
+        mesh_component.post_load_resource(&self, object_id);
+        println!("{}", mesh_component.m_raw_meshes.len());
+        let transform_component = Box::new(TransformComponent::default());
+        let components = vec![
+            RefCell::new(chunk as Box<dyn ComponentTrait>),
+            RefCell::new(mesh_component),
+            RefCell::new(transform_component),
+        ];
+        self.borrow_mut().create_object(object_id, components);
+
         self.borrow_mut().m_level_res_url = level_res_url.to_string();
         self.borrow_mut().m_is_loaded = true;
         info!("Level load succeed!");

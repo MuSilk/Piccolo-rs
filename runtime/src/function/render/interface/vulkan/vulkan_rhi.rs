@@ -12,6 +12,7 @@ const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_L
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
 pub const K_MAX_FRAMES_IN_FLIGHT: usize = 3;
+pub const MAX_MATERIAL_COUNT: u32 = 256;
 
 pub struct VulkanRHI {
     _m_entry: Entry,
@@ -81,7 +82,6 @@ pub struct VulkanRHIData {
     m_enable_point_light_shadow: bool,
 
     m_max_vertex_blending_mesh_count: u32,
-    m_max_material_count: u32,
 
     m_debug_messenger: vk::DebugUtilsMessengerEXT,   
 }
@@ -91,7 +91,6 @@ impl VulkanRHI {
     pub fn create(info: &RHICreateInfo) -> Result<Self> {
 
         let mut data = VulkanRHIData::default();
-        data.m_max_material_count = 256;
         data.m_max_vertex_blending_mesh_count = 256;
 
         let window_system = info.window_system;
@@ -1286,7 +1285,7 @@ fn create_descriptor_pool(device: &Device, data: &mut VulkanRHIData) -> Result<(
     ].into_iter().filter(|poolsize| poolsize.descriptor_count > 0).collect::<Vec<_>>();
     let info = vk::DescriptorPoolCreateInfo::builder()
         .pool_sizes(&pool_sizes)
-        .max_sets(1 + 1 + 1 + data.m_max_material_count + data.m_max_vertex_blending_mesh_count + 1 + 1);
+        .max_sets(1 + 1 + 1 + MAX_MATERIAL_COUNT + data.m_max_vertex_blending_mesh_count + 1 + 1);
 
     unsafe {
         data.m_descriptor_pool = device.create_descriptor_pool(&info, None)?;

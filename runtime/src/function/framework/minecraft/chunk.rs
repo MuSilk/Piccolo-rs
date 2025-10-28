@@ -1,0 +1,136 @@
+use std::rc::Rc;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{core::math::vector3::Vector3, function::framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent}, minecraft::block::{Block, BlockType, FACE_DIRECTION_OFFSETS}}};
+
+pub const CHUNK_DIM: (u32, u32, u32) = (16, 16, 256);
+const CHUNK_SIZE: usize = (CHUNK_DIM.0 * CHUNK_DIM.1 * CHUNK_DIM.2) as usize;
+
+fn get_chunk_offset(x: u32, y: u32, z: u32) -> usize {
+    (z + CHUNK_DIM.2 * (y + CHUNK_DIM.1 * x)) as usize
+}
+
+#[derive(Clone)]
+pub struct ChunkData {
+    air_block: Rc<Block>,
+    pub blocks: [Rc<Block>; CHUNK_SIZE],
+}
+
+impl Default for ChunkData {
+    fn default() -> Self {
+        let air_block = Rc::new(Block {
+            ..Default::default()
+        });
+        Self { 
+            air_block: air_block.clone(),
+            blocks: {
+                std::array::from_fn(|_| air_block.clone())
+            },
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Chunk {
+    #[serde(skip)]
+    pub m_component: Component,
+    #[serde(skip)]
+    pub data: ChunkData,
+}
+
+#[typetag::serde]
+impl ComponentTrait for Chunk  {
+    fn get_component(&self) ->  &Component {
+        &self.m_component
+    }
+
+    fn get_component_mut(&mut self) ->  &mut Component {
+        &mut self.m_component
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn ComponentTrait> {
+        Box::new(self.clone())
+    }
+}
+
+impl Chunk {
+
+    pub fn new_box() -> Box<Self> {
+        let mut res = Box::<Self>::new_uninit();
+        unsafe {
+            let air_block = Rc::new(Block {
+                block_type: BlockType::Air,
+                ..Default::default()
+            });
+            std::ptr::write(&mut (*res.as_mut_ptr()).data.air_block, Rc::clone(&air_block));
+            for i in 0..CHUNK_SIZE {
+                std::ptr::write(&mut (*res.as_mut_ptr()).data.blocks[i], Rc::clone(&air_block));
+            }
+            res.assume_init()
+        }
+    }
+    pub fn update_mesh_component(&self, mesh_component: &mut MeshComponent) {
+        mesh_component.m_raw_meshes.clear();
+        for i in 0..CHUNK_DIM.0 as i32 {
+            for j in 0..CHUNK_DIM.1 as i32 {
+                for k in 0..CHUNK_DIM.2 as i32 {
+                    let offset = get_chunk_offset(i as u32, j as u32, k as u32);
+                    let block = &self.data.blocks[offset];
+                    if let BlockType::Air = block.block_type {
+                        continue;
+                    }
+                    for face in 0..6 {
+                        let neighbor = (
+                            i + FACE_DIRECTION_OFFSETS[face].0, 
+                            j + FACE_DIRECTION_OFFSETS[face].1, 
+                            k + FACE_DIRECTION_OFFSETS[face].2 
+                        );
+                        if neighbor.0 < 0 || neighbor.0 >= CHUNK_DIM.0 as i32 ||
+                           neighbor.1 < 0 || neighbor.1 >= CHUNK_DIM.1 as i32 ||
+                           neighbor.2 < 0 || neighbor.2 >= CHUNK_DIM.2 as i32 {
+
+                            let mut sub_mesh = block.m_mesh_res.m_sub_meshs[face].clone();
+                            sub_mesh.m_transform.set_position(Vector3::new(i as f32, j as f32, k as f32));
+                            mesh_component.m_mesh_res.m_sub_meshs.push(sub_mesh);
+                        }
+                        else{
+                            let neighbor_offset = get_chunk_offset(neighbor.0 as u32, neighbor.1 as u32, neighbor.2 as u32);
+                            let neighbor_block = &self.data.blocks[neighbor_offset];
+                            if let BlockType::Air = neighbor_block.block_type {
+                                let mut sub_mesh = block.m_mesh_res.m_sub_meshs[face].clone();
+                                sub_mesh.m_transform.set_position(Vector3::new(i as f32, j as f32, k as f32));
+                                mesh_component.m_mesh_res.m_sub_meshs.push(sub_mesh);
+                            } else {
+                                continue; // Neighbor is solid, skip face
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn set_block(&mut self, x: u32, y: u32, z: u32, block: &Rc<Block>) {
+        let offset = get_chunk_offset(x, y, z);
+        self.data.blocks[offset] = Rc::clone(block);
+    }
+
+    pub fn fill(&mut self, x1: u32, y1: u32, z1: u32, x2: u32, y2: u32, z2: u32, block: &Rc<Block>) {
+        for x in x1..x2 {
+            for y in y1..y2 {
+                for z in z1..z2 {
+                    self.set_block(x, y, z, block);
+                }
+            }
+        }
+    }
+}
