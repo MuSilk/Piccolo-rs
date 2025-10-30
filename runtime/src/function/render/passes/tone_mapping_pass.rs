@@ -31,7 +31,7 @@ impl ToneMappingPass {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
-        rhi.push_event(command_buffer, "Tone Map", color);
+        rhi.push_event(command_buffer, "Tone Map\0", color);
         let info = rhi.get_swapchain_info();
         rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
         rhi.cmd_set_viewport(command_buffer, 0, std::slice::from_ref(info.viewport));

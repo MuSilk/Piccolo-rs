@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 use crate::core::math::{axis_aligned::AxisAlignedBox, matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4};
 
 pub struct RenderEntity {
     pub m_instance_id: u32,
-    pub m_model_matrix: Matrix4x4,
+    pub m_model_matrix: Rc<Matrix4x4>,
     
     pub m_mesh_asset_id: usize,
     pub m_enable_vertex_blending: bool,
@@ -24,7 +26,7 @@ impl Default for RenderEntity {
     fn default() -> Self {
         Self {
             m_instance_id: 0,
-            m_model_matrix: Matrix4x4::identity(),
+            m_model_matrix: Rc::new(Matrix4x4::identity()),
             
             m_mesh_asset_id: 0,
             m_enable_vertex_blending: false,

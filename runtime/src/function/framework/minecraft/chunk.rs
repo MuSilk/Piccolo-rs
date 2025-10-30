@@ -80,6 +80,7 @@ impl Chunk {
     }
     pub fn update_mesh_component(&self, mesh_component: &mut MeshComponent) {
         mesh_component.m_raw_meshes.clear();
+        mesh_component.set_dirty_flag(true);
         for i in 0..CHUNK_DIM.0 as i32 {
             for j in 0..CHUNK_DIM.1 as i32 {
                 for k in 0..CHUNK_DIM.2 as i32 {

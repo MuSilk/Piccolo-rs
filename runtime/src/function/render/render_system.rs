@@ -1,10 +1,10 @@
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, time::{Duration, Instant}};
 
 use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::{core::math::vector2::Vector2, function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
+use crate::{core::math::vector2::Vector2, function::{global::global_context::RuntimeGlobalContext, render::{self, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -23,11 +23,11 @@ pub struct RenderSystem{
 }
 
 impl RenderSystem {
-    pub fn create(create_info: &RenderSystemCreateInfo) -> Result<Self> {
+    pub fn create(create_info: &RenderSystemCreateInfo) -> Self {
         let rhi_create_info = RHICreateInfo {
             window_system: create_info.window_system,
         };
-        let vulkan_rhi = VulkanRHI::create(&rhi_create_info)?;
+        let vulkan_rhi = VulkanRHI::create(&rhi_create_info);
         let vulkan_rhi = Rc::new(RefCell::new(vulkan_rhi));
 
         let mut imgui_context = imgui::Context::create();
@@ -44,7 +44,11 @@ impl RenderSystem {
         let swap_context = RenderSwapContext::default();
 
         let mut render_camera = RenderCamera::default();
-        render_camera.set_aspect(1024.0/768.0);
+        let camera_pose = &global_rendering_res.camera_config.pose;
+        render_camera.look_at(camera_pose.position, &camera_pose.target, &camera_pose.up);
+        render_camera.set_znear(global_rendering_res.camera_config.z_near);
+        render_camera.set_zfar(global_rendering_res.camera_config.z_far);
+        render_camera.set_aspect(global_rendering_res.camera_config.aspect.x / global_rendering_res.camera_config.aspect.y);
 
         let mut render_scene = RenderScene::default();
         render_scene.m_ambient_light = AmbientLight{
@@ -78,7 +82,7 @@ impl RenderSystem {
             imgui_context: &imgui_context,
             imgui_platform: &imgui_platform,
         };
-        let render_pipeline = RenderPipeline::create(&create_info)?;
+        let render_pipeline = RenderPipeline::create(&create_info).unwrap();
 
         render_resource.borrow_mut().m_mesh_descriptor_set_layout = 
             render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout;
@@ -86,7 +90,7 @@ impl RenderSystem {
         render_resource.borrow_mut().m_material_descriptor_set_layout = 
             render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout;
 
-        Ok(Self {
+        Self {
             m_rhi: vulkan_rhi, 
             m_imgui_context: imgui_context,
             m_imgui_platform: imgui_platform,
@@ -96,19 +100,32 @@ impl RenderSystem {
             m_render_scene: render_scene,
             m_render_resource: render_resource,
             m_render_pipeline: render_pipeline
-        })
+        }
     }
     
     pub fn tick(&mut self, delta_time: f32) -> Result<()>{
+        let curr = Instant::now();
         self.process_swap_data();
+        println!("process_swap_data: {}", curr.elapsed().as_micros());
+        let curr = Instant::now();
         self.m_rhi.borrow_mut().prepare_context();
+        println!("prepare_context: {}", curr.elapsed().as_micros());
+        let curr = Instant::now();
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
+        println!("update_per_frame_buffer: {}", curr.elapsed().as_micros());
+        let curr = Instant::now();
         self.m_render_scene.update_visible_objects(&self.m_render_resource.borrow(), &self.m_render_camera.borrow());
+        println!("update_visible_objects: {}", curr.elapsed().as_micros());
+        let curr = Instant::now();
         self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
+        println!("prepare_pass_data: {}", curr.elapsed().as_micros());
+        let curr = Instant::now();
         RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().tick(delta_time);
         let window_system = RuntimeGlobalContext::get_window_system().borrow();
         self.m_imgui_context.borrow_mut().io_mut().update_delta_time(Duration::from_secs_f32(delta_time));
         self.m_imgui_platform.borrow_mut().prepare_frame(self.m_imgui_context.borrow_mut().io_mut(), window_system.get_window()).unwrap();
+        println!("gui render: {}", curr.elapsed().as_micros());
+        let curr = Instant::now();
         match self.m_render_pipeline_type {
             RenderPipelineType::ForwardPipeline => {
                 self.m_render_pipeline.forward_render(&mut self.m_render_resource.borrow_mut())?;
@@ -118,6 +135,7 @@ impl RenderSystem {
             },
             _ => {panic!("Unknown render pipeline type")}
         }
+        println!("render_pipeline: {}", curr.elapsed().as_micros());
         Ok(())
     }
     
@@ -174,14 +192,14 @@ impl RenderSystem {
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
+        0
+        // self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
     }
 }
 
 impl RenderSystem {
     fn process_swap_data(&mut self) {
         let swap_data = self.m_swap_context.get_render_swap_data();
-
         if swap_data.borrow().m_game_object_resource_descs.is_some() {
             {
                 let mut swap_data = swap_data.borrow_mut();
@@ -194,13 +212,12 @@ impl RenderSystem {
                             m_go_id: gobject.get_id(),
                             m_part_id: part_index
                         };
-                        
                         let is_entity_in_scene = self.m_render_scene.get_instance_id_allocator().has_element(&part_id);
-                        let mut render_entity = RenderEntity::default();
+                        let mut render_entity = Box::new(RenderEntity::default());
                         render_entity.m_instance_id = 
                             self.m_render_scene.get_instance_id_allocator().alloc_guid(&part_id) as u32;
-                        render_entity.m_model_matrix = game_object_part.m_transform_desc.m_transform_matrix;
-
+                        render_entity.m_model_matrix = Rc::new(game_object_part.m_transform_desc.m_transform_matrix);
+                        
                         self.m_render_scene.add_instance_id_to_map(render_entity.m_instance_id, gobject.get_id());
 
                         let mesh_source = MeshSourceDesc {
@@ -240,15 +257,16 @@ impl RenderSystem {
                             material_source.m_normal_file = "asset/texture/default/normal.jpg".to_string();
                         }
                         let is_material_loaded = self.m_render_scene.get_material_asset_id_allocator().has_element(&material_source);
-                        
                         let mut material_data = RenderMaterialData::default();
                         if !is_material_loaded {
+                            println!("load material data");
                             material_data = RenderResourceBase::load_material_data(&material_source);
                         }
 
                         render_entity.m_material_asset_id = self.m_render_scene.get_material_asset_id_allocator().alloc_guid(&material_source);
 
                         if !is_mesh_loaded {
+                            println!("load mesh data");
                             self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
                         }
 
@@ -257,15 +275,11 @@ impl RenderSystem {
                         }
 
                         if !is_entity_in_scene {
-                            self.m_render_scene.m_render_entities.push(render_entity);
+                            self.m_render_scene.m_render_entities.insert(render_entity.m_instance_id,render_entity);
                         }
                         else{
-                            for entity in &mut self.m_render_scene.m_render_entities {
-                                if entity.m_instance_id == render_entity.m_instance_id {
-                                    *entity = render_entity;
-                                    break;
-                                }
-                            }
+                            let instance_id = render_entity.m_instance_id;
+                            *self.m_render_scene.m_render_entities.get_mut(&instance_id).unwrap() = render_entity;
                         } 
                     }
                     game_object_resource_desc.pop();

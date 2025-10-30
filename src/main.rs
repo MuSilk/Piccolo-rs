@@ -40,7 +40,7 @@ impl ApplicationHandler for WinitApp {
         let config_file_path = executable_path.parent().ok_or_else(||
             anyhow!("Failed to get parent directory")
         ).unwrap().join("PiccoloEditor.ini");
-        self.engine.borrow().start_engine(event_loop, &config_file_path).unwrap();
+        self.engine.borrow().start_engine(event_loop, &config_file_path);
         self.engine.borrow_mut().initialize();
         self.editor.initialize(&self.engine);
     }

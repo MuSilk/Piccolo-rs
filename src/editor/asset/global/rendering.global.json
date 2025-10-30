@@ -31,9 +31,9 @@
   "camera_config": {
     "pose": {
       "position": {
-        "x": -5.0,
+        "x": 0.0,
         "y": 0.0,
-        "z": 3.0
+        "z": 72.0
       },
       "target": {
         "x": -4.0,

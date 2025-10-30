@@ -29,9 +29,8 @@ impl Default for Engine {
 
 impl Engine {
 
-    pub fn start_engine(&self, event_loop: &ActiveEventLoop, config_file_path: &Path) -> Result<()> {
-        RuntimeGlobalContext::start_systems(event_loop, config_file_path)?;
-        Ok(())  
+    pub fn start_engine(&self, event_loop: &ActiveEventLoop, config_file_path: &Path) {
+        RuntimeGlobalContext::start_systems(event_loop, config_file_path);
     }
     pub fn initialize(&mut self){
         self.m_last_tick_time_point = Instant::now();
@@ -51,7 +50,9 @@ impl Engine {
     pub fn tick_one_frame(&mut self, delta_time: f32) -> Result<bool> {
         RuntimeGlobalContext::get_render_system().borrow_mut().swap_logic_render_data();
         Self::logical_tick(delta_time);
+        self.calculate_fps(delta_time);
         Self::renderer_tick(delta_time)?;
+        RuntimeGlobalContext::get_window_system().borrow().set_title(&format!("Editor - FPS: {}", self.m_fps));
         Ok(!RuntimeGlobalContext::get_window_system().borrow().should_close())
     }
 }

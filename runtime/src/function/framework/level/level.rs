@@ -4,7 +4,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use log::info;
 
-use crate::{core::math::transform, function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::{self, MeshComponent}, transform::transform_component::TransformComponent}, minecraft::{block::Block, chunk::{Chunk, CHUNK_DIM}}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::common::{level::LevelRes, object::ObjectInstanceRes}};
+use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, minecraft::{block::Block, chunk::Chunk, world::World}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::common::{level::LevelRes, object::ObjectInstanceRes}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -61,7 +61,7 @@ pub struct Level {
     m_level_res_url: String,
     m_archetypes: HashMap<usize, Archetype>,
     m_entity_location: HashMap<GObjectID, (usize, usize)>,
-    m_entities: HashMap<GObjectID, Rc<RefCell<GObject>>>,
+    pub m_entities: HashMap<GObjectID, Rc<RefCell<GObject>>>,
 }
 
 impl Level {
@@ -75,6 +75,7 @@ impl Level {
         if !self.m_is_loaded {
             return;
         }
+        self.tick_transform_components(delta_time);
         self.tick_mesh_components(delta_time);
     }
 
@@ -157,11 +158,17 @@ impl Level {
         self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
+    fn tick_transform_components(&mut self, delta_time: f32) {
+        self.query_mut::<TransformComponent>().for_each(|mut transform| {
+            transform.tick(delta_time);
+        });
+    }
+
     fn tick_mesh_components(&mut self, _delta_time: f32) {
         self.query_pair_mut::<MeshComponent, TransformComponent>()
             .for_each(|(mut mesh, mut transform)| 
         {
-            // if transform_component.is_dirty() {
+            if transform.is_dirty() {
                 let mut dirty_mesh_parts = vec![];
                 for mesh_part in &mut mesh.m_raw_meshes {
                     let object_transform_matrix = mesh_part.m_transform_desc.m_transform_matrix;
@@ -177,7 +184,7 @@ impl Level {
                 let logic_swap_data = render_swap_context.get_logic_swap_data();
                 transform.set_dirty_flag(false);
                 logic_swap_data.borrow_mut().add_dirty_game_object(&GameObjectDesc::new(mesh.m_component.m_parent_object, dirty_mesh_parts));
-            // }
+            }
         });
         
     }
@@ -221,27 +228,12 @@ impl LevelExt for Rc<RefCell<Level>> {
 
         let object_id = object_id_allocator::alloc();
         let gobject = GObject::new(object_id);
-
-        let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        let mut dirt_block: Block = assert_manager.load_asset("asset/minecraft/dirt.block.json").unwrap();
-        dirt_block.post_load_resource(&self, object_id);
-        let dirt_block = Rc::new(dirt_block);
-        
         self.borrow_mut().m_entities.insert(object_id, gobject);
-        let mut chunk = Chunk::new_box();
 
-        // chunk.fill(0, 0, 0, CHUNK_DIM.0, CHUNK_DIM.1, CHUNK_DIM.2, &dirt_block);
-        chunk.fill(0, 0, 0, 16, 16, 16, &dirt_block);
-
-        let mut mesh_component = Box::new(MeshComponent::default());
-        chunk.update_mesh_component(&mut mesh_component);
-        mesh_component.post_load_resource(&self, object_id);
-        println!("{}", mesh_component.m_raw_meshes.len());
-        let transform_component = Box::new(TransformComponent::default());
+        let mut world = World::new_box(&self);
+        world.post_load_resource(&self, object_id);
         let components = vec![
-            RefCell::new(chunk as Box<dyn ComponentTrait>),
-            RefCell::new(mesh_component),
-            RefCell::new(transform_component),
+            RefCell::new(world as Box<dyn ComponentTrait>),
         ];
         self.borrow_mut().create_object(object_id, components);
 

@@ -146,7 +146,7 @@ impl PickPass {
 
             rhi.cmd_begin_render_pass(command_buffer, &begin_info, vk::SubpassContents::INLINE);
 
-            rhi.push_event(command_buffer, "Mesh Inefficient Pick", [1.0; 4]);
+            rhi.push_event(command_buffer, "Mesh Inefficient Pick\0", [1.0; 4]);
             rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
             
             rhi.cmd_set_viewport(command_buffer, 0, &[*swapchain_info.viewport]);
@@ -174,7 +174,7 @@ impl PickPass {
 
             for render_mesh_node in m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap().borrow().iter() {
                 let mut object = MeshInefficientPickPerdrawcallStorageBufferObject::default();
-                object.model_matrix[0] = render_mesh_node.model_matrix.clone();
+                object.model_matrix[0] = *render_mesh_node.model_matrix;
                 object.node_ids[0] = render_mesh_node.node_id;
                 object.enable_vertex_blending[0] = 0;
 

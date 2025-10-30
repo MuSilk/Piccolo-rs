@@ -133,7 +133,7 @@ impl DebugDrawManager {
         let rhi = self.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
-        rhi.push_event(command_buffer, "DebugDrawManager", color);
+        rhi.push_event(command_buffer, "DebugDrawManager\0", color);
         let info = rhi.get_swapchain_info();
         rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));

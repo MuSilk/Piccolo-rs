@@ -65,7 +65,7 @@ impl UIPass {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
-        rhi.push_event(command_buffer, "UI", color);
+        rhi.push_event(command_buffer, "UI\0", color);
 
         let window_system = RuntimeGlobalContext::get_window_system().borrow();
         let platform = self.platform.upgrade().unwrap();

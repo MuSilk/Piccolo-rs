@@ -1,0 +1,3 @@
+xperf -on DiagEasy+DISK_IO+POWER
+$env:RUST_LOG="info"; $env:RUST_BACKTRACE=1; cargo run
+xperf -d output.etl

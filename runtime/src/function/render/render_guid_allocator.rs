@@ -7,6 +7,8 @@ const S_INVALID_GUID: usize = 0;
 pub struct GuidAllocator<T: Eq + Hash + Clone + Default> {
     m_elements_guid_map: HashMap<T, usize>,
     m_guid_elements_map: HashMap<usize, T>,
+    m_tail_guid: usize,
+    m_free_guid_list: Vec<usize>,
 }
 
 impl<T: Eq + Hash + Clone + Default> GuidAllocator<T>  {
@@ -18,15 +20,17 @@ impl<T: Eq + Hash + Clone + Default> GuidAllocator<T>  {
         if self.m_elements_guid_map.contains_key(element) {
             return self.m_elements_guid_map[element];
         }
-        for i in 0..self.m_guid_elements_map.len() + 1 {
-            let guid = i + 1;
-            if !self.m_guid_elements_map.contains_key(&guid) {
-                self.m_guid_elements_map.insert(guid, element.clone());
-                self.m_elements_guid_map.insert(element.clone(), guid);
-                return guid;
-            }
-        }
-        S_INVALID_GUID
+        let guid = if self.m_free_guid_list.len() > 0 {
+            let guid = self.m_free_guid_list[self.m_free_guid_list.len() - 1];
+            self.m_free_guid_list.pop();
+            guid
+        } else {
+            self.m_tail_guid += 1;
+            self.m_tail_guid
+        };
+        self.m_guid_elements_map.insert(guid, element.clone());
+        self.m_elements_guid_map.insert(element.clone(), guid);
+        return guid;
     }
 
     pub fn get_guid_related_element(&self, guid: usize) -> Option<&T> {
@@ -43,12 +47,14 @@ impl<T: Eq + Hash + Clone + Default> GuidAllocator<T>  {
 
     pub fn free_guid(&mut self, guid: usize) {
         if let Some(element) = self.m_guid_elements_map.remove(&guid) {
+            self.m_free_guid_list.push(guid);
             self.m_elements_guid_map.remove(&element);
         }
     }
 
     pub fn free_element(&mut self, element: &T) {
         if let Some(guid) = self.m_elements_guid_map.remove(element) {
+            self.m_free_guid_list.push(guid);
             self.m_guid_elements_map.remove(&guid);
         }
     }

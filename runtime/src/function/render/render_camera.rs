@@ -77,6 +77,14 @@ impl RenderCamera {
         Vector2::new(self.m_fovx, self.m_fovy)
     }
 
+    pub fn set_znear(&mut self, znear: f32) {
+        self.m_znear = znear;
+    }
+
+    pub fn set_zfar(&mut self, zfar: f32) {
+        self.m_zfar = zfar;
+    }
+
     pub fn get_view_matrix(&self) -> Matrix4x4 {
         let _guard = self.m_view_matrix_mutex.lock().unwrap();
         match self.m_current_type {

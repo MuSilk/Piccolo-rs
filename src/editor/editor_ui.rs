@@ -1,7 +1,7 @@
 use std::{cell::RefCell};
 
 use imgui::{Condition, WindowFlags};
-use runtime::{core::math::vector2::Vector2, function::{render::window_system, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
+use runtime::{core::math::vector2::Vector2, function::{ui::window_ui::{WindowUI, WindowUIInitInfo}}};
 
 use crate::editor::editor_global_context::EditorGlobalContext;
 

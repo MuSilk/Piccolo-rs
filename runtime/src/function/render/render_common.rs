@@ -1,4 +1,4 @@
-use std::{array, rc::{Weak}};
+use std::{array, rc::{Rc, Weak}};
 
 use vulkanalia::{prelude::v1_0::*};
 
@@ -8,7 +8,7 @@ pub const S_POINT_LIGHT_SHADOW_MAP_DIMENSION: u32 = 2048;
 pub const S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION: u32 = 4096;
 
 
-const S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT: usize = 64;
+pub const MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT: usize = 64;
 const S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT: usize = 1024;
 pub const S_MAX_POINT_LIGHT_COUNT: usize                = 15;
 
@@ -48,16 +48,16 @@ pub struct MeshPerframeStorageBufferObject {
 #[derive(Clone, Default)]
 pub struct VulkanMeshInstance {
     pub enable_vertex_blending: f32,
-    pub _padding_enable_vertex_blending_1: f32,
-    pub _padding_enable_vertex_blending_2: f32,
-    pub _padding_enable_vertex_blending_3: f32,
+    _padding_enable_vertex_blending_1: f32,
+    _padding_enable_vertex_blending_2: f32,
+    _padding_enable_vertex_blending_3: f32,
     pub model_matrix: Matrix4x4,
 }
 
 #[repr(C)]
 #[derive(Clone)]
 pub struct MeshPerdrawcallStorageBufferObject {
-    pub mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+    pub mesh_instances: [VulkanMeshInstance; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
 }
 
 impl Default for MeshPerdrawcallStorageBufferObject {
@@ -71,7 +71,7 @@ impl Default for MeshPerdrawcallStorageBufferObject {
 #[repr(C)]
 #[derive(Clone)]
 pub struct MeshPerdrawcallVertexBlendingStorageBufferObject {
-    pub joint_matrices: [VulkanMeshInstance; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+    pub joint_matrices: [VulkanMeshInstance; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
 }
 
 impl Default for MeshPerdrawcallVertexBlendingStorageBufferObject {
@@ -109,7 +109,7 @@ pub struct MeshPointLightShadowPerframeStorageBufferObject {
 #[repr(C)]
 #[derive(Clone)]
 pub struct MeshPointLightShadowPerdrawcallStorageBufferObject {
-    pub mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+    pub mesh_instances: [VulkanMeshInstance; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
 }
 
 impl Default for MeshPointLightShadowPerdrawcallStorageBufferObject {
@@ -143,7 +143,7 @@ pub struct MeshDirectionalLightShadowPerframeStorageBufferObject {
 #[repr(C)]
 #[derive(Clone)]
 pub struct MeshDirectionalLightShadowPerdrawcallStorageBufferObject {
-    pub mesh_instances: [VulkanMeshInstance; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
+    pub mesh_instances: [VulkanMeshInstance; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT]
 }
 
 impl Default for MeshDirectionalLightShadowPerdrawcallStorageBufferObject {
@@ -176,9 +176,9 @@ pub struct MeshInefficientPickPerframeStorageBufferObject {
 }
 
 pub struct MeshInefficientPickPerdrawcallStorageBufferObject {
-    pub model_matrix: [Matrix4x4; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
-    pub node_ids: [u32; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
-    pub enable_vertex_blending: [i32; S_MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
+    pub model_matrix: [Matrix4x4; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
+    pub node_ids: [u32; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
+    pub enable_vertex_blending: [i32; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
 }
 
 impl Default for MeshInefficientPickPerdrawcallStorageBufferObject {
@@ -251,7 +251,7 @@ pub struct VulkanPBRMaterial {
 
 #[derive(Clone, Default)]
 pub struct RenderMeshNode {
-    pub model_matrix: Matrix4x4,
+    pub model_matrix: Rc<Matrix4x4>,
     pub joint_matrices: Vec<Matrix4x4>,
     pub ref_mesh: Weak<VulkanMesh>,
     pub ref_material: Weak<VulkanPBRMaterial>,

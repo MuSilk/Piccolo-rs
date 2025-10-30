@@ -11,7 +11,7 @@ pub struct RenderScene{
     pub m_directional_light: DirectionalLight,
     pub m_point_light_list: PointLightList,
     
-    pub m_render_entities: Vec<RenderEntity>,
+    pub m_render_entities: HashMap<u32, Box<RenderEntity>>,
 
     m_main_camera_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
 
@@ -52,9 +52,12 @@ impl RenderScene {
 
 impl RenderScene {
     fn update_visible_objects_main_camera(&mut self, render_resource: &RenderResource, _camera: &RenderCamera) {
-        self.m_main_camera_visible_mesh_nodes.borrow_mut().clear();
 
-        for entity in &self.m_render_entities {
+        let mut main_camera_visible_mesh_nodes = 
+            self.m_main_camera_visible_mesh_nodes.borrow_mut();
+        main_camera_visible_mesh_nodes.clear();
+
+        for (_instance_id ,entity) in &self.m_render_entities {
             let mut temp_node = RenderMeshNode::default();
             temp_node.model_matrix = entity.m_model_matrix.clone();
             temp_node.node_id = entity.m_instance_id;
@@ -66,7 +69,7 @@ impl RenderScene {
             let material_asset = render_resource.get_entity_material(entity);
             temp_node.ref_material = Rc::downgrade(material_asset);
 
-            self.m_main_camera_visible_mesh_nodes.borrow_mut().push(temp_node);
+            main_camera_visible_mesh_nodes.push(temp_node);
         }
     }
 }   

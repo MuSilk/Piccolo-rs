@@ -408,7 +408,7 @@ impl DirectionalLightShadowPass {
             .clear_values(&clear_values);
 
         rhi.cmd_begin_render_pass(command_buffer, &begin_info, vk::SubpassContents::INLINE);
-        rhi.push_event(command_buffer, "Directional Light Shadow", [1.0;4]);
+        rhi.push_event(command_buffer, "Directional Light Shadow\0", [1.0;4]);
 
         rhi.pop_event(command_buffer);
         rhi.cmd_end_render_pass(command_buffer);

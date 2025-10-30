@@ -1,8 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
-
 use serde::{Deserialize, Serialize};
 
-use crate::{function::{framework::{component::component::{Component, ComponentTrait}, level::level::Level, object::object_id_allocator::GObjectID}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectPartDesc}, resource::res_type::{components::mesh::MeshComponentRes, data::material::MaterialRes}};
+use crate::{function::{framework::{component::component::{Component, ComponentTrait}}}, resource::res_type::{components::mesh::MeshComponentRes}};
 
 
 pub enum FaceDirection {
@@ -59,12 +57,4 @@ impl ComponentTrait for Block {
     fn clone_box(&self) -> Box<dyn ComponentTrait> {
         Box::new(self.clone())
     }
-}
-
-fn get_full_path(path: &str) -> String {
-    if path.is_empty() {
-        return String::new();
-    }
-    let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-    asset_manager.get_full_path(path).to_str().unwrap().to_string()
 }

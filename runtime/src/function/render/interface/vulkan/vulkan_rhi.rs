@@ -88,7 +88,7 @@ pub struct VulkanRHIData {
 
 impl VulkanRHI {
 
-    pub fn create(info: &RHICreateInfo) -> Result<Self> {
+    pub fn create(info: &RHICreateInfo) -> Self {
 
         let mut data = VulkanRHIData::default();
         data.m_max_vertex_blending_mesh_count = 256;
@@ -114,43 +114,43 @@ impl VulkanRHI {
         let window = info.window_system.get_window();
 
         let entry = unsafe {
-            let loader = LibloadingLoader::new(LIBRARY)?;
-            Entry::new(loader).map_err(|b| anyhow!("{}", b))?
+            let loader = LibloadingLoader::new(LIBRARY).unwrap();
+            Entry::new(loader).map_err(|b| anyhow!("{}", b)).unwrap()
         };
 
-        data.m_validation_layers = vec![VALIDATION_LAYER];
         data.m_device_extensions = DEVICE_EXTENSIONS.to_vec();
         data.m_enable_point_light_shadow = true; //todo : make it configurable
 
         if cfg!(debug_assertions) {
             data.m_enable_validation_layers = true;
             data.m_enable_debug_utils_label = true;
+            data.m_validation_layers = vec![VALIDATION_LAYER];
         }
         else{
             data.m_enable_validation_layers = false;
             data.m_enable_debug_utils_label = false;
         }
 
-        let instance = create_instance(window, &entry, &mut data)?;
-        initialize_debug_messenger(&instance, &mut data)?;
-        create_window_surface(&instance, window, &mut data)?;
-        initial_physical_device(&instance, &mut data)?;
-        let device = create_logical_device(&entry, &instance, &mut data)?;
-        create_command_pool(&device, &mut data)?;
-        create_command_buffers(&device, &mut data)?;
-        create_sync_objects(&device, &mut data)?;
-        create_descriptor_pool(&device, &mut data)?;
-        create_swapchain(window, &instance, &device, &mut data)?;
-        create_swapchain_image_views(&device, &mut data)?;
-        create_depth_objects(&instance, &device, &mut data)?;
+        let instance = create_instance(window, &entry, &mut data).unwrap();
+        initialize_debug_messenger(&instance, &mut data).unwrap();
+        create_window_surface(&instance, window, &mut data).unwrap();
+        initial_physical_device(&instance, &mut data).unwrap();
+        let device = create_logical_device(&entry, &instance, &mut data).unwrap();
+        create_command_pool(&device, &mut data).unwrap();
+        create_command_buffers(&device, &mut data).unwrap();
+        create_sync_objects(&device, &mut data).unwrap();
+        create_descriptor_pool(&device, &mut data).unwrap();
+        create_swapchain(window, &instance, &device, &mut data).unwrap();
+        create_swapchain_image_views(&device, &mut data).unwrap();
+        create_depth_objects(&instance, &device, &mut data).unwrap();
 
-        Ok(Self {
+        Self {
             _m_entry: entry,
             m_instance: instance,
             m_data: data,
             m_device: device,
             m_current_frame_index: 0,
-        })
+        }
     }
 
     pub fn destroy(&mut self) {

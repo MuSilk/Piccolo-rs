@@ -1,6 +1,5 @@
 use std::{cell::{RefCell}, path::Path, rc::Rc};
 
-use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::{function::{framework::world::world_manager::WorldManager, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
@@ -29,25 +28,24 @@ impl RuntimeGlobalContext {
     }
     
     #[allow(static_mut_refs)]
-    pub fn start_systems(event_loop: &ActiveEventLoop, config_file_path: &Path) -> Result<()> {
+    pub fn start_systems(event_loop: &ActiveEventLoop, config_file_path: &Path) {
         unsafe{
             G_RUNTIME_GLOBAL_CONTEXT = Some(RuntimeGlobalContext::default());
             let ctx = G_RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap();
             ctx.m_config_manager.borrow_mut().initialize(config_file_path);
             ctx.m_world_manager.borrow_mut().initialize();
-            ctx.m_window_system.borrow_mut().initialize(event_loop, WindowCreateInfo::default())?;
+            ctx.m_window_system.borrow_mut().initialize(event_loop, WindowCreateInfo::default()).unwrap();
 
             let render_system = RenderSystem::create(&RenderSystemCreateInfo {
                 window_system: &ctx.m_window_system.borrow(),
-            })?;
+            });
             let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
                 rhi: render_system.get_rhi(),
                 font_path: ctx.m_config_manager.borrow().get_editor_font_path(),
-            })?;
+            }).unwrap();
             G_RUNTIME_GLOBAL_CONTEXT.as_mut().unwrap().m_render_system = Some(Rc::new(RefCell::new(render_system)));
             G_RUNTIME_GLOBAL_CONTEXT.as_mut().unwrap().m_debugdraw_manager = Some(Rc::new(RefCell::new(debugdraw_manager)));
         }
-        Ok(())
     }
 
 
