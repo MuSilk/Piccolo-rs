@@ -1,8 +1,6 @@
 use std::rc::Rc;
 
-use serde::{Deserialize, Serialize};
-
-use crate::{core::math::vector3::Vector3, function::framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent}, minecraft::block::{Block, BlockType, FACE_DIRECTION_OFFSETS}}};
+use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3}, function::{framework::{component::component::{Component, ComponentTrait}, minecraft::block::{self, BLOCK_TEXTURE_DIM, Block, BlockType, FACE_DIRECTION_OFFSETS}}, render::{render_object::GameObjectDynamicMeshDesc, render_type::MeshVertexDataDefinition}}};
 
 pub const CHUNK_DIM: (u32, u32, u32) = (16, 16, 256);
 const CHUNK_SIZE: usize = (CHUNK_DIM.0 * CHUNK_DIM.1 * CHUNK_DIM.2) as usize;
@@ -31,15 +29,12 @@ impl Default for ChunkData {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Chunk {
-    #[serde(skip)]
     pub m_component: Component,
-    #[serde(skip)]
     pub data: ChunkData,
 }
 
-#[typetag::serde]
 impl ComponentTrait for Chunk  {
     fn get_component(&self) ->  &Component {
         &self.m_component
@@ -68,7 +63,7 @@ impl Chunk {
         let mut res = Box::<Self>::new_uninit();
         unsafe {
             let air_block = Rc::new(Block {
-                block_type: BlockType::Air,
+                m_block_type: BlockType::Air,
                 ..Default::default()
             });
             std::ptr::write(&mut (*res.as_mut_ptr()).data.air_block, Rc::clone(&air_block));
@@ -78,38 +73,49 @@ impl Chunk {
             res.assume_init()
         }
     }
-    pub fn update_mesh_component(&self, mesh_component: &mut MeshComponent) {
-        mesh_component.m_raw_meshes.clear();
-        mesh_component.set_dirty_flag(true);
+
+    pub fn update_mesh_data(&self) -> GameObjectDynamicMeshDesc {
+        let mut res = GameObjectDynamicMeshDesc::default();
+        res.m_is_dirty = true;
         for i in 0..CHUNK_DIM.0 as i32 {
             for j in 0..CHUNK_DIM.1 as i32 {
                 for k in 0..CHUNK_DIM.2 as i32 {
                     let offset = get_chunk_offset(i as u32, j as u32, k as u32);
                     let block = &self.data.blocks[offset];
-                    if let BlockType::Air = block.block_type {
+                    if let BlockType::Air = block.m_block_type {
                         continue;
                     }
-                    for face in 0..6 {
+                    for direction in 0..6 {
                         let neighbor = (
-                            i + FACE_DIRECTION_OFFSETS[face].0, 
-                            j + FACE_DIRECTION_OFFSETS[face].1, 
-                            k + FACE_DIRECTION_OFFSETS[face].2 
+                            i + FACE_DIRECTION_OFFSETS[direction].0, 
+                            j + FACE_DIRECTION_OFFSETS[direction].1, 
+                            k + FACE_DIRECTION_OFFSETS[direction].2 
                         );
                         if neighbor.0 < 0 || neighbor.0 >= CHUNK_DIM.0 as i32 ||
                            neighbor.1 < 0 || neighbor.1 >= CHUNK_DIM.1 as i32 ||
                            neighbor.2 < 0 || neighbor.2 >= CHUNK_DIM.2 as i32 {
 
-                            let mut sub_mesh = block.m_mesh_res.m_sub_meshs[face].clone();
-                            sub_mesh.m_transform.set_position(Vector3::new(i as f32, j as f32, k as f32));
-                            mesh_component.m_mesh_res.m_sub_meshs.push(sub_mesh);
+                            let translate = Vector3::new(i as f32, j as f32, k as f32).to_translate_matrix();
+                            let mut face = block::FACES[direction];
+                            face.iter_mut().for_each(|vertex|{
+                                transform_vertex(vertex, &translate, &(block.get_texture_location)((direction as u32).try_into().unwrap()));
+                            });
+                            let indices = block::INDICES.iter().map(|index| index + res.m_vertices.len() as u32).collect::<Vec<_>>();
+                            res.m_vertices.extend_from_slice(&face);
+                            res.m_indices.extend_from_slice(&indices);
                         }
                         else{
                             let neighbor_offset = get_chunk_offset(neighbor.0 as u32, neighbor.1 as u32, neighbor.2 as u32);
                             let neighbor_block = &self.data.blocks[neighbor_offset];
-                            if let BlockType::Air = neighbor_block.block_type {
-                                let mut sub_mesh = block.m_mesh_res.m_sub_meshs[face].clone();
-                                sub_mesh.m_transform.set_position(Vector3::new(i as f32, j as f32, k as f32));
-                                mesh_component.m_mesh_res.m_sub_meshs.push(sub_mesh);
+                            if let BlockType::Air = neighbor_block.m_block_type {
+                                let translate = Vector3::new(i as f32, j as f32, k as f32).to_translate_matrix();
+                                let mut face = block::FACES[direction];
+                                face.iter_mut().for_each(|vertex|{
+                                    transform_vertex(vertex, &translate, &(block.get_texture_location)((direction as u32).try_into().unwrap()));
+                                });
+                                let indices = block::INDICES.iter().map(|index| index + res.m_vertices.len() as u32).collect::<Vec<_>>();
+                                res.m_indices.extend_from_slice(&indices);
+                                res.m_vertices.extend_from_slice(&face);
                             } else {
                                 continue; // Neighbor is solid, skip face
                             }
@@ -118,6 +124,7 @@ impl Chunk {
                 }
             }
         }
+        res
     }
 
     pub fn set_block(&mut self, x: u32, y: u32, z: u32, block: &Rc<Block>) {
@@ -134,4 +141,15 @@ impl Chunk {
             }
         }
     }
+}
+
+fn transform_vertex(vertex: &mut MeshVertexDataDefinition, translate: &Matrix4x4, texture_offset: &(u32, u32)) {
+    let pos = Vector3::new(vertex.x, vertex.y, vertex.z);
+    let pos =  translate * pos.to_homogeneous();
+    vertex.x = pos.x;
+    vertex.y = pos.y;
+    vertex.z = pos.z;
+
+    vertex.u = (vertex.u + texture_offset.0 as f32) / BLOCK_TEXTURE_DIM.0 as f32;
+    vertex.v = (vertex.v + texture_offset.1 as f32) / BLOCK_TEXTURE_DIM.1 as f32;
 }

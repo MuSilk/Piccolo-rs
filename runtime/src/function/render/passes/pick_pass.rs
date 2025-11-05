@@ -209,9 +209,11 @@ impl PickPass {
                 let buffers = [
                     render_mesh_node.ref_mesh.upgrade().unwrap().mesh_vertex_position_buffer,
                 ];
+
+                let ref_mesh = render_mesh_node.ref_mesh.upgrade().unwrap();
                 
                 rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0]);
-                rhi.cmd_bind_index_buffer(command_buffer, render_mesh_node.ref_mesh.upgrade().unwrap().mesh_index_buffer, 0, vk::IndexType::UINT16);
+                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
                 rhi.cmd_draw_indexed(
                     command_buffer, 
                     render_mesh_node.ref_mesh.upgrade().unwrap().mesh_index_count, 

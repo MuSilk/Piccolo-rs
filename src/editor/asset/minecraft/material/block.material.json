@@ -1,5 +1,5 @@
 {
-  "base_colour_texture_file": "asset/texture/minecraft/dirt.png",
+  "base_colour_texture_file": "asset/minecraft/texture/block.png",
   "metallic_roughness_texture_file": "asset/texture/default/mr.jpg",
   "normal_texture_file": "asset/texture/default/normal.jpg",
   "occlusion_texture_file": "",

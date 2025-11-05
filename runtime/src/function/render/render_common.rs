@@ -2,7 +2,7 @@ use std::{array, rc::{Rc, Weak}};
 
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4};
+use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4}};
 
 pub const S_POINT_LIGHT_SHADOW_MAP_DIMENSION: u32 = 2048;
 pub const S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION: u32 = 4096;
@@ -216,6 +216,7 @@ pub struct VulkanMesh {
     pub mesh_vertex_varying_buffer_allocation: vk::DeviceMemory,
 
     pub mesh_index_count: u32,
+    pub mesh_index_type: vk::IndexType,
 
     pub mesh_index_buffer: vk::Buffer,
     pub mesh_index_buffer_allocation: vk::DeviceMemory,

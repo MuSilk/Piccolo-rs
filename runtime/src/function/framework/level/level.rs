@@ -4,7 +4,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use log::info;
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, minecraft::{block::Block, chunk::Chunk, world::World}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc}, resource::res_type::common::{level::LevelRes, object::ObjectInstanceRes}};
+use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, minecraft::world::World, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectDesc}}, resource::res_type::common::level::LevelRes};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -177,6 +177,7 @@ impl Level {
                     dirty_mesh_parts.push(mesh_part.clone());
 
                     mesh_part.m_transform_desc.m_transform_matrix = object_transform_matrix;
+                    // mesh_part.m_base_color_factor = 
                 }
 
                 let render_system = RuntimeGlobalContext::get_render_system().borrow();
@@ -211,27 +212,26 @@ impl LevelExt for Rc<RefCell<Level>> {
             let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
             assert_manager.load_asset::<LevelRes>(level_res_url)?
         };
-        level_res.m_objects.iter().for_each(|obj| {
-            let object_id = object_id_allocator::alloc();
-            let gobject = GObject::new(object_id);
-            gobject.borrow_mut().set_name(&obj.m_name);
-            gobject.borrow_mut().set_definition_url(&obj.m_definition);
-            self.borrow_mut().m_entities.insert(object_id, gobject);
+        // level_res.m_objects.iter().for_each(|obj| {
+        //     let object_id = object_id_allocator::alloc();
+        //     let gobject = GObject::new(object_id);
+        //     gobject.borrow_mut().set_name(&obj.m_name);
+        //     gobject.borrow_mut().set_definition_url(&obj.m_definition);
+        //     self.borrow_mut().m_entities.insert(object_id, gobject);
 
-            let components = obj.m_instanced_components.iter().map(|component| {
-                let component = RefCell::new(component.clone_box());
-                component.borrow_mut().post_load_resource(&self, object_id);
-                component
-            }).collect::<Vec<_>>();
-            self.borrow_mut().create_object(object_id, components);
-        });
+        //     let components = obj.m_instanced_components.iter().map(|component| {
+        //         let component = RefCell::new(component.clone_box());
+        //         component.borrow_mut().post_load_resource(&self, object_id);
+        //         component
+        //     }).collect::<Vec<_>>();
+        //     self.borrow_mut().create_object(object_id, components);
+        // });
 
         let object_id = object_id_allocator::alloc();
         let gobject = GObject::new(object_id);
         self.borrow_mut().m_entities.insert(object_id, gobject);
 
-        let mut world = World::new_box(&self);
-        world.post_load_resource(&self, object_id);
+        let world = World::new_box(&self);
         let components = vec![
             RefCell::new(world as Box<dyn ComponentTrait>),
         ];
@@ -245,28 +245,28 @@ impl LevelExt for Rc<RefCell<Level>> {
 
     fn save(&self) -> Result<()> {
         info!("Saving level: {}", self.borrow().m_level_res_url);
-        let mut output_level_res = LevelRes::default();
+        // let mut output_level_res = LevelRes::default();
 
-        self.borrow().m_entities.iter().for_each(|(object_id, entity)|{
-            let mut output_object = ObjectInstanceRes::default();
-            output_object.m_name = entity.borrow().get_name().to_string();
-            output_object.m_definition = entity.borrow().get_definition_url().to_string();
+        // self.borrow().m_entities.iter().for_each(|(object_id, entity)|{
+        //     let mut output_object = ObjectInstanceRes::default();
+        //     output_object.m_name = entity.borrow().get_name().to_string();
+        //     output_object.m_definition = entity.borrow().get_definition_url().to_string();
 
-            let borrowed_level = self.borrow();
-            let index = borrowed_level.m_entity_location.get(object_id).unwrap();
-            let components = 
-                borrowed_level.m_archetypes.get(&index.0).unwrap().get_entity(index.1)
-                .map(|component| {
-                    component.borrow().clone_box()
-                })
-                .collect::<Vec<_>>();
-            output_object.m_instanced_components = components;
+        //     let borrowed_level = self.borrow();
+        //     let index = borrowed_level.m_entity_location.get(object_id).unwrap();
+        //     let components = 
+        //         borrowed_level.m_archetypes.get(&index.0).unwrap().get_entity(index.1)
+        //         .map(|component| {
+        //             component.borrow().clone_box()
+        //         })
+        //         .collect::<Vec<_>>();
+        //     output_object.m_instanced_components = components;
 
-            output_level_res.m_objects.push(output_object);
-        });
+        //     output_level_res.m_objects.push(output_object);
+        // });
 
-        let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        assert_manager.save_asset(&self.borrow().m_level_res_url, output_level_res)?;
+        // let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
+        // assert_manager.save_asset(&self.borrow().m_level_res_url, output_level_res)?;
 
         info!("Level save succeed!");
         Ok(())

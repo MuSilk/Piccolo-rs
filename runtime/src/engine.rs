@@ -59,6 +59,10 @@ impl Engine {
 
 impl Engine {
     fn renderer_tick(delta_time: f32) -> Result<()>{
+        let window_size = RuntimeGlobalContext::get_window_system().borrow().get_window_size();
+        RuntimeGlobalContext::get_render_system().borrow_mut().update_engine_content_viewport(
+            0.0, 0.0, window_size.0 as f32,  window_size.1 as f32
+        );
         RuntimeGlobalContext::get_render_system().borrow_mut().tick(delta_time)?;
         Ok(())
     }

@@ -1235,7 +1235,7 @@ pub struct TextureData {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable, serde::Serialize, serde::Deserialize)]
 pub struct MeshVertexDataDefinition {
     pub x: f32, pub y: f32, pub z: f32,
     pub nx: f32,pub ny: f32, pub nz: f32,
@@ -1261,6 +1261,7 @@ pub struct MaterialSourceDesc{
 pub struct StaticMeshData{
     pub m_vertex_buffer: BufferData,
     pub m_index_buffer: BufferData,
+    pub m_index_type: vk::IndexType,
 }
 
 #[derive(Default)]

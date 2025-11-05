@@ -1,0 +1,27 @@
+{
+  "m_mesh_res": {
+    "m_sub_meshs": [
+        {
+            "m_transform": {
+                "m_position": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+                },
+                "m_scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+                },
+                "m_rotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+                }
+            },
+            "m_material": "asset/minecraft/material/block.material.json"
+        }
+    ]
+  }
+}

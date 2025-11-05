@@ -1420,11 +1420,11 @@ impl MainCameraPass {
                 ];
             
                 rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0, 0, 0]);
-                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, vk::IndexType::UINT16);
+                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
 
                 let instance_count = mesh_nodes.len();
                 let max_drawcall_instance =  MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
-                let drawcall_count = instance_count / max_drawcall_instance;
+                let drawcall_count = instance_count.div_ceil(max_drawcall_instance);
 
                 for index in 0..drawcall_count { 
                     let current_count = max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
@@ -1461,7 +1461,6 @@ impl MainCameraPass {
                         ],
                         &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
                     );
-
                     rhi.cmd_draw_indexed(command_buffer, ref_mesh.mesh_index_count, current_count as u32, 0, 0, 0);
                 }
             }

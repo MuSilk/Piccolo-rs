@@ -21,7 +21,7 @@ void main()
     // Gamma correct
     // TODO: select the VK_FORMAT_B8G8R8A8_SRGB surface format,
     // there is no need to do gamma correction in the fragment shader
-    color = vec3(pow(color.x, 1.0 / 2.2), pow(color.y, 1.0 / 2.2), pow(color.z, 1.0 / 2.2));
+    // color = vec3(pow(color.x, 1.0 / 2.2), pow(color.y, 1.0 / 2.2), pow(color.z, 1.0 / 2.2));
 
     out_color = vec4(color, 1.0f);
 }

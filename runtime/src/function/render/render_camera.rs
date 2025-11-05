@@ -95,7 +95,7 @@ impl RenderCamera {
         }
     }
 
-    pub fn get_pers_proj_matrix(&self) -> Matrix4x4 { 
+    pub fn get_perspective_matrix(&self) -> Matrix4x4 { 
         let fix_mat = Matrix4x4::from_columns(
             [1.0, 0.0, 0.0, 0.0],
             [0.0, -1.0, 0.0, 0.0],

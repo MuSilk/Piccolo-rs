@@ -75,7 +75,9 @@ impl EditorUI {
         context_offset[0] += 0.3 * context_size[0];
         context_size[0] -= 0.3 * context_size[0];
 
-        main_window.build(||{});
+        main_window.build(||{
+            self.show_editor_game_window(ui);
+        });
         components_details_window.build(||{
             self.show_editor_detail_window(ui);
         });
@@ -132,7 +134,7 @@ impl EditorUI {
 
     }
 
-    fn show_editor_detail_window(&mut self, ui: &imgui::Ui) { 
-
+    fn show_editor_detail_window(&mut self, ui: &imgui::Ui) {
+        
     }
 }

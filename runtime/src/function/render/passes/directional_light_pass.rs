@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC}, render_common::{MeshDirectionalLightShadowPerdrawcallStorageBufferObject, MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshDirectionalLightShadowPerframeStorageBufferObject, S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION}, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::RenderResource}, shader::generated::shader::{MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshDirectionalLightShadowPerdrawcallStorageBufferObject, MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshDirectionalLightShadowPerframeStorageBufferObject, S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::RenderResource}, shader::generated::shader::{MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -409,6 +409,112 @@ impl DirectionalLightShadowPass {
 
         rhi.cmd_begin_render_pass(command_buffer, &begin_info, vk::SubpassContents::INLINE);
         rhi.push_event(command_buffer, "Directional Light Shadow\0", [1.0;4]);
+
+        let pipeline = &self.m_render_pass.m_render_pipeline[0];
+        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
+
+        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+        );
+
+        render_resource.borrow_mut()
+            ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+                perframe_dynamic_offset + std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u32;
+        unsafe{
+            std::ptr::copy_nonoverlapping(
+                &self.m_mesh_directional_light_shadow_perframe_storage_buffer_object as *const _ as *const c_void,
+                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
+                std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>()
+            );
+        }
+
+        struct MeshNode<'a> {
+            model_matrix: &'a Matrix4x4,
+        }
+
+        let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
+        let visiable_nodes = m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap();
+        let visiable_nodes = visiable_nodes.borrow();
+        
+        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_,Vec<_>>> = HashMap::new();
+
+        for node in visiable_nodes.iter() {
+            let mesh_instanced = 
+                main_camera_mesh_drawcall_batch.entry(node.ref_material.as_ptr()).or_default();
+            let mesh_nodes = mesh_instanced.entry(node.ref_mesh.as_ptr()).or_default();
+            
+            mesh_nodes.push(MeshNode {
+                model_matrix : &node.model_matrix
+            });
+        }
+
+        for (_material, mesh_instanced) in &main_camera_mesh_drawcall_batch {
+
+            for (mesh, mesh_nodes) in mesh_instanced {
+                let ref_mesh = unsafe{&**mesh};
+
+                rhi.cmd_bind_descriptor_sets(
+                    command_buffer, 
+                    vk::PipelineBindPoint::GRAPHICS, 
+                    self.m_render_pass.m_render_pipeline[0].layout,
+                    1, 
+                    &[ref_mesh.mesh_vertex_blending_descriptor_set], 
+                    &[],
+                );
+
+                let buffers = [
+                    ref_mesh.mesh_vertex_position_buffer,
+                ];
+            
+                rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0, 0, 0]);
+                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
+
+                let instance_count = mesh_nodes.len();
+                let max_drawcall_instance =  MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
+                let drawcall_count = instance_count.div_ceil(max_drawcall_instance);
+
+                for index in 0..drawcall_count { 
+                    let current_count = max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
+
+                    let mut object = MeshDirectionalLightShadowPerdrawcallStorageBufferObject::default();
+
+                    for i in 0..current_count { 
+                        object.mesh_instances[i].model_matrix = mesh_nodes[index * max_drawcall_instance + i].model_matrix.clone();
+                    }
+
+                    let perdrawcall_dynamic_offset = round_up(
+                        render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
+                        render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+                    );
+                    render_resource.borrow_mut()
+                        ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+                            perdrawcall_dynamic_offset + std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>() as u32;
+
+                    unsafe{
+                        std::ptr::copy_nonoverlapping(
+                            &object as *const _ as *const c_void,
+                            render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
+                            std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>()
+                        );
+                    }
+
+                    rhi.cmd_bind_descriptor_sets(
+                        command_buffer, 
+                        vk::PipelineBindPoint::GRAPHICS, 
+                        self.m_render_pass.m_render_pipeline[0].layout,
+                        0,
+                        &[
+                            self.m_render_pass.m_descriptor_infos[0].descriptor_set,
+                        ],
+                        &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
+                    );
+                    rhi.cmd_draw_indexed(command_buffer, ref_mesh.mesh_index_count, current_count as u32, 0, 0, 0);
+                }
+            }
+        }
 
         rhi.pop_event(command_buffer);
         rhi.cmd_end_render_pass(command_buffer);

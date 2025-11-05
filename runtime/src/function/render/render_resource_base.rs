@@ -5,7 +5,7 @@ use log::error;
 use itertools::Itertools;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}, resource::{res_type::data::mesh_data::MeshData}};
+use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::{global::global_context::RuntimeGlobalContext, render::{render_object::GameObjectDynamicMeshDesc, render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}}}, resource::res_type::data::mesh_data::MeshData};
 
 
 #[derive(Clone, Default)]
@@ -64,10 +64,11 @@ impl RenderResourceBase {
         Some(texture)
     }
 
-    pub fn load_mesh_data(&mut self, source: &MeshSourceDesc, bounding_box: &mut AxisAlignedBox) -> RenderMeshData {
-        let mut ret = RenderMeshData::default();
+    pub fn load_mesh_data(&mut self, source: &MeshSourceDesc) -> (RenderMeshData, AxisAlignedBox) {
+        let mut ret: RenderMeshData = RenderMeshData::default();
+        let mut bounding_box = AxisAlignedBox::default();
         if PathBuf::from(&source.m_mesh_file).extension().unwrap() == "obj" {
-            ret.m_static_mesh_data = Self::load_static_mesh(&source.m_mesh_file, bounding_box);
+            (ret.m_static_mesh_data, bounding_box) = Self::load_static_mesh(&source.m_mesh_file);
         }
         else if PathBuf::from(&source.m_mesh_file).extension().unwrap() == "json" {
             let mesh_data: MeshData = {
@@ -84,6 +85,7 @@ impl RenderResourceBase {
                     u: vertex.u, v: vertex.v,
                 })
                 .collect_vec();
+            vertices.iter().for_each(|vertice|bounding_box.merge(&Vector3::new(vertice.x, vertice.y, vertice.z)));
 
             ret.m_static_mesh_data.m_vertex_buffer.m_data = bytemuck::pod_collect_to_vec(&vertices);
 
@@ -93,6 +95,7 @@ impl RenderResourceBase {
                 .collect_vec();
 
             ret.m_static_mesh_data.m_index_buffer.m_data = bytemuck::pod_collect_to_vec(&indices);
+            ret.m_static_mesh_data.m_index_type = vk::IndexType::UINT16;
     
 
             //todo: skeleton bindings
@@ -103,7 +106,22 @@ impl RenderResourceBase {
 
         self.m_bounding_box_cache_map.insert(source.clone(), bounding_box.clone());
 
-        ret
+        (ret, bounding_box)
+    }
+
+    pub fn load_mesh_data_from_raw(&mut self, source: &MeshSourceDesc, data: &GameObjectDynamicMeshDesc) -> (RenderMeshData, AxisAlignedBox) {
+        let mut ret: RenderMeshData = RenderMeshData::default();
+        let mut bounding_box = AxisAlignedBox::default();
+
+        data.m_vertices.iter().for_each(|vertice| bounding_box.merge(&Vector3::new(vertice.x, vertice.y, vertice.z)));
+        ret.m_static_mesh_data.m_vertex_buffer.m_data = bytemuck::pod_collect_to_vec(&data.m_vertices);
+        ret.m_static_mesh_data.m_index_buffer.m_data = bytemuck::pod_collect_to_vec(&data.m_indices);
+        ret.m_static_mesh_data.m_index_type = vk::IndexType::UINT32;
+
+        //todo: skeleton bindings
+        self.m_bounding_box_cache_map.insert( source.clone(), bounding_box.clone());
+
+        (ret, bounding_box)
     }
 
     pub fn load_material_data(source: &MaterialSourceDesc) -> RenderMaterialData {
@@ -120,7 +138,8 @@ impl RenderResourceBase {
         self.m_bounding_box_cache_map.get(mesh_source)
     }
 
-    fn load_static_mesh(filename: &str, bounding_box: &mut AxisAlignedBox) -> StaticMeshData {
+    fn load_static_mesh(filename: &str) -> (StaticMeshData, AxisAlignedBox) {
+        let mut bounding_box = AxisAlignedBox::default();
         let mut reader = BufReader::new(File::open(filename).unwrap_or_else(|_|{
             panic!("Failed to open mesh file: {}", filename);
         }));
@@ -223,7 +242,8 @@ impl RenderResourceBase {
         })
         .copied()
         .collect();
-
+        
+        mesh_data.m_index_type = vk::IndexType::UINT16;
         mesh_data.m_index_buffer.m_data = mesh_indices.iter().flat_map(|i|{
             let ptr = i as *const u16 as *const u8;
             unsafe { std::slice::from_raw_parts(ptr, std::mem::size_of::<u16>()) }
@@ -231,6 +251,6 @@ impl RenderResourceBase {
         .copied()
         .collect();
 
-        mesh_data
+        (mesh_data, bounding_box)
     }
 }

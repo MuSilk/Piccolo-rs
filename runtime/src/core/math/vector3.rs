@@ -30,6 +30,10 @@ impl Vector3 {
         Vector3::new(0.0, 0.0, 0.0)
     }
 
+    pub const fn from_homogeneous(v: &Vector4) -> Vector3 {
+        Vector3::new(v.x / v.w, v.y / v.w, v.z / v.w)
+    }
+
     pub const fn to_translate_matrix(&self) -> Matrix4x4 {
         Matrix4x4::from_columns(
             [1.0, 0.0, 0.0, 0.0],
@@ -170,6 +174,13 @@ impl Mul<f32> for Vector3 {
     type Output = Self;
     fn mul(self, rhs: f32) -> Self::Output {
         Vector3 { x: self.x * rhs, y: self.y * rhs, z: self.z * rhs }
+    }
+}
+
+impl Mul<Vector3> for Vector3 {
+    type Output = Self;
+    fn mul(self, rhs: Vector3) -> Self::Output {
+        Vector3 { x: self.x * rhs.x, y: self.y * rhs.y, z: self.z * rhs.z }
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, f32::consts::PI, ops::Index, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
 use itertools::Itertools;
 use vulkanalia::{prelude::v1_0::*};
@@ -155,7 +155,7 @@ impl RenderResource {
     
     pub fn update_per_frame_buffer(&mut self, render_scene: &RenderScene, camera: &RenderCamera){
         let view_matrix = camera.get_view_matrix();
-        let proj_matrix = camera.get_pers_proj_matrix();
+        let proj_matrix = camera.get_perspective_matrix();
         let camera_position = camera.position();
         let proj_view_matrix = proj_matrix * view_matrix;
 
@@ -187,12 +187,12 @@ impl RenderResource {
     }
 
     pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData, material_data: &RenderMaterialData) {
-        self.get_or_create_vulkan_mesh(rhi, render_entity, mesh_data);
+        self.update_vulkan_mesh(rhi, render_entity, mesh_data);
         self.get_or_create_vulkan_material(rhi, render_entity, material_data);
     }
 
     pub fn upload_game_object_render_resource_mesh(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData){
-        self.get_or_create_vulkan_mesh(rhi, render_entity, mesh_data);
+        self.update_vulkan_mesh(rhi, render_entity, mesh_data);
     }
 
     pub fn upload_game_object_render_resource_material(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, material_data: &RenderMaterialData){
@@ -209,37 +209,42 @@ impl RenderResource {
 }
 
 impl RenderResource {
-    fn get_or_create_vulkan_mesh(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, mesh_data: &RenderMeshData) -> &VulkanMesh {
+    fn update_vulkan_mesh(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, mesh_data: &RenderMeshData) {
         let assetid = entity.m_mesh_asset_id;
 
-        if let None = self.m_vulkan_meshes.get(&assetid) {
-            let mut now_mesh = VulkanMesh::default();
+        if let Some(mesh) = self.m_vulkan_meshes.get(&assetid) {
+            //todo: destroy the old mesh
+        }
+        let mut now_mesh = VulkanMesh::default();
 
-            let index_buffer_size = mesh_data.m_static_mesh_data.m_index_buffer.m_data.len();
-            let index_buffer_data = &mesh_data.m_static_mesh_data.m_index_buffer.m_data;
-           
-            let vertex_buffer_data = &mesh_data.m_static_mesh_data.m_vertex_buffer.m_data;
+        let index_buffer_data = &mesh_data.m_static_mesh_data.m_index_buffer.m_data;
+        
+        let vertex_buffer_data = &mesh_data.m_static_mesh_data.m_vertex_buffer.m_data;
 
-            if mesh_data.m_skeleton_binding_buffer.m_data.len() > 0{
-                unimplemented!();
+        if mesh_data.m_skeleton_binding_buffer.m_data.len() > 0{
+            unimplemented!();
+        }
+        else{
+            let vertex_buffer_data: &[MeshVertexDataDefinition] = bytemuck::cast_slice(&vertex_buffer_data);
+            match mesh_data.m_static_mesh_data.m_index_type {
+                vk::IndexType::UINT16 => {
+                    Self::update_mesh_data::<u16>(
+                        self, rhi, false,
+                        index_buffer_data, vertex_buffer_data, &mut now_mesh
+                    );
+                },
+                vk::IndexType::UINT32 => {
+                    Self::update_mesh_data::<u32>(
+                        self, rhi, false,
+                        index_buffer_data, vertex_buffer_data, &mut now_mesh
+                    );
+                },
+                _ => panic!("unsupported index type"),
             }
-            else{
-                let vertex_buffer_data: &[MeshVertexDataDefinition] = bytemuck::cast_slice(&vertex_buffer_data);
-                Self::update_mesh_data(
-                    self,
-                    rhi,
-                    false,
-                    index_buffer_size as u32,
-                    index_buffer_data,
-                    vertex_buffer_data,
-                    &mut now_mesh
-                );
-            }
-
-            self.m_vulkan_meshes.insert(assetid, Rc::new(now_mesh));
+            now_mesh.mesh_index_type = mesh_data.m_static_mesh_data.m_index_type;
         }
 
-        self.m_vulkan_meshes.get(&assetid).unwrap()
+        self.m_vulkan_meshes.insert(assetid, Rc::new(now_mesh));
     }
 
     fn get_or_create_vulkan_material(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, material_data: &RenderMaterialData) -> &VulkanPBRMaterial {
@@ -483,11 +488,10 @@ impl RenderResource {
         self.m_vulkan_pbr_materials.get(&assetid).unwrap()
     }
     
-    fn update_mesh_data(
+    fn update_mesh_data<IndexType>(
         &self,
         rhi: &VulkanRHI,
         enable_vertex_blending: bool,
-        index_buffer_size: u32,
         index_buffer_data: &[u8],
         vertex_buffer_data: &[MeshVertexDataDefinition],
         now_mesh: &mut VulkanMesh,
@@ -495,8 +499,8 @@ impl RenderResource {
         now_mesh.enable_vertex_blending = enable_vertex_blending;
         now_mesh.mesh_vertex_count = vertex_buffer_data.len() as u32;
         Self::update_vertex_buffer(self, rhi, enable_vertex_blending, vertex_buffer_data, now_mesh);
-        now_mesh.mesh_index_count = index_buffer_size / std::mem::size_of::<u16>() as u32;
-        Self::update_index_buffer(rhi, index_buffer_size, index_buffer_data, now_mesh).unwrap();
+        now_mesh.mesh_index_count = (index_buffer_data.len() / std::mem::size_of::<IndexType>()) as u32;
+        Self::update_index_buffer(rhi, index_buffer_data, now_mesh).unwrap();
     }
 
     fn update_vertex_buffer(
@@ -623,8 +627,8 @@ impl RenderResource {
         }
     } 
     
-    fn update_index_buffer(rhi: &VulkanRHI, index_buffer_size: u32, index_buffer_data: &[u8], now_mesh: &mut VulkanMesh) -> Result<()>{
-        let buffer_size = index_buffer_size as u64;
+    fn update_index_buffer(rhi: &VulkanRHI, index_buffer_data: &[u8], now_mesh: &mut VulkanMesh) -> Result<()>{
+        let buffer_size = index_buffer_data.len() as u64;
         let (staging_buffer, staging_memory) = rhi.create_buffer(
             buffer_size, 
             vk::BufferUsageFlags::TRANSFER_SRC, 
@@ -830,4 +834,13 @@ impl RenderResource {
             specular_cubemap_miplevels
         ).unwrap();
     }
+}
+
+impl std::ops::Deref for RenderResource { 
+    type Target = RenderResourceBase;
+    fn deref(&self) -> &Self::Target { &self.m_base }
+}
+
+impl std::ops::DerefMut for RenderResource {
+    fn deref_mut(&mut self) -> &mut Self::Target {&mut self.m_base   }
 }

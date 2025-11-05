@@ -1,11 +1,40 @@
+use std::{cell::RefCell, rc::Rc};
+
 use serde::{Deserialize, Serialize};
 
-use crate::{core::math::matrix4::Matrix4x4, function::framework::object::object_id_allocator::{GObjectID, K_INVALID_GOBJECT_ID}};
-
+use crate::{core::math::{matrix4::Matrix4x4, vector4::Vector4}, function::{framework::object::object_id_allocator::{GObjectID, K_INVALID_GOBJECT_ID}, render::render_type::MeshVertexDataDefinition}};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct GameObjectMeshDesc {
+pub struct GameObjectStaticMeshDesc {
     pub m_mesh_file: String,
+}
+
+impl GameObjectStaticMeshDesc {
+    pub fn new(mesh_file: String) -> Self {
+        Self {
+            m_mesh_file: mesh_file,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct GameObjectDynamicMeshDesc {
+    pub m_mesh_file: String,
+    pub m_vertices: Vec<MeshVertexDataDefinition>,
+    pub m_indices: Vec<u32>,
+    pub m_is_dirty: bool,
+}
+
+#[derive(Clone)]
+pub enum GameObjectMeshDesc {
+    Mesh(GameObjectStaticMeshDesc),
+    DynamicMesh(Rc<RefCell<GameObjectDynamicMeshDesc>>),
+}
+
+impl Default for GameObjectMeshDesc {
+    fn default() -> Self {
+        Self::Mesh(GameObjectStaticMeshDesc::default())
+    }
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -38,7 +67,7 @@ pub struct GameObjectTransformDesc {
     pub m_transform_matrix: Matrix4x4,
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct GameObjectPartDesc {
     pub m_mesh_desc: GameObjectMeshDesc,
     pub m_material_desc: GameObjectMaterialDesc,
@@ -46,6 +75,22 @@ pub struct GameObjectPartDesc {
     pub m_with_animation: bool,
     pub m_skeleton_binding_desc: SkeletonBindingDesc,
     pub m_skeleton_animation_result: SkeletonAnimationResult,
+
+    pub m_base_color_factor: Vector4,
+}
+
+impl Default for GameObjectPartDesc {
+    fn default() -> Self {
+        Self {
+            m_mesh_desc: GameObjectMeshDesc::default(),
+            m_material_desc: GameObjectMaterialDesc::default(),
+            m_transform_desc: GameObjectTransformDesc::default(),
+            m_with_animation: false,
+            m_skeleton_binding_desc: SkeletonBindingDesc::default(),
+            m_skeleton_animation_result: SkeletonAnimationResult::default(),
+            m_base_color_factor: Vector4::new(1.0, 1.0, 1.0, 1.0),
+        }
+    }
 }
 
 impl GameObjectPartDesc {

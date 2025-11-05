@@ -4,7 +4,7 @@ use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::{core::math::vector2::Vector2, function::{global::global_context::RuntimeGlobalContext, render::{self, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::GameObjectPartId, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderMaterialData, RenderMeshData, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
+use crate::{core::math::vector2::Vector2, function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera, RenderCameraType}, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -114,7 +114,7 @@ impl RenderSystem {
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
         println!("update_per_frame_buffer: {}", curr.elapsed().as_micros());
         let curr = Instant::now();
-        self.m_render_scene.update_visible_objects(&self.m_render_resource.borrow(), &self.m_render_camera.borrow());
+        self.m_render_scene.update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
         println!("update_visible_objects: {}", curr.elapsed().as_micros());
         let curr = Instant::now();
         self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
@@ -165,7 +165,7 @@ impl RenderSystem {
         &self.m_render_camera
     }
 
-    pub fn update_engine_content_viewport(&mut self, offset_x: f32, offset_y: f32, width: f32, height: f32){
+    pub fn update_engine_content_viewport(&self, offset_x: f32, offset_y: f32, width: f32, height: f32){
         let mut rhi = self.m_rhi.as_ref().borrow_mut();
         rhi.m_data.m_viewport.x = offset_x;
         rhi.m_data.m_viewport.y = offset_y;
@@ -179,7 +179,7 @@ impl RenderSystem {
         &self.m_rhi
     }
 
-    pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
+    pub fn initialize_ui_render_backend(&self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
         self.m_render_pipeline.m_base.borrow_mut().initialize_ui_render_backend(window_ui);
     }
 
@@ -217,23 +217,45 @@ impl RenderSystem {
                         render_entity.m_instance_id = 
                             self.m_render_scene.get_instance_id_allocator().alloc_guid(&part_id) as u32;
                         render_entity.m_model_matrix = Rc::new(game_object_part.m_transform_desc.m_transform_matrix);
+                        render_entity.m_base_color_factor = game_object_part.m_base_color_factor;
                         
                         self.m_render_scene.add_instance_id_to_map(render_entity.m_instance_id, gobject.get_id());
 
-                        let mesh_source = MeshSourceDesc {
-                            m_mesh_file: game_object_part.m_mesh_desc.m_mesh_file.clone(),
+                        match game_object_part.m_mesh_desc {
+                            GameObjectMeshDesc::Mesh(ref mesh_desc) => {
+                                let mesh_source = MeshSourceDesc {
+                                    m_mesh_file: mesh_desc.m_mesh_file.clone(),
+                                };
+                                let is_mesh_loaded = self.m_render_scene.get_mesh_asset_id_allocator().has_element(&mesh_source);
+                                render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                                if !is_mesh_loaded {
+                                    println!("load mesh data");
+                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(&mesh_source);
+                                    render_entity.m_bounding_box = bounding_box;
+                                    self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                                }
+                                else{
+                                    render_entity.m_bounding_box = self.m_render_resource.borrow_mut().get_cached_bounding_box(&mesh_source).unwrap().clone();
+                                }
+                            },
+                            GameObjectMeshDesc::DynamicMesh(ref mesh_desc) => {
+                                let mesh_source = MeshSourceDesc {
+                                    m_mesh_file: mesh_desc.borrow().m_mesh_file.clone(),
+                                };
+                                render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                                if mesh_desc.borrow().m_is_dirty {
+                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source,&mesh_desc.borrow());
+                                    render_entity.m_bounding_box = bounding_box;
+                                    self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                                    mesh_desc.borrow_mut().m_is_dirty = false;
+                                    println!("load or update dynamic mesh data");
+                                }
+                                else{
+                                    render_entity.m_bounding_box = self.m_render_resource.borrow_mut().get_cached_bounding_box(&mesh_source).unwrap().clone();
+                                }
+                            }
                         };
-                        let is_mesh_loaded = self.m_render_scene.get_mesh_asset_id_allocator().has_element(&mesh_source);
 
-                        let mut mesh_data = RenderMeshData::default();
-                        if !is_mesh_loaded {
-                            mesh_data = self.m_render_resource.borrow_mut().m_base.load_mesh_data(&mesh_source, &mut render_entity.m_bounding_box);
-                        }
-                        else{
-                            render_entity.m_bounding_box = self.m_render_resource.borrow_mut().m_base.get_cached_bounding_box(&mesh_source).unwrap().clone();
-                        }
-
-                        render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
                         render_entity.m_enable_vertex_blending = 
                             game_object_part.m_skeleton_animation_result.m_transforms.len() > 1;
                         render_entity.m_joint_matrices.resize(game_object_part.m_skeleton_animation_result.m_transforms.len(), Default::default());
@@ -257,20 +279,10 @@ impl RenderSystem {
                             material_source.m_normal_file = "asset/texture/default/normal.jpg".to_string();
                         }
                         let is_material_loaded = self.m_render_scene.get_material_asset_id_allocator().has_element(&material_source);
-                        let mut material_data = RenderMaterialData::default();
+                        render_entity.m_material_asset_id = self.m_render_scene.get_material_asset_id_allocator().alloc_guid(&material_source);
                         if !is_material_loaded {
                             println!("load material data");
-                            material_data = RenderResourceBase::load_material_data(&material_source);
-                        }
-
-                        render_entity.m_material_asset_id = self.m_render_scene.get_material_asset_id_allocator().alloc_guid(&material_source);
-
-                        if !is_mesh_loaded {
-                            println!("load mesh data");
-                            self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
-                        }
-
-                        if !is_material_loaded {
+                            let material_data = RenderResourceBase::load_material_data(&material_source);
                             self.m_render_resource.borrow_mut().upload_game_object_render_resource_material(&self.m_rhi.borrow(), &render_entity, &material_data);
                         }
 

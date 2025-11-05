@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::function::{framework::object::object_id_allocator::GObjectID, render::{light::{AmbientLight, DirectionalLight, PointLightList}, render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}};
+use crate::function::{framework::object::object_id_allocator::GObjectID, render::{light::{AmbientLight, DirectionalLight, PointLightList}, render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_helper::calculate_directional_light_camera, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}};
 
 
 
@@ -24,8 +24,9 @@ pub struct RenderScene{
 
 impl RenderScene {
 
-    pub fn update_visible_objects(&mut self, render_resource: &RenderResource, camera: &RenderCamera) {
+    pub fn update_visible_objects(&self, render_resource: &mut RenderResource, camera: &RenderCamera) {
         self.update_visible_objects_main_camera(render_resource, camera);
+        self.update_visible_objects_directional_light(render_resource, camera);
     }
 
     pub fn set_visible_nodes_reference(&self) {
@@ -51,7 +52,7 @@ impl RenderScene {
 }
 
 impl RenderScene {
-    fn update_visible_objects_main_camera(&mut self, render_resource: &RenderResource, _camera: &RenderCamera) {
+    fn update_visible_objects_main_camera(&self, render_resource: &RenderResource, _camera: &RenderCamera) {
 
         let mut main_camera_visible_mesh_nodes = 
             self.m_main_camera_visible_mesh_nodes.borrow_mut();
@@ -71,5 +72,11 @@ impl RenderScene {
 
             main_camera_visible_mesh_nodes.push(temp_node);
         }
+    }
+
+    fn update_visible_objects_directional_light(&self, render_resource: &mut RenderResource, camera: &RenderCamera) {
+        let directional_light_proj_view = calculate_directional_light_camera(self, camera);
+        render_resource.m_mesh_perframe_storage_buffer_object.directional_light_proj_view = directional_light_proj_view;
+        render_resource.m_mesh_directional_light_shadow_perframe_storage_buffer_object.light_proj_view = directional_light_proj_view;
     }
 }   
