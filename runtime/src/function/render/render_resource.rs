@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, f32::consts::PI, ops::Index, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
 use itertools::Itertools;
 use vulkanalia::{prelude::v1_0::*};

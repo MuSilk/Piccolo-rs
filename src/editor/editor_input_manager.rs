@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::{Rc}};
 use bitflags::bitflags;
 use log::info;
 use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
-use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton}, keyboard::{KeyCode, PhysicalKey}};
+use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, keyboard::{KeyCode, PhysicalKey}};
 
 use crate::{editor::{editor_global_context::EditorGlobalContext}};
 
@@ -83,6 +83,52 @@ impl EditorInputManager {
         }
         self.m_mouse_x = position.x as f32;
         self.m_mouse_y = position.y as f32;
+    }
+
+    fn on_cursor_scroll(&mut self, _device_id: DeviceId, delta: MouseScrollDelta, _phase: TouchPhase) {
+        if !unsafe{G_IS_EDITOR_MODE} {
+            return;
+        }
+
+        if !self.is_cursor_in_rect(&self.m_engine_window_pos, &self.m_engine_window_size){
+            return;
+        }
+        let global = EditorGlobalContext::global().borrow();
+        let window_system = global.m_window_system.upgrade().unwrap();
+        if window_system.borrow().is_mouse_button_down(MouseButton::Right) {
+            match delta {
+                MouseScrollDelta::LineDelta(_x, y) => {
+                    if y > 0.0 {
+                        self.m_camera_speed *= 1.2;
+                    }
+                    else{
+                        self.m_camera_speed /= 1.2;
+                    }
+                }
+                MouseScrollDelta::PixelDelta(position) => {
+                    if position.y > 0.0 {
+                        self.m_camera_speed *= 1.2;
+                    }
+                    else{
+                        self.m_camera_speed /= 1.2;
+                    }
+                }
+            }
+        }
+        else{
+            match delta {
+                MouseScrollDelta::LineDelta(_x, y) => {
+                    let scene_manager = global.m_scene_manager.borrow();
+                    let editor_camera = scene_manager.get_editor_camera().upgrade().unwrap();
+                    editor_camera.borrow_mut().zoom_camera((y * 2.0) as f32);
+                }
+                MouseScrollDelta::PixelDelta(position) => {
+                    let scene_manager = global.m_scene_manager.borrow();
+                    let editor_camera = scene_manager.get_editor_camera().upgrade().unwrap();
+                    editor_camera.borrow_mut().zoom_camera((position.y * 2.0) as f32);
+                }
+            }
+        }
     }
 
     fn on_mouse_button(&mut self, _device_id: DeviceId, state: ElementState, button: MouseButton) {
@@ -240,6 +286,11 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
         window_system.register_on_mouse_button_func(move |device_id, state, button| {
             let this = this.upgrade().unwrap();
             this.borrow_mut().on_mouse_button(device_id, state, button);
+        });
+        let this = Rc::downgrade(&self);
+        window_system.register_on_mouse_wheel_func(move |device_id, delta,phase| {
+            let this = this.upgrade().unwrap();
+            this.borrow_mut().on_cursor_scroll(device_id, delta, phase);
         });
     }
 

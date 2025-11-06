@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
-use winit::{dpi::{LogicalSize, PhysicalPosition}, event::{DeviceId, ElementState, KeyEvent, MouseButton}, event_loop::ActiveEventLoop, window::Window};
+use winit::{dpi::{LogicalSize, PhysicalPosition, PhysicalSize}, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, event_loop::ActiveEventLoop, window::Window};
 
 pub struct WindowCreateInfo{
     pub width: u32,
@@ -24,6 +24,8 @@ impl Default for WindowCreateInfo{
 type OnKeyFunc = dyn Fn(DeviceId, &KeyEvent, bool);
 type OnMouseButtonFunc = dyn Fn(DeviceId, ElementState, MouseButton);
 type OnCursorPosFunc = dyn Fn(DeviceId, PhysicalPosition<f64>);
+type OnMouseWheelFunc = dyn Fn(DeviceId, MouseScrollDelta, TouchPhase);
+type OnWindowSize = dyn Fn(PhysicalSize<u32>);
 
 #[derive(Default)]
 pub struct WindowSystem{
@@ -31,10 +33,12 @@ pub struct WindowSystem{
     m_width: u32,
     m_height: u32,
     _m_is_focus_mode: bool,
+    m_minimized: bool,
 
     m_on_key_func: Vec<Box<OnKeyFunc>>,
     m_on_mouse_button_func: Vec<Box<OnMouseButtonFunc>>,
     m_on_cursor_pos_func: Vec<Box<OnCursorPosFunc>>,
+    m_on_mouse_wheel_func: Vec<Box<OnMouseWheelFunc>>,
 
     m_is_mouse_button_down: HashMap<MouseButton, bool>,
 }
@@ -59,6 +63,10 @@ impl WindowSystem {
 
     pub fn get_window(&self) -> &Rc<Window> {
         &self.m_window.as_ref().unwrap()
+    }
+
+    pub fn is_minimized(&self) -> bool {
+        self.m_minimized
     }
 
     pub fn get_window_size(&self) -> (u32, u32) {
@@ -94,6 +102,21 @@ impl WindowSystem {
         self.m_on_cursor_pos_func.push(Box::new(f));
     }
 
+    pub fn register_on_mouse_wheel_func<F>(&mut self, f: F) 
+    where
+        F: 'static + Fn(DeviceId, MouseScrollDelta, TouchPhase),
+    {
+        self.m_on_mouse_wheel_func.push(Box::new(f));
+    }
+
+    pub fn on_window_size(&mut self, size: PhysicalSize<u32>) {
+        if size.width == 0 || size.height == 0 {
+            self.m_minimized = true;
+        } else {
+            self.m_minimized = false;
+        }
+    }
+
     pub fn on_key(&self, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) {
         self.m_on_key_func.iter().for_each(|f| f(device_id, event, is_synthetic));
     }
@@ -101,6 +124,10 @@ impl WindowSystem {
     pub fn on_mouse_button(&mut self, device_id: DeviceId, state: ElementState, button: MouseButton) {
         self.m_is_mouse_button_down.insert(button, state == ElementState::Pressed);
         self.m_on_mouse_button_func.iter().for_each(|f| f(device_id, state, button));
+    }
+
+    pub fn on_mouse_wheel(&self, device_id: DeviceId, delta: MouseScrollDelta, phase: TouchPhase) {
+        self.m_on_mouse_wheel_func.iter().for_each(|f| f(device_id, delta, phase));
     }
 
     pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
