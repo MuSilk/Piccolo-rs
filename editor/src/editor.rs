@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use runtime::{app, engine::{Engine, G_IS_EDITOR_MODE}, function::{global::global_context::RuntimeGlobalContext, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
 
-use crate::editor::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, editor_input_manager::EditorInputManagerExt, editor_ui::EditorUI};
+use crate::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, editor_input_manager::EditorInputManagerExt, editor_ui::EditorUI};
+
 
 
 pub struct Editor {

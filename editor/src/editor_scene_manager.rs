@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use runtime::{core::math::vector2::Vector2, function::render::{render_camera::RenderCamera}};
 
-use crate::editor::editor_global_context::EditorGlobalContext;
+use crate::editor_global_context::EditorGlobalContext;
+
 
 #[derive(Default)]
 pub struct EditorSceneManager {

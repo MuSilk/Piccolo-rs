@@ -2,7 +2,7 @@ use std::{cell::{RefCell}, rc::{Rc, Weak}};
 
 use runtime::{engine::Engine, function::render::{render_system::RenderSystem, window_system::WindowSystem}};
 
-use crate::editor::{editor_input_manager::{EditorInputManager, EditorInputManagerExt}, editor_scene_manager::EditorSceneManager};
+use crate::{editor_input_manager::{EditorInputManager, EditorInputManagerExt}, editor_scene_manager::EditorSceneManager};
 
 static mut G_EDITOR_GLOBAL_CONTEXT: Option<RefCell<EditorGlobalContext>> = None;
 

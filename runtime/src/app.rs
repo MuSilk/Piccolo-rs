@@ -3,9 +3,8 @@ use std::{cell::RefCell, env, rc::Rc};
 use anyhow::anyhow;
 use winit::{application::ApplicationHandler, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
 
-use crate::{engine::Engine, function::global::global_context::RuntimeGlobalContext};
+use crate::{engine::Engine, function::{framework::{scene::scene::SceneTrait}, global::global_context::RuntimeGlobalContext}};
 
-#[derive(Default)]
 pub struct App{
     engine: Rc<RefCell<Engine>>,
     systems: Vec<Box<dyn System>>,
@@ -18,6 +17,18 @@ pub trait System {
 }
 
 impl App {
+
+    pub fn new() -> Self {
+        let _ = pretty_env_logger::try_init();
+        let executable_path = env::current_exe().unwrap();
+        let config_file_path = executable_path.parent().ok_or_else(||
+            anyhow!("Failed to get parent directory")
+        ).unwrap().join("PiccoloEditor.ini");
+        Self { 
+            engine: Rc::new(RefCell::new(Engine::new(&config_file_path))), 
+            systems: Default::default() 
+        }
+    }
     pub fn run(&mut self) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -27,15 +38,21 @@ impl App {
     pub fn add_system<T>(&mut self, system: T) where T: System + 'static {
         self.systems.push(Box::new(system));
     }
+
+    pub fn add_scene<T: SceneTrait + 'static>(&mut self, scene: T) {
+        let mut world_manager = RuntimeGlobalContext::get_world_manager().borrow_mut();
+        world_manager.add_scene(scene);
+    }
+
+    pub fn set_default_scene(&mut self, scene_url: &str) {
+        let mut world_manager = RuntimeGlobalContext::get_world_manager().borrow_mut();
+        world_manager.set_default_scene(scene_url);
+    }
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let executable_path = env::current_exe().unwrap();
-        let config_file_path = executable_path.parent().ok_or_else(||
-            anyhow!("Failed to get parent directory")
-        ).unwrap().join("PiccoloEditor.ini");
-        self.engine.borrow().start_engine(event_loop, &config_file_path);
+        self.engine.borrow().resumed(event_loop);
         self.engine.borrow_mut().initialize();
         self.systems.iter_mut().for_each(|s| s.initialize(&self.engine));
     }

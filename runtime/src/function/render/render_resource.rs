@@ -212,7 +212,7 @@ impl RenderResource {
     fn update_vulkan_mesh(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, mesh_data: &RenderMeshData) {
         let assetid = entity.m_mesh_asset_id;
 
-        if let Some(mesh) = self.m_vulkan_meshes.get(&assetid) {
+        if let Some(_mesh) = self.m_vulkan_meshes.get(&assetid) {
             //todo: destroy the old mesh
         }
         let mut now_mesh = VulkanMesh::default();

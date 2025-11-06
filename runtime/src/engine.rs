@@ -29,8 +29,13 @@ impl Default for Engine {
 
 impl Engine {
 
-    pub fn start_engine(&self, event_loop: &ActiveEventLoop, config_file_path: &Path) {
-        RuntimeGlobalContext::start_systems(event_loop, config_file_path);
+    pub fn new(config_file_path: &Path) -> Self {
+        RuntimeGlobalContext::start_systems(config_file_path);
+        Default::default()
+    }
+
+    pub fn resumed(&self, event_loop: &ActiveEventLoop) {
+        RuntimeGlobalContext::resumed(event_loop);
     }
     pub fn initialize(&mut self){
         self.m_last_tick_time_point = Instant::now();

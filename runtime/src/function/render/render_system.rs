@@ -192,8 +192,7 @@ impl RenderSystem {
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        0
-        // self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
+        self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
     }
 }
 

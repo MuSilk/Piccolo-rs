@@ -1,10 +1,8 @@
 use std::{any::{TypeId}, cell::{RefCell}, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
 
-use anyhow::Result;
 use itertools::Itertools;
-use log::info;
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, minecraft::world::World, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectDesc}}, resource::res_type::common::level::LevelRes};
+use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectDesc}}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -56,7 +54,7 @@ impl Archetype {
 }
 
 #[derive(Default)]
-pub struct Level {
+pub struct Scene {
     m_is_loaded: bool,
     m_level_res_url: String,
     m_archetypes: HashMap<usize, Archetype>,
@@ -64,19 +62,32 @@ pub struct Level {
     pub m_entities: HashMap<GObjectID, Rc<RefCell<GObject>>>,
 }
 
-impl Level {
-    pub fn new() -> Rc<RefCell<Self>> {
-        let level = Self::default();
-        let level = Rc::new(RefCell::new(level));
-        level
+impl Scene {
+    pub fn new() -> Self {
+        Self::default()
     }
-    
-    pub fn tick(&mut self, delta_time: f32) {
-        if !self.m_is_loaded {
-            return;
-        }
-        self.tick_transform_components(delta_time);
-        self.tick_mesh_components(delta_time);
+
+    pub fn spawn(&mut self) -> GObjectID {
+        let object_id = object_id_allocator::alloc();
+        let gobject = GObject::new(object_id);
+        self.m_entities.insert(object_id, gobject);
+        object_id
+    }
+
+    pub fn set_url(&mut self, level_res_url: &str) {
+        self.m_level_res_url = level_res_url.to_string();
+    }
+
+    pub fn get_url(&self) -> String {
+        self.m_level_res_url.clone()
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.m_is_loaded
+    }
+
+    pub fn set_loaded(&mut self, loaded: bool) {
+        self.m_is_loaded = loaded;
     }
 
     fn query<T: 'static + ComponentTrait>(&'_ mut self) -> impl Iterator<Item = std::cell::Ref<'_, T>> {
@@ -158,13 +169,13 @@ impl Level {
         self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
-    fn tick_transform_components(&mut self, delta_time: f32) {
+    pub fn tick_transform_components(&mut self, delta_time: f32) {
         self.query_mut::<TransformComponent>().for_each(|mut transform| {
             transform.tick(delta_time);
         });
     }
 
-    fn tick_mesh_components(&mut self, _delta_time: f32) {
+    pub fn tick_mesh_components(&mut self, _delta_time: f32) {
         self.query_pair_mut::<MeshComponent, TransformComponent>()
             .for_each(|(mut mesh, mut transform)| 
         {
@@ -177,7 +188,6 @@ impl Level {
                     dirty_mesh_parts.push(mesh_part.clone());
 
                     mesh_part.m_transform_desc.m_transform_matrix = object_transform_matrix;
-                    // mesh_part.m_base_color_factor = 
                 }
 
                 let render_system = RuntimeGlobalContext::get_render_system().borrow();
@@ -189,87 +199,12 @@ impl Level {
         });
         
     }
-
 }
 
-pub trait LevelExt {
-    fn spawn(&mut self) -> GObjectID;
-    fn load(&mut self, level_res_url: &str) -> Result<()>;
-    fn save(&self) -> Result<()>;
-}
-
-impl LevelExt for Rc<RefCell<Level>> {
-    fn spawn(&mut self) -> GObjectID {
-        let object_id = object_id_allocator::alloc();
-        let gobject = GObject::new(object_id);
-        self.borrow_mut().m_entities.insert(object_id, gobject);
-        object_id
-    }
-
-    fn load(&mut self, level_res_url: &str) -> Result<()> {
-        info!("Loading level: {}", level_res_url);
-        let level_res = {
-            let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-            assert_manager.load_asset::<LevelRes>(level_res_url)?
-        };
-        // level_res.m_objects.iter().for_each(|obj| {
-        //     let object_id = object_id_allocator::alloc();
-        //     let gobject = GObject::new(object_id);
-        //     gobject.borrow_mut().set_name(&obj.m_name);
-        //     gobject.borrow_mut().set_definition_url(&obj.m_definition);
-        //     self.borrow_mut().m_entities.insert(object_id, gobject);
-
-        //     let components = obj.m_instanced_components.iter().map(|component| {
-        //         let component = RefCell::new(component.clone_box());
-        //         component.borrow_mut().post_load_resource(&self, object_id);
-        //         component
-        //     }).collect::<Vec<_>>();
-        //     self.borrow_mut().create_object(object_id, components);
-        // });
-
-        let object_id = object_id_allocator::alloc();
-        let gobject = GObject::new(object_id);
-        self.borrow_mut().m_entities.insert(object_id, gobject);
-
-        let world = World::new_box(&self);
-        let components = vec![
-            RefCell::new(world as Box<dyn ComponentTrait>),
-        ];
-        self.borrow_mut().create_object(object_id, components);
-
-        self.borrow_mut().m_level_res_url = level_res_url.to_string();
-        self.borrow_mut().m_is_loaded = true;
-        info!("Level load succeed!");
-        Ok(())
-    }
-
-    fn save(&self) -> Result<()> {
-        info!("Saving level: {}", self.borrow().m_level_res_url);
-        // let mut output_level_res = LevelRes::default();
-
-        // self.borrow().m_entities.iter().for_each(|(object_id, entity)|{
-        //     let mut output_object = ObjectInstanceRes::default();
-        //     output_object.m_name = entity.borrow().get_name().to_string();
-        //     output_object.m_definition = entity.borrow().get_definition_url().to_string();
-
-        //     let borrowed_level = self.borrow();
-        //     let index = borrowed_level.m_entity_location.get(object_id).unwrap();
-        //     let components = 
-        //         borrowed_level.m_archetypes.get(&index.0).unwrap().get_entity(index.1)
-        //         .map(|component| {
-        //             component.borrow().clone_box()
-        //         })
-        //         .collect::<Vec<_>>();
-        //     output_object.m_instanced_components = components;
-
-        //     output_level_res.m_objects.push(output_object);
-        // });
-
-        // let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        // assert_manager.save_asset(&self.borrow().m_level_res_url, output_level_res)?;
-
-        info!("Level save succeed!");
-        Ok(())
-    }
-
+pub trait SceneTrait {
+    fn load(&mut self);
+    fn save(&self);
+    fn tick(&mut self, delta_time: f32);
+    fn get_url(&self) -> String;
+    fn is_loaded(&self) -> bool;
 }

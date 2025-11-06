@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
-use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3}, function::{framework::{component::component::{Component, ComponentTrait}, minecraft::block::{self, BLOCK_TEXTURE_DIM, Block, BlockType, FACE_DIRECTION_OFFSETS}}, render::{render_object::GameObjectDynamicMeshDesc, render_type::MeshVertexDataDefinition}}};
+use runtime::{core::math::{matrix4::Matrix4x4, vector3::Vector3}, function::{framework::component::component::{Component, ComponentTrait}, render::{render_object::GameObjectDynamicMeshDesc, render_type::MeshVertexDataDefinition}}};
+
+use crate::block::{self, BLOCK_TEXTURE_DIM, Block, BlockType, FACE_DIRECTION_OFFSETS};
 
 pub const CHUNK_DIM: (u32, u32, u32) = (16, 16, 256);
 const CHUNK_SIZE: usize = (CHUNK_DIM.0 * CHUNK_DIM.1 * CHUNK_DIM.2) as usize;

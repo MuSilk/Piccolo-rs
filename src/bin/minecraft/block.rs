@@ -1,6 +1,5 @@
+use runtime::function::render::render_type::MeshVertexDataDefinition;
 use serde::{Deserialize, Serialize};
-
-use crate::function::{render::render_type::MeshVertexDataDefinition};
 
 pub enum FaceDirection {
     Top,

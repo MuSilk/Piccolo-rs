@@ -1,6 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{core::{algorithm::noise, math::{transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, level::level::Level, minecraft::{block::{BLOCK_DIRT, BLOCK_GRASS, BLOCK_STONE}, block_res::BlockRes, chunk::{Chunk}}, object::{object::GObject, object_id_allocator}}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
+use runtime::{core::{algorithm::noise, math::{transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, scene::scene::Scene}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
+
+use crate::{block::{BLOCK_DIRT, BLOCK_GRASS, BLOCK_STONE}, block_res::BlockRes, chunk::Chunk};
+
 
 #[derive(Clone)]
 pub struct World {
@@ -32,7 +35,7 @@ impl ComponentTrait for World  {
 }
 
 impl World {
-    pub fn new_box(level: &Rc<RefCell<Level>>) -> Box<Self> {
+    pub fn new_box(level: &mut Scene) -> Box<Self> {
 
         let mut world = Self {
             m_component: Component::default(),
@@ -77,9 +80,7 @@ impl World {
 
         for i in 0..12 {
             for j in 0..12 {
-                let object_id = object_id_allocator::alloc();
-                let gobject = GObject::new(object_id);
-                level.borrow_mut().m_entities.insert(object_id, gobject);
+                let object_id = level.spawn();
                 let chunk = &mut world.loaded_chunks[i][j];
 
                 for chunk_i in 0..16 {
@@ -130,7 +131,7 @@ impl World {
                     RefCell::new(mesh_component) as RefCell<Box<dyn ComponentTrait>>,
                     RefCell::new(transform_component),
                 ];
-                level.borrow_mut().create_object(object_id, components);
+                level.create_object(object_id, components);
             }
         }
         Box::new(world)

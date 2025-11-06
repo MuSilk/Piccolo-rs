@@ -1,6 +1,5 @@
+use runtime::function::framework::resource::{component::mesh::MeshComponentRes, resource::Resource};
 use serde::{Deserialize, Serialize};
-
-use crate::function::framework::{resource::{component::mesh::MeshComponentRes, resource::Resource}};
 
 
 #[derive(Clone, Default, Serialize, Deserialize)]

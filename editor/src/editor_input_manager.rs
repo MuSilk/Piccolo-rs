@@ -5,7 +5,8 @@ use log::info;
 use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
 use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{editor::{editor_global_context::EditorGlobalContext}};
+use crate::editor_global_context::EditorGlobalContext;
+
 
 bitflags! {
     #[repr(transparent)]
