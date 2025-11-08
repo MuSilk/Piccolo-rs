@@ -137,7 +137,7 @@ impl RenderPipeline {
             self.m_base.borrow().m_directional_light_pass.draw();
             self.m_base.borrow().m_point_light_pass.draw();
 
-            self.m_base.borrow().m_main_camera_pass.draw(
+            self.m_base.borrow().m_main_camera_pass.draw_forward(
                 &self.m_base.borrow().m_tone_mapping_pass,
                 &self.m_base.borrow().m_color_grading_pass,
                 &self.m_base.borrow().m_fxaa_pass,

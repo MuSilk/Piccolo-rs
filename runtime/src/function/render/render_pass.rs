@@ -29,8 +29,8 @@ pub const _MAIN_CAMERA_SUBPASS_COUNT: u32 = 8;
 
 #[derive(Default)]
 pub struct VisiableNodes {
-    pub p_directional_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
-    pub p_point_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
+    pub p_directional_light_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
+    pub p_point_light_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
     pub p_main_camera_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
     // p_axis_node: RenderAxisNode,
 }

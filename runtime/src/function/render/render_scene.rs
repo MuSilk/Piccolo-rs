@@ -14,6 +14,7 @@ pub struct RenderScene{
     pub m_render_entities: HashMap<u32, Box<RenderEntity>>,
 
     m_main_camera_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
+    m_directional_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
 
     m_instance_id_allocator: GuidAllocator<GameObjectPartId>,
     m_mesh_asset_id_allocator: GuidAllocator<MeshSourceDesc>,
@@ -30,6 +31,8 @@ impl RenderScene {
     }
 
     pub fn set_visible_nodes_reference(&self) {
+        RenderPass::m_visible_nodes().borrow_mut().p_directional_light_visible_mesh_nodes =
+            Rc::downgrade(&self.m_directional_light_visible_mesh_nodes);
         RenderPass::m_visible_nodes().borrow_mut().p_main_camera_visible_mesh_nodes = 
             Rc::downgrade(&self.m_main_camera_visible_mesh_nodes);
     }
@@ -78,5 +81,24 @@ impl RenderScene {
         let directional_light_proj_view = calculate_directional_light_camera(self, camera);
         render_resource.m_mesh_perframe_storage_buffer_object.directional_light_proj_view = directional_light_proj_view;
         render_resource.m_mesh_directional_light_shadow_perframe_storage_buffer_object.light_proj_view = directional_light_proj_view;
+    
+        let mut directional_light_visible_mesh_nodes = 
+            self.m_directional_light_visible_mesh_nodes.borrow_mut();
+        directional_light_visible_mesh_nodes.clear();
+
+        for (_instance_id ,entity) in &self.m_render_entities {
+            let mut temp_node = RenderMeshNode::default();
+            temp_node.model_matrix = entity.m_model_matrix.clone();
+            temp_node.node_id = entity.m_instance_id;
+
+            let mesh_asset = render_resource.get_entity_mesh(entity);
+            temp_node.ref_mesh = Rc::downgrade(mesh_asset);
+            temp_node.enable_vertex_blending = entity.m_enable_vertex_blending;
+
+            let material_asset = render_resource.get_entity_material(entity);
+            temp_node.ref_material = Rc::downgrade(material_asset);
+
+            directional_light_visible_mesh_nodes.push(temp_node);
+        }
     }
 }   

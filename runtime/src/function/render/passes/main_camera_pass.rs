@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject, MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase, _MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, _MAIN_CAMERA_SUBPASS_BASEPASS, _MAIN_CAMERA_SUBPASS_COLOR_GRADING, _MAIN_CAMERA_SUBPASS_COMBINE_UI, _MAIN_CAMERA_SUBPASS_COUNT, _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING, _MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING, _MAIN_CAMERA_SUBPASS_FXAA, _MAIN_CAMERA_SUBPASS_TONE_MAPPING, _MAIN_CAMERA_SUBPASS_UI}, render_resource::RenderResource, render_type::RHISamplerType}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_GBUFFER_FRAG, MESH_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, _MAIN_CAMERA_SUBPASS_BASEPASS, _MAIN_CAMERA_SUBPASS_COLOR_GRADING, _MAIN_CAMERA_SUBPASS_COMBINE_UI, _MAIN_CAMERA_SUBPASS_COUNT, _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING, _MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING, _MAIN_CAMERA_SUBPASS_FXAA, _MAIN_CAMERA_SUBPASS_TONE_MAPPING, _MAIN_CAMERA_SUBPASS_UI, RenderPass, RenderPipelineBase}, render_resource::RenderResource, render_type::RHISamplerType}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -135,6 +135,102 @@ impl MainCameraPass {
         rhi.pop_event(command_buffer);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        tone_mapping_pass.draw();
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        color_grading_pass.draw();
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        if self.m_enable_fxaa {
+            fxaa_pass.draw();
+        }
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        let mut clear_value = vk::ClearValue::default();
+        clear_value.color.float32 = [0.0, 0.0, 0.0, 0.0];
+        let clear_attachments = [
+            vk::ClearAttachment::builder()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .color_attachment(0)
+                .clear_value(clear_value)
+                .build()
+        ];
+        let mut clear_rect = vk::Rect2D::default();
+        clear_rect.offset.x = 0;
+        clear_rect.offset.y = 0;
+        clear_rect.extent.width = swapchain_info.extent.width;
+        clear_rect.extent.height = swapchain_info.extent.height;
+        let clear_rects = [
+            vk::ClearRect::builder()
+                .base_array_layer(0)
+                .layer_count(1)
+                .rect(clear_rect)
+                .build()
+        ];
+        rhi.cmd_clear_attachments(command_buffer, &clear_attachments, &clear_rects);
+
+        ui_pass.draw();
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        combine_ui_pass.draw();
+
+        rhi.cmd_end_render_pass(command_buffer);
+
+        Ok(())
+    }
+
+    pub fn draw_forward(
+        &self, 
+        tone_mapping_pass: &ToneMappingPass,
+        color_grading_pass: &ColorGradingPass,
+        fxaa_pass: &FXAAPass,
+        ui_pass: &UIPass,
+        combine_ui_pass: &CombineUIPass,
+        current_swapchain_image_index: usize
+    ) -> Result<()> {
+        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
+        let rhi = rhi.borrow();
+        let command_buffer = rhi.get_current_command_buffer();
+
+        let swapchain_info = rhi.get_swapchain_info();
+        let render_area = vk::Rect2D::builder()
+            .offset(vk::Offset2D::default())
+            .extent(swapchain_info.extent);
+
+        let mut clear_values = [vk::ClearValue::default(); _MAIN_CAMERA_PASS_ATTACHMENT_COUNT];
+        clear_values[_MAIN_CAMERA_PASS_GBUFFER_A].color.float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_GBUFFER_B].color.float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_GBUFFER_C].color.float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].color.float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].color.float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].color.float32 = [0.0, 0.0, 0.0, 1.0];
+        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].color.float32 = [0.0, 0.0, 0.0, 1.0];
+        clear_values[_MAIN_CAMERA_PASS_DEPTH].depth_stencil = vk::ClearDepthStencilValue{depth: 1.0, stencil: 0};
+        clear_values[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE].color.float32 = [0.0, 0.0, 0.0, 1.0];
+        
+        let info = vk::RenderPassBeginInfo::builder()
+            .render_pass(self.m_render_pass.m_framebuffer.render_pass)
+            .framebuffer(self.m_swapchain_framebuffers[current_swapchain_image_index])
+            .render_area(render_area)
+            .clear_values(&clear_values);
+
+        rhi.cmd_begin_render_pass(command_buffer, &info, vk::SubpassContents::INLINE);
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+
+        rhi.push_event(command_buffer, "Forward Lighting\0", [1.0;4]);
+        self.draw_mesh_lighting()?;
+        self.draw_skybox()?;
+        rhi.pop_event(command_buffer);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
@@ -1112,6 +1208,202 @@ impl MainCameraPass {
             };
         }
 
+        // mesh lighting
+        {
+            let vert_shader_module = rhi.create_shader_module(&MESH_VERT)?;
+            let frag_shader_module = rhi.create_shader_module(&MESH_FRAG)?;
+
+            let vert_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vert_shader_module)
+                .name(b"main\0");
+
+            let frag_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(frag_shader_module)
+                .name(b"main\0");
+
+            let binding_descriptions = &MeshVertex::get_binding_descriptions();
+            let attribute_descriptions = &MeshVertex::get_attribute_descriptions();
+            let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
+                .vertex_binding_descriptions(binding_descriptions)
+                .vertex_attribute_descriptions(attribute_descriptions);
+
+            let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+                .primitive_restart_enable(false);
+
+            let swapchain_info = rhi.get_swapchain_info();
+
+            let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
+                .viewports(std::slice::from_ref(swapchain_info.viewport))
+                .scissors(std::slice::from_ref(swapchain_info.scissor));
+
+            let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
+                .depth_clamp_enable(false)
+                .rasterizer_discard_enable(false)
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::BACK)
+                .front_face(vk::FrontFace::CLOCKWISE)
+                .depth_bias_enable(false);
+
+            let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
+                .sample_shading_enable(false)
+                .rasterization_samples(vk::SampleCountFlags::_1);
+
+            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS)
+                .stencil_test_enable(false);
+
+            let attachments = [
+                vk::PipelineColorBlendAttachmentState::builder()
+                    .color_write_mask(vk::ColorComponentFlags::all())
+                    .blend_enable(false)
+                    .build(),
+            ];
+            let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
+                .logic_op_enable(false)
+                .logic_op(vk::LogicOp::COPY)
+                .attachments(&attachments)
+                .blend_constants([0.0, 0.0, 0.0, 0.0]);
+
+            let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
+                .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
+
+            let set_layouts = &[
+                self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout,
+                self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout,
+                self.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout,
+            ];
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(set_layouts);
+
+            let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
+
+            let stages = &[vert_stage, frag_stage];
+            let info = vk::GraphicsPipelineCreateInfo::builder()
+                .stages(stages)
+                .vertex_input_state(&vertex_input_state)
+                .input_assembly_state(&input_assembly_state)
+                .viewport_state(&viewport_state)
+                .rasterization_state(&rasterization_state)
+                .multisample_state(&multisample_state)
+                .depth_stencil_state(&depth_stencil_state)
+                .color_blend_state(&color_blend_state)
+                .dynamic_state(&dynamic_state)
+                .layout(pipeline_layout)
+                .render_pass(self.m_render_pass.m_framebuffer.render_pass)
+                .subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
+                .build();
+
+            let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
+
+            rhi.destroy_shader_module(vert_shader_module);
+            rhi.destroy_shader_module(frag_shader_module);
+
+            self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshLighting as usize] = RenderPipelineBase{
+                layout: pipeline_layout,
+                pipeline,
+            };
+        }
+
+        // skybox
+        {
+            let vert_shader_module = rhi.create_shader_module(&SKYBOX_VERT)?;
+            let frag_shader_module = rhi.create_shader_module(&SKYBOX_FRAG)?;
+
+            let vert_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vert_shader_module)
+                .name(b"main\0");
+
+            let frag_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(frag_shader_module)
+                .name(b"main\0");
+
+            let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder();
+
+            let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+                .primitive_restart_enable(false);
+
+            let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
+                .viewport_count(1)
+                .scissor_count(1);
+
+            let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
+                .depth_clamp_enable(false)
+                .rasterizer_discard_enable(false)
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::BACK)
+                .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+                .depth_bias_enable(false);
+
+            let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
+                .sample_shading_enable(false)
+                .rasterization_samples(vk::SampleCountFlags::_1);
+
+            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS)
+                .stencil_test_enable(false);
+
+            let attachments = [
+                vk::PipelineColorBlendAttachmentState::builder()
+                    .color_write_mask(vk::ColorComponentFlags::all())
+                    .blend_enable(false)
+                    .build(),
+            ];
+            let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
+                .logic_op_enable(false)
+                .logic_op(vk::LogicOp::COPY)
+                .attachments(&attachments)
+                .blend_constants([0.0, 0.0, 0.0, 0.0]);
+
+            let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
+                .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
+
+            let set_layouts = &[
+                self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout,
+            ];
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(set_layouts);
+
+            let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
+
+            let stages = &[vert_stage, frag_stage];
+            let info = vk::GraphicsPipelineCreateInfo::builder()
+                .stages(stages)
+                .vertex_input_state(&vertex_input_state)
+                .input_assembly_state(&input_assembly_state)
+                .viewport_state(&viewport_state)
+                .rasterization_state(&rasterization_state)
+                .multisample_state(&multisample_state)
+                .depth_stencil_state(&depth_stencil_state)
+                .color_blend_state(&color_blend_state)
+                .dynamic_state(&dynamic_state)
+                .layout(pipeline_layout)
+                .render_pass(self.m_render_pass.m_framebuffer.render_pass)
+                .subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
+                .build();
+
+            let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
+
+            rhi.destroy_shader_module(vert_shader_module);
+            rhi.destroy_shader_module(frag_shader_module);
+
+            self.m_render_pass.m_render_pipeline[RenderPipelineType::SkyBox as usize] = RenderPipelineBase{
+                layout: pipeline_layout,
+                pipeline,
+            };
+        }
+
         Ok(())
     }
 
@@ -1514,6 +1806,182 @@ impl MainCameraPass {
         );
 
         rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
+
+        Ok(())
+    }
+
+    fn draw_mesh_lighting(&self) -> Result<()> {
+        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
+        let rhi = rhi.borrow();
+        let command_buffer = rhi.get_current_command_buffer();
+
+        let info = rhi.get_swapchain_info();
+        rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
+        rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
+
+        let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshLighting as usize];
+        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
+
+        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+        );
+
+        render_resource.borrow_mut()
+            ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+                perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
+        unsafe{
+            std::ptr::copy_nonoverlapping(
+                &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
+                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
+                std::mem::size_of::<MeshPerframeStorageBufferObject>()
+            );
+        }
+
+        struct MeshNode<'a> {
+            model_matrix: &'a Matrix4x4,
+        }
+
+        let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
+        let visiable_nodes = m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap();
+        let visiable_nodes = visiable_nodes.borrow();
+        
+        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_,Vec<_>>> = HashMap::new();
+
+        for node in visiable_nodes.iter() {
+            let mesh_instanced = 
+                main_camera_mesh_drawcall_batch.entry(node.ref_material.as_ptr()).or_default();
+            let mesh_nodes = mesh_instanced.entry(node.ref_mesh.as_ptr()).or_default();
+            
+            mesh_nodes.push(MeshNode {
+                model_matrix : &node.model_matrix
+            });
+        }
+
+        for (material, mesh_instanced) in &main_camera_mesh_drawcall_batch {
+
+            rhi.cmd_bind_descriptor_sets(
+                command_buffer, 
+                vk::PipelineBindPoint::GRAPHICS, 
+                self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize].layout,
+                2, 
+                &[unsafe{&**material}.material_descriptor_set], 
+                &[],
+            );
+
+            for (mesh, mesh_nodes) in mesh_instanced {
+                let ref_mesh = unsafe{&**mesh};
+
+                rhi.cmd_bind_descriptor_sets(
+                    command_buffer, 
+                    vk::PipelineBindPoint::GRAPHICS, 
+                    self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize].layout,
+                    1, 
+                    &[ref_mesh.mesh_vertex_blending_descriptor_set], 
+                    &[],
+                );
+
+                let buffers = [
+                    ref_mesh.mesh_vertex_position_buffer,
+                    ref_mesh.mesh_vertex_varying_enable_blending_buffer,
+                    ref_mesh.mesh_vertex_varying_buffer,
+                ];
+            
+                rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0, 0, 0]);
+                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
+
+                let instance_count = mesh_nodes.len();
+                let max_drawcall_instance =  MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
+                let drawcall_count = instance_count.div_ceil(max_drawcall_instance);
+
+                for index in 0..drawcall_count { 
+                    let current_count = max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
+
+                    let mut object = MeshPerdrawcallStorageBufferObject::default();
+
+                    for i in 0..current_count { 
+                        object.mesh_instances[i].model_matrix = mesh_nodes[index * max_drawcall_instance + i].model_matrix.clone();
+                    }
+
+                    let perdrawcall_dynamic_offset = round_up(
+                        render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
+                        render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+                    );
+                    render_resource.borrow_mut()
+                        ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+                            perdrawcall_dynamic_offset + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
+
+                    unsafe{
+                        std::ptr::copy_nonoverlapping(
+                            &object as *const _ as *const c_void,
+                            render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
+                            std::mem::size_of::<MeshPerdrawcallStorageBufferObject>()
+                        );
+                    }
+
+                    rhi.cmd_bind_descriptor_sets(
+                        command_buffer, 
+                        vk::PipelineBindPoint::GRAPHICS, 
+                        self.m_render_pass.m_render_pipeline[0].layout,
+                        0,
+                        &[
+                            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set,
+                        ],
+                        &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
+                    );
+                    rhi.cmd_draw_indexed(command_buffer, ref_mesh.mesh_index_count, current_count as u32, 0, 0, 0);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn draw_skybox(&self) -> Result<()> {
+        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
+        let rhi = rhi.borrow();
+        let command_buffer = rhi.get_current_command_buffer();
+
+        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource.borrow()
+                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
+            render_resource.borrow()
+                ._storage_buffer._min_storage_buffer_offset_alignment
+        );
+
+        render_resource.borrow_mut()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+            perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
+
+        unsafe{
+            std::ptr::copy_nonoverlapping(
+                &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
+                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
+                std::mem::size_of::<MeshPerframeStorageBufferObject>()
+            );
+        }
+
+        let info = rhi.get_swapchain_info();
+        rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
+        rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
+
+        let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::SkyBox as usize];
+        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
+
+        rhi.cmd_bind_descriptor_sets(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.layout,
+            0,
+            &[
+                self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set,
+            ],
+            &[perframe_dynamic_offset],
+        );
+
+        rhi.cmd_draw(command_buffer, 36, 1, 0, 0);
 
         Ok(())
     }
