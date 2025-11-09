@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_TONE_MAPPING}, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
 
 pub struct ToneMappingInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -48,17 +48,20 @@ impl ToneMappingPass {
         rhi.pop_event(command_buffer);
     }
     pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, input_attachment: vk::ImageView) -> Result<()> {
-        let post_process_per_frame_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-            .image_view(input_attachment)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let post_process_per_frame_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+                .image_view(input_attachment)
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build()
+        ];
 
         let post_process_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[post_process_per_frame_input_attachment_info])
+                .image_info(&post_process_per_frame_input_attachment_info)
                 .build(),
         ];
         rhi.update_descriptor_sets(&post_process_descriptor_writes_info)?;
@@ -161,7 +164,7 @@ impl ToneMappingPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(_MAIN_CAMERA_SUBPASS_TONE_MAPPING)
+            .subpass(MainCameraSubPass::ToneMapping as u32)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

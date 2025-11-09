@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, _MAIN_CAMERA_SUBPASS_BASEPASS, _MAIN_CAMERA_SUBPASS_COLOR_GRADING, _MAIN_CAMERA_SUBPASS_COMBINE_UI, _MAIN_CAMERA_SUBPASS_COUNT, _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING, _MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING, _MAIN_CAMERA_SUBPASS_FXAA, _MAIN_CAMERA_SUBPASS_TONE_MAPPING, _MAIN_CAMERA_SUBPASS_UI, RenderPass, RenderPipelineBase}, render_resource::RenderResource, render_type::RHISamplerType}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::RenderResource, render_type::RHISamplerType}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -384,8 +384,7 @@ impl MainCameraPass {
     fn setup_render_pass(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let mut attachments = [vk::AttachmentDescription::default(); _MAIN_CAMERA_PASS_ATTACHMENT_COUNT];
 
-        let gbuffer_normal_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_GBUFFER_A];
-        *gbuffer_normal_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_GBUFFER_A] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -396,8 +395,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let gbuffer_metallic_roughness_shadingmodeid_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_GBUFFER_B];
-        *gbuffer_metallic_roughness_shadingmodeid_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_GBUFFER_B] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -408,8 +406,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let gbuffer_albedo_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_GBUFFER_C];
-        *gbuffer_albedo_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_GBUFFER_C] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -420,8 +417,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let backup_odd_color_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD];
-        *backup_odd_color_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -432,8 +428,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let backup_even_color_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN];
-        *backup_even_color_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -444,8 +439,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let post_process_odd_color_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD];
-        *post_process_odd_color_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -456,8 +450,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let post_process_even_color_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN];
-        *post_process_even_color_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN] = vk::AttachmentDescription::builder()
             .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -468,8 +461,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        let depth_attachment_description = &mut attachments[_MAIN_CAMERA_PASS_DEPTH];
-        *depth_attachment_description = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_DEPTH] = vk::AttachmentDescription::builder()
             .format(rhi.get_depth_image_info().format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -480,8 +472,7 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .build();
 
-        let swapchain_image_attachment = &mut attachments[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE];
-        *swapchain_image_attachment = vk::AttachmentDescription::builder()
+        attachments[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE] = vk::AttachmentDescription::builder()
             .format(rhi.get_swapchain_info().image_format)
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -491,210 +482,201 @@ impl MainCameraPass {
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
             .build();    
-
-        let mut subpasses = [vk::SubpassDescription::default(); _MAIN_CAMERA_SUBPASS_COUNT as usize];
+        let mut subpasses = [vk::SubpassDescription::default(); MainCameraSubPass::EnumCount as usize];
 
         //gbuffer subpass
-        {
-            let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
-                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            let color_attachment_refs = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_GBUFFER_A as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .build(),
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_GBUFFER_B as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .build(),
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_GBUFFER_C as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .build(),
-            ];
-            subpasses[_MAIN_CAMERA_SUBPASS_BASEPASS as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_refs)
-                .depth_stencil_attachment(&depth_stencil_attachment_ref)
-                .build();
-        }  
+        let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        let color_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_A as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_B as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_C as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+        ];
+        subpasses[MainCameraSubPass::BasePass as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .depth_stencil_attachment(&depth_stencil_attachment_ref)
+            .build();  
 
         //deferred lighting subpass
-        {
-            let input_attachment_refs = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_GBUFFER_A as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .build(),
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_GBUFFER_B as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .build(),
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_GBUFFER_C as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .build(),
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .build(),
-            ];
-            let color_attachment_refs = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .build(),
-            ];
-            subpasses[_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_refs)
-                .input_attachments(&input_attachment_refs)
-                .build();
-        }
+        let input_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_A as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_B as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_C as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+        ];
+        let color_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+        ];
+        subpasses[MainCameraSubPass::DeferredLighting as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .input_attachments(&input_attachment_refs)
+            .build();
 
         //forward lighting subpass
-        {
-            let color_attachment_refs = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .build(),
-            ];
-            let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
-                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            subpasses[_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_refs)
-                .depth_stencil_attachment(&depth_stencil_attachment_ref)
-                .build();
-        }
+        let color_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+        ];
+        let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        subpasses[MainCameraSubPass::ForwardLighting as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .depth_stencil_attachment(&depth_stencil_attachment_ref)
+            .build();
 
         //tone mapping subpass
-        {
-            let input_attachment_ref = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-            ];
+        let input_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+        ];
 
-            let color_attachment_ref = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-            ];
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+        ];
 
-            subpasses[_MAIN_CAMERA_SUBPASS_TONE_MAPPING as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_ref)
-                .input_attachments(&input_attachment_ref)
-                .build();
-        }
+        subpasses[MainCameraSubPass::ToneMapping as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();
 
         //color grading subpass
-        {
-            let input_attachment_ref = [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-            ];
-
-            let color_attachment_ref = if self.m_enable_fxaa {
-                [
-                    vk::AttachmentReference::builder()
-                        .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
-                        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-                ]
-            }
-            else{
-                [
-                    vk::AttachmentReference::builder()
-                        .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-                ]
-            };
-
-            subpasses[_MAIN_CAMERA_SUBPASS_COLOR_GRADING as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_ref)
-                .input_attachments(&input_attachment_ref)
-                .build();
-        }
-
-        //fxaa subpass
-        {
-            let input_attachment_ref = if self.m_enable_fxaa {
-                [
-                    vk::AttachmentReference::builder()
-                        .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
-                        .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-                ]
-            }
-            else{
-                [
-                    vk::AttachmentReference::builder()
-                        .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                        .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-                ]
-            };
-
-            let color_attachment_ref = vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-
-            subpasses[_MAIN_CAMERA_SUBPASS_FXAA as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&[color_attachment_ref])
-                .input_attachments(&input_attachment_ref)
-                .build();
-        }   
-
-        //ui subpass
-        {
-            let color_attachment_ref = vk::AttachmentReference::builder()
+        let input_attachment_ref = [
+            vk::AttachmentReference::builder()
                 .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-            let preserve_attachments = [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32];
-            subpasses[_MAIN_CAMERA_SUBPASS_UI as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&[color_attachment_ref])
-                .preserve_attachments(&preserve_attachments)
-                .build();
-        }
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+        ];
 
-        //combine ui subpass
-        {
-            let input_attachment_ref = [
+        let color_attachment_ref = if self.m_enable_fxaa {
+            [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
+                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+            ]
+        }
+        else{
+            [
                 vk::AttachmentReference::builder()
                     .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+            ]
+        };
+
+        subpasses[MainCameraSubPass::ColorGrading as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();
+
+        //fxaa subpass
+        let input_attachment_ref = if self.m_enable_fxaa {
+            [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
                     .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+            ]
+        }
+        else{
+            [
                 vk::AttachmentReference::builder()
                     .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
                     .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-            ];
-            let color_attachment_ref = vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-            subpasses[_MAIN_CAMERA_SUBPASS_COMBINE_UI as usize] = vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&[color_attachment_ref])
-                .input_attachments(&input_attachment_ref)
-                .build();
-        }
+            ]
+        };
 
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build()
+        ];
+
+        subpasses[MainCameraSubPass::FXAA as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();   
+
+        //ui subpass
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build()
+        ];
+        let preserve_attachments = [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32];
+        subpasses[MainCameraSubPass::UI as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .preserve_attachments(&preserve_attachments)
+            .build();
+
+        //combine ui subpass
+        let input_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+        ];
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build()
+        ];
+        subpasses[MainCameraSubPass::CombineUI as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();
         let dependencies = [
             vk::SubpassDependency::builder()
                 .src_subpass(vk::SUBPASS_EXTERNAL)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
+                .dst_subpass(MainCameraSubPass::BasePass as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
                 .dst_stage_mask(vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
                 .dst_access_mask(vk::AccessFlags::SHADER_READ)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_BASEPASS)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
+                .src_subpass(MainCameraSubPass::BasePass as u32)
+                .dst_subpass(MainCameraSubPass::DeferredLighting as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -704,8 +686,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
+                .src_subpass(MainCameraSubPass::DeferredLighting as u32)
+                .dst_subpass(MainCameraSubPass::ForwardLighting as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -715,8 +697,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_TONE_MAPPING)
+                .src_subpass(MainCameraSubPass::ForwardLighting as u32)
+                .dst_subpass(MainCameraSubPass::ToneMapping as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -726,8 +708,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_TONE_MAPPING)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_COLOR_GRADING)
+                .src_subpass(MainCameraSubPass::ToneMapping as u32)
+                .dst_subpass(MainCameraSubPass::ColorGrading as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -737,8 +719,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_COLOR_GRADING)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_FXAA)
+                .src_subpass(MainCameraSubPass::ColorGrading as u32)
+                .dst_subpass(MainCameraSubPass::FXAA as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -748,8 +730,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_FXAA)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_UI)
+                .src_subpass(MainCameraSubPass::FXAA as u32)
+                .dst_subpass(MainCameraSubPass::UI as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -759,8 +741,8 @@ impl MainCameraPass {
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
-                .src_subpass(_MAIN_CAMERA_SUBPASS_UI)
-                .dst_subpass(_MAIN_CAMERA_SUBPASS_COMBINE_UI)
+                .src_subpass(MainCameraSubPass::UI as u32)
+                .dst_subpass(MainCameraSubPass::CombineUI as u32)
                 .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
                     vk::PipelineStageFlags::FRAGMENT_SHADER)
                 .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
@@ -1099,7 +1081,7 @@ impl MainCameraPass {
                 .dynamic_state(&dynamic_state)
                 .layout(pipeline_layout)
                 .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-                .subpass(_MAIN_CAMERA_SUBPASS_BASEPASS)
+                .subpass(MainCameraSubPass::BasePass as u32)
                 .build();
 
             let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
@@ -1194,7 +1176,7 @@ impl MainCameraPass {
                 .dynamic_state(&dynamic_state)
                 .layout(pipeline_layout)
                 .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-                .subpass(_MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING)
+                .subpass(MainCameraSubPass::DeferredLighting as u32)
                 .build();
 
             let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
@@ -1296,7 +1278,7 @@ impl MainCameraPass {
                 .dynamic_state(&dynamic_state)
                 .layout(pipeline_layout)
                 .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-                .subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
+                .subpass(MainCameraSubPass::ForwardLighting as u32)
                 .build();
 
             let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
@@ -1390,7 +1372,7 @@ impl MainCameraPass {
                 .dynamic_state(&dynamic_state)
                 .layout(pipeline_layout)
                 .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-                .subpass(_MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING)
+                .subpass(MainCameraSubPass::ForwardLighting as u32)
                 .build();
 
             let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
@@ -1415,111 +1397,127 @@ impl MainCameraPass {
     }
 
     fn setup_model_global_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        let set_layouts = &[self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout];
+        let set_layouts = [self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout];
         let mesh_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(set_layouts);
+            .set_layouts(&set_layouts);
 
         self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set = rhi.allocate_descriptor_sets(&mesh_global_descriptor_set_alloc_info)?[0];
 
         let global_render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
 
-        let mesh_perframe_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-            .offset(0)
-            .range(size_of::<MeshPerframeStorageBufferObject>() as u64)
-            .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .build();
+        let mesh_perframe_storage_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .offset(0)
+                .range(size_of::<MeshPerframeStorageBufferObject>() as u64)
+                .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .build()
+        ];
 
-        let mesh_perdrawcall_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-            .offset(0)
-            .range(size_of::<MeshPerdrawcallStorageBufferObject>() as u64) 
-            .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .build();
+        let mesh_perdrawcall_storage_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .offset(0)
+                .range(size_of::<MeshPerdrawcallStorageBufferObject>() as u64) 
+                .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .build()
+        ];
 
-        let mesh_per_drawcall_vertex_blending_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-            .offset(0)
-            .range(size_of::<MeshPerdrawcallVertexBlendingStorageBufferObject>() as u64) 
-            .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .build();
+        let mesh_per_drawcall_vertex_blending_storage_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .offset(0)
+                .range(size_of::<MeshPerdrawcallVertexBlendingStorageBufferObject>() as u64) 
+                .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .build()
+        ];
         
-        let brdf_texture_image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(global_render_resource.borrow()._ibl_resource._brdf_lut_texture_image_view)
-            .sampler(global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler)
-            .build();
+        let brdf_texture_image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(global_render_resource.borrow()._ibl_resource._brdf_lut_texture_image_view)
+                .sampler(global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler)
+                .build()
+        ];
 
-        let irradiance_texture_image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(global_render_resource.borrow()._ibl_resource._irradiance_texture_image_view)
-            .sampler(global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler)
-            .build();
+        let irradiance_texture_image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(global_render_resource.borrow()._ibl_resource._irradiance_texture_image_view)
+                .sampler(global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler)
+                .build()
+        ];
 
-        let specular_texture_image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(global_render_resource.borrow()._ibl_resource._specular_texture_image_view)
-            .sampler(global_render_resource.borrow()._ibl_resource._specular_texture_sampler)
-            .build();
+        let specular_texture_image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(global_render_resource.borrow()._ibl_resource._specular_texture_image_view)
+                .sampler(global_render_resource.borrow()._ibl_resource._specular_texture_sampler)
+                .build()
+        ];
 
-        let point_light_shadow_texture_image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.m_point_light_shadow_color_image_view)
-            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-            .build();   
+        let point_light_shadow_texture_image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.m_point_light_shadow_color_image_view)
+                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+                .build()
+        ];   
 
-        let directional_light_shadow_texture_image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.m_directional_light_shadow_color_image_view)
-            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-            .build();
+        let directional_light_shadow_texture_image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.m_directional_light_shadow_color_image_view)
+                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+                .build()
+        ];
 
         let mesh_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[mesh_perframe_storage_buffer_info])
+                .buffer_info(&mesh_perframe_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[mesh_perdrawcall_storage_buffer_info])
+                .buffer_info(&mesh_perdrawcall_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(2)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[mesh_per_drawcall_vertex_blending_storage_buffer_info])
+                .buffer_info(&mesh_per_drawcall_vertex_blending_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(3)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[brdf_texture_image_info])
+                .image_info(&brdf_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(4)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[irradiance_texture_image_info])
+                .image_info(&irradiance_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(5)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[specular_texture_image_info])
+                .image_info(&specular_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(6)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[point_light_shadow_texture_image_info])
+                .image_info(&point_light_shadow_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
                 .dst_binding(7)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[directional_light_shadow_texture_image_info])
+                .image_info(&directional_light_shadow_texture_image_info)
                 .build(),
         ];
 
@@ -1529,9 +1527,10 @@ impl MainCameraPass {
     }
     
     fn setup_skybox_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        let set_layouts = [self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout];
         let skybox_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(&[self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout])
+            .set_layouts(&set_layouts)
             .build();
 
         self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set
@@ -1539,30 +1538,34 @@ impl MainCameraPass {
 
         let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
 
-        let mesh_perframe_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-            .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .offset(0)
-            .range(std::mem::size_of::<MeshPerframeStorageBufferObject>() as u64)
-            .build();
+        let mesh_perframe_storage_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .offset(0)
+                .range(std::mem::size_of::<MeshPerframeStorageBufferObject>() as u64)
+                .build()
+        ];
 
-        let specular_texture_image_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(render_resource.borrow()._ibl_resource._specular_texture_image_view)
-            .sampler(render_resource.borrow()._ibl_resource._specular_texture_sampler)
-            .build();
+        let specular_texture_image_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(render_resource.borrow()._ibl_resource._specular_texture_image_view)
+                .sampler(render_resource.borrow()._ibl_resource._specular_texture_sampler)
+                .build()
+        ];
 
         let skybox_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[mesh_perframe_storage_buffer_info])
+                .buffer_info(&mesh_perframe_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set)
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[specular_texture_image_info])
+                .image_info(&specular_texture_image_info)
                 .build(),
         ];
 
@@ -1572,9 +1575,10 @@ impl MainCameraPass {
     }
 
     fn setup_gbuffer_lighting_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        let set_layouts = [self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout];
         let gbuffer_light_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(&[self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout])
+            .set_layouts(&set_layouts)
             .build();
         self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set 
             = rhi.allocate_descriptor_sets(&gbuffer_light_global_descriptor_set_alloc_info)?[0];
@@ -1582,50 +1586,58 @@ impl MainCameraPass {
     }
 
     fn setup_framebuffer_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> { 
-        let gbuffer_normal_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].view)
-            .sampler(vk::Sampler::null())
-            .build();
-        let gbuffer_metallic_roughness_shadingmodeid_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].view)
-            .sampler(vk::Sampler::null())
-            .build();
-        let gbuffer_albedo_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].view)
-            .sampler(vk::Sampler::null())
-            .build();
-        let depth_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(*rhi.get_depth_image_info().image_view)
-            .sampler(vk::Sampler::null())
-            .build();
+        let gbuffer_normal_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].view)
+                .sampler(vk::Sampler::null())
+                .build()
+        ];
+        let gbuffer_metallic_roughness_shadingmodeid_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].view)
+                .sampler(vk::Sampler::null())
+                .build()
+        ];
+        let gbuffer_albedo_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].view)
+                .sampler(vk::Sampler::null())
+                .build()
+        ];
+        let depth_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(*rhi.get_depth_image_info().image_view)
+                .sampler(vk::Sampler::null())
+                .build()
+        ];
         let deferred_lighting_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[gbuffer_normal_input_attachment_info])
+                .image_info(&gbuffer_normal_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[gbuffer_metallic_roughness_shadingmodeid_input_attachment_info])
+                .image_info(&gbuffer_metallic_roughness_shadingmodeid_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
                 .dst_binding(2)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[gbuffer_albedo_input_attachment_info])
+                .image_info(&gbuffer_albedo_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
                 .dst_binding(3)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[depth_input_attachment_info])
+                .image_info(&depth_input_attachment_info)
                 .build(),
         ];
         rhi.update_descriptor_sets(&deferred_lighting_descriptor_writes_info)?;

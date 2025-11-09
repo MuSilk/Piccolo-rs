@@ -17,15 +17,17 @@ pub const _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT: usize = 5;
 pub const _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT: usize = 2;
 pub const _MAIN_CAMERA_PASS_ATTACHMENT_COUNT:usize = 9;
 
-pub const _MAIN_CAMERA_SUBPASS_BASEPASS: u32 = 0;
-pub const _MAIN_CAMERA_SUBPASS_DEFERRED_LIGHTING: u32 = 1;
-pub const _MAIN_CAMERA_SUBPASS_FORWARD_LIGHTING: u32 = 2;
-pub const _MAIN_CAMERA_SUBPASS_TONE_MAPPING: u32 = 3;
-pub const _MAIN_CAMERA_SUBPASS_COLOR_GRADING: u32 = 4;
-pub const _MAIN_CAMERA_SUBPASS_FXAA: u32 = 5;
-pub const _MAIN_CAMERA_SUBPASS_UI: u32 = 6;
-pub const _MAIN_CAMERA_SUBPASS_COMBINE_UI: u32 = 7;
-pub const _MAIN_CAMERA_SUBPASS_COUNT: u32 = 8;
+pub enum MainCameraSubPass {
+    BasePass = 0,
+    DeferredLighting = 1,
+    ForwardLighting = 2,
+    ToneMapping = 3,
+    ColorGrading = 4,
+    FXAA = 5,
+    UI = 6,
+    CombineUI = 7,
+    EnumCount = 8
+}
 
 #[derive(Default)]
 pub struct VisiableNodes {

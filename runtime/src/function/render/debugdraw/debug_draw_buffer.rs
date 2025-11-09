@@ -335,17 +335,17 @@ impl DebugDrawAllocator {
             .bindings(&ubo_layout_binding)
             .build();
 
-        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        let layout = [rhi.create_descriptor_set_layout(&create_info)?];
         let descriptor_set = (0..VulkanRHI::get_max_frames_in_flight()).map(|_| {
             let alloc_info = vk::DescriptorSetAllocateInfo::builder()
                 .descriptor_pool(rhi.get_descriptor_pool())
-                .set_layouts(&[layout])
+                .set_layouts(&layout)
                 .build();
             rhi.allocate_descriptor_sets(&alloc_info).unwrap()
         }).collect::<Vec<_>>().into_iter().flatten().collect::<Vec<_>>();
 
         Ok(Descriptor { 
-            layout: layout, 
+            layout: layout[0], 
             descriptor_set: descriptor_set 
         })
     }
@@ -361,14 +361,16 @@ impl DebugDrawAllocator {
                 .build()
         ];
         for i in 0..VulkanRHI::get_max_frames_in_flight() {
-            let descriptor_write = vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_descriptor.descriptor_set[i as usize])
-                .dst_binding(2)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&image_info)
-                .build();
+            let descriptor_write = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(self.m_descriptor.descriptor_set[i as usize])
+                    .dst_binding(2)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(&image_info)
+                    .build()
+            ];
 
-            rhi.update_descriptor_sets(&[descriptor_write])?;
+            rhi.update_descriptor_sets(&descriptor_write)?;
         }
         Ok(())
     } 

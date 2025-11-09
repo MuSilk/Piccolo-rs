@@ -342,39 +342,47 @@ impl DirectionalLightShadowPass {
 
         let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
 
-        let perframe_buffer_info = vk::DescriptorBufferInfo::builder()
-            .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .offset(0)
-            .range(std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u64);
+        let perframe_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .offset(0)
+                .range(std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u64)
+                .build()
+        ];
 
-        let perdrawcall_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-            .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .offset(0)
-            .range(std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>() as u64);
+        let perdrawcall_storage_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .offset(0)
+                .range(std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>() as u64)
+                .build()
+        ];
         
-        let perdrawcall_vertex_blending_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-            .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-            .offset(0)
-            .range(std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject>() as u64);
+        let perdrawcall_vertex_blending_storage_buffer_info = [
+            vk::DescriptorBufferInfo::builder()
+                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
+                .offset(0)
+                .range(std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject>() as u64)
+            ];
 
         let write_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[perframe_buffer_info])
+                .buffer_info(&perframe_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[perdrawcall_storage_buffer_info])
+                .buffer_info(&perdrawcall_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(2)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .buffer_info(&[perdrawcall_vertex_blending_storage_buffer_info])
+                .buffer_info(&perdrawcall_vertex_blending_storage_buffer_info)
                 .build(),
         ];
 

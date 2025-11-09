@@ -389,51 +389,69 @@ impl RenderResource {
                 .set_layouts(&set_layouts);
             now_material.material_descriptor_set = rhi.allocate_descriptor_sets(&material_descriptor_set_alloc_info).unwrap()[0];
 
-            let material_uniform_buffer_info = vk::DescriptorBufferInfo::builder()
-                .buffer(now_material.material_uniform_buffer)
-                .offset(0)
-                .range(size_of::<MeshPerMaterialUniformBufferObject>() as u64);
+            let material_uniform_buffer_info = [
+                vk::DescriptorBufferInfo::builder()
+                    .buffer(now_material.material_uniform_buffer)
+                    .offset(0)
+                    .range(size_of::<MeshPerMaterialUniformBufferObject>() as u64)
+                    .build()
+            ];
 
-            let base_color_image_info = vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(now_material.base_color_image_view)
-                .sampler(rhi.get_or_create_mipmap_sampler(
-                    base_color_image_width,
-                    base_color_image_height,
-                    RHISamplerType::Nearest,
-                ).unwrap());
-            let metallic_roughness_image_info = vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(now_material.metallic_roughness_image_view)
-                .sampler(rhi.get_or_create_mipmap_sampler(
-                    metallic_roughness_image_width,
-                    metallic_roughness_image_height,
-                    RHISamplerType::Linear,
-                ).unwrap());
-            let normal_roughness_image_info = vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(now_material.normal_image_view)
-                .sampler(rhi.get_or_create_mipmap_sampler(
-                    normal_roughness_image_width,
-                    normal_roughness_image_height,
-                    RHISamplerType::Linear,
-                ).unwrap());
-            let occlusion_image_info = vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(now_material.occlusion_image_view)
-                .sampler(rhi.get_or_create_mipmap_sampler(
-                    occlusion_image_width,
-                    occlusion_image_height,
-                    RHISamplerType::Linear,
-                ).unwrap());
-            let emissive_image_info = vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(now_material.emissive_image_view)
-                .sampler(rhi.get_or_create_mipmap_sampler(
-                    emissive_image_width,
-                    emissive_image_height,
-                    RHISamplerType::Linear,
-                ).unwrap());
+            let base_color_image_info = [
+                vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(now_material.base_color_image_view)
+                    .sampler(rhi.get_or_create_mipmap_sampler(
+                        base_color_image_width,
+                        base_color_image_height,
+                        RHISamplerType::Nearest,
+                    ).unwrap())
+                    .build()
+            ];
+            let metallic_roughness_image_info = [
+                vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(now_material.metallic_roughness_image_view)
+                    .sampler(rhi.get_or_create_mipmap_sampler(
+                        metallic_roughness_image_width,
+                        metallic_roughness_image_height,
+                        RHISamplerType::Linear,
+                    ).unwrap())
+                    .build()
+            ];
+            let normal_roughness_image_info = [
+                vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(now_material.normal_image_view)
+                    .sampler(rhi.get_or_create_mipmap_sampler(
+                        normal_roughness_image_width,
+                        normal_roughness_image_height,
+                        RHISamplerType::Linear,
+                    ).unwrap())
+                    .build()
+            ];
+            let occlusion_image_info = [
+                vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(now_material.occlusion_image_view)
+                    .sampler(rhi.get_or_create_mipmap_sampler(
+                        occlusion_image_width,
+                        occlusion_image_height,
+                        RHISamplerType::Linear,
+                    ).unwrap())
+                    .build()
+            ];
+            let emissive_image_info = [
+                vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(now_material.emissive_image_view)
+                    .sampler(rhi.get_or_create_mipmap_sampler(
+                        emissive_image_width,
+                        emissive_image_height,
+                        RHISamplerType::Linear,
+                    ).unwrap())
+                    .build()
+            ];
 
             let mesh_descriptor_writes_info = [
                 vk::WriteDescriptorSet::builder()
@@ -441,42 +459,42 @@ impl RenderResource {
                     .dst_binding(0)
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(&[material_uniform_buffer_info])
+                    .buffer_info(&material_uniform_buffer_info)
                     .build(),
                 vk::WriteDescriptorSet::builder()
                     .dst_set(now_material.material_descriptor_set)
                     .dst_binding(1)
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(&[base_color_image_info])
+                    .image_info(&base_color_image_info)
                     .build(),
                 vk::WriteDescriptorSet::builder()
                     .dst_set(now_material.material_descriptor_set)
                     .dst_binding(2)
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(&[metallic_roughness_image_info])
+                    .image_info(&metallic_roughness_image_info)
                     .build(),
                 vk::WriteDescriptorSet::builder()
                     .dst_set(now_material.material_descriptor_set)
                     .dst_binding(3)
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(&[normal_roughness_image_info])
+                    .image_info(&normal_roughness_image_info)
                     .build(),
                 vk::WriteDescriptorSet::builder()
                     .dst_set(now_material.material_descriptor_set)
                     .dst_binding(4)
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(&[occlusion_image_info])
+                    .image_info(&occlusion_image_info)
                     .build(),
                 vk::WriteDescriptorSet::builder()
                     .dst_set(now_material.material_descriptor_set)
                     .dst_binding(5)
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(&[emissive_image_info])
+                    .image_info(&emissive_image_info)
                     .build(),
             ];
 
@@ -610,17 +628,19 @@ impl RenderResource {
             now_mesh.mesh_vertex_blending_descriptor_set =
                 rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info).unwrap()[0];
 
-            let mesh_vertex_joint_binding_storage_buffer_info = vk::DescriptorBufferInfo::builder()
-                .buffer(self.m_global_render_resource.borrow()._storage_buffer._global_null_descriptor_storage_buffer)
-                .range(1)
-                .build();
+            let mesh_vertex_joint_binding_storage_buffer_info = [
+                vk::DescriptorBufferInfo::builder()
+                    .buffer(self.m_global_render_resource.borrow()._storage_buffer._global_null_descriptor_storage_buffer)
+                    .range(1)
+                    .build()
+            ];
 
             let descriptor_writes = [
                 vk::WriteDescriptorSet::builder()
                     .dst_set(now_mesh.mesh_vertex_blending_descriptor_set)
                     .dst_binding(0)
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .buffer_info(&[mesh_vertex_joint_binding_storage_buffer_info])
+                    .buffer_info(&mesh_vertex_joint_binding_storage_buffer_info)
                     .build(),
             ];
             rhi.update_descriptor_sets(&descriptor_writes).unwrap();

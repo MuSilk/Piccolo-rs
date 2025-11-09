@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_COMBINE_UI}, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
 
 pub struct CombineUIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -49,27 +49,33 @@ impl CombineUIPass {
         rhi.pop_event(command_buffer);
     }
     pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, scene_input_attachment: vk::ImageView, ui_input_attachment: vk::ImageView) -> Result<()> {
-        let per_frame_scene_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-            .image_view(scene_input_attachment)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let per_frame_ui_input_attachment_info = vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-            .image_view(ui_input_attachment)
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        let per_frame_scene_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+                .image_view(scene_input_attachment)
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build()
+        ];
+        let per_frame_ui_input_attachment_info = [
+            vk::DescriptorImageInfo::builder()
+                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+                .image_view(ui_input_attachment)
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build()
+        ];
 
         let post_process_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[per_frame_scene_input_attachment_info])
+                .image_info(&per_frame_scene_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&[per_frame_ui_input_attachment_info])
+                .image_info(&per_frame_ui_input_attachment_info)
                 .build(),
         ];
         rhi.update_descriptor_sets(&post_process_descriptor_writes_info)?;
@@ -187,7 +193,7 @@ impl CombineUIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(_MAIN_CAMERA_SUBPASS_COMBINE_UI)
+            .subpass(MainCameraSubPass::CombineUI as u32)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

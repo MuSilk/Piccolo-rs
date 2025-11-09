@@ -1,13 +1,12 @@
 use std::{cell::{OnceCell, RefCell}, collections::{HashMap, HashSet}, ffi::CStr, fmt::Debug, os::raw::c_void, rc::{Rc, Weak}};
 
 use anyhow::{anyhow, Result};
-use vulkanalia::{loader::{LibloadingLoader, LIBRARY}, prelude::v1_0::*, vk::{ExtDebugUtilsExtension, KhrSurfaceExtension, KhrSwapchainExtension}, window::{self as vk_window}, Version};
+use vulkanalia::{Version, loader::{LIBRARY, LibloadingLoader}, prelude::v1_0::*, vk::{ExtDebugUtilsExtensionInstanceCommands, KhrSurfaceExtensionInstanceCommands, KhrSwapchainExtensionDeviceCommands}, window::{self as vk_window}};
 use winit::window::Window;
 use log::*;
 
 use crate::function::render::{interface::{rhi::{RHICreateInfo}, rhi_struct::{QueueFamilyIndices, RHIDepthImageDesc, RHISwapChainDesc, SwapChainSupportDetails}, vulkan::vulkan_util::{self, create_image_view}}, render_type::RHISamplerType};
 
-const VALIDATION_ENABLED: bool = cfg!(debug_assertions);
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
 const DEVICE_EXTENSIONS: &[vk::ExtensionName] = &[vk::KHR_SWAPCHAIN_EXTENSION.name];
 const PORTABILITY_MACOS_VERSION: Version = Version::new(1, 3, 216);
@@ -131,7 +130,7 @@ impl VulkanRHI {
             data.m_enable_debug_utils_label = false;
         }
 
-        let instance = create_instance(window, &entry, &mut data).unwrap();
+        let instance = create_instance(window, &entry, &mut data);
         initialize_debug_messenger(&instance, &mut data).unwrap();
         create_window_surface(&instance, window, &mut data).unwrap();
         initial_physical_device(&instance, &mut data).unwrap();
@@ -177,7 +176,7 @@ impl VulkanRHI {
             self.m_device.destroy_device(None);
             self.m_instance.destroy_surface_khr(self.m_data.m_surface, None);
 
-            if VALIDATION_ENABLED {
+            if self.m_data.m_enable_validation_layers {
                 self.m_instance.destroy_debug_utils_messenger_ext(self.m_data.m_debug_messenger, None);
             }
 
@@ -991,8 +990,8 @@ fn populate_debug_messenger_info(info: vk::DebugUtilsMessengerCreateInfoEXTBuild
         .user_callback(Some(debug_callback))
 }
 
-fn create_instance(_window: &Window, entry: &Entry, data: &mut VulkanRHIData) -> Result<Instance> {
-    if data.m_enable_validation_layers && !check_validation_layer_support(entry, data)? {
+fn create_instance(_window: &Window, entry: &Entry, data: &mut VulkanRHIData) -> Instance {
+    if data.m_enable_validation_layers && !check_validation_layer_support(entry, data).unwrap() {
         error!("validation layers requested, but not available!");
     }
 
@@ -1005,15 +1004,15 @@ fn create_instance(_window: &Window, entry: &Entry, data: &mut VulkanRHIData) ->
         .engine_version(vk::make_version(1, 0, 0))
         .api_version(data.m_vulkan_api_version);
 
-    let extensions = get_required_extensions(entry, data)?;
+    let extensions = get_required_extensions(entry, data).unwrap();
 
-    let flags = if cfg!(target_os = "macos") && entry.version()? >= PORTABILITY_MACOS_VERSION {
+    let flags = if cfg!(target_os = "macos") && entry.version().unwrap() >= PORTABILITY_MACOS_VERSION {
             vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
         } else {
             vk::InstanceCreateFlags::empty()
         };
 
-    let validation_layers = data.m_validation_layers.iter().map(|&layer| layer.as_ptr()).collect::<Vec<_>>();
+    let validation_layers = data.m_validation_layers.iter().map(|layer| layer.as_ptr()).collect::<Vec<_>>();
 
     let mut info = vk::InstanceCreateInfo::builder()
         .application_info(&application_info)
@@ -1028,11 +1027,9 @@ fn create_instance(_window: &Window, entry: &Entry, data: &mut VulkanRHIData) ->
         info = info.push_next(&mut debug_info);
     }
 
-    let instance = unsafe {
-        entry.create_instance(&info, None)?
-    };
-
-    Ok(instance)
+    unsafe {
+        entry.create_instance(&info, None).unwrap()
+    }
 }
 
 fn initialize_debug_messenger(instance: &Instance, data: &mut VulkanRHIData) -> Result<()> {

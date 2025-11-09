@@ -314,15 +314,15 @@ checksum = "c00d31b1d19317b4777ec879192d3745bd97d05262b4b19cb1dda284b9d22f19"
 
 [[package]]
 name = "cocoa"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6140449f97a6e97f9511815c5632d84c8aacf8ac271ad77c559218161a1373c"
+checksum = "ad36507aeb7e16159dfe68db81ccc27571c3ccd4b76fb2fb72fc59e7a4b1b64c"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.10.0",
  "block",
  "cocoa-foundation",
- "core-foundation",
- "core-graphics",
+ "core-foundation 0.10.1",
+ "core-graphics 0.24.0",
  "foreign-types",
  "libc",
  "objc",
@@ -330,15 +330,14 @@ dependencies = [
 
 [[package]]
 name = "cocoa-foundation"
-version = "0.1.2"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c6234cbb2e4c785b456c0644748b1ac416dd045799740356f8363dfe00c93f7"
+checksum = "81411967c50ee9a1fc11365f8c585f863a22a9697c89239c452292c40ba79b0d"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.10.0",
  "block",
- "core-foundation",
- "core-graphics-types",
- "libc",
+ "core-foundation 0.10.1",
+ "core-graphics-types 0.2.0",
  "objc",
 ]
 
@@ -378,6 +377,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-foundation"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -390,8 +399,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c07782be35f9e1140080c6b96f0d44b739e2278479f64e02fdab4e32dfd8b081"
 dependencies = [
  "bitflags 1.3.2",
- "core-foundation",
- "core-graphics-types",
+ "core-foundation 0.9.4",
+ "core-graphics-types 0.1.3",
+ "foreign-types",
+ "libc",
+]
+
+[[package]]
+name = "core-graphics"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa95a34622365fa5bbf40b20b75dba8dfa8c94c734aea8ac9a5ca38af14316f1"
+dependencies = [
+ "bitflags 2.10.0",
+ "core-foundation 0.10.1",
+ "core-graphics-types 0.2.0",
  "foreign-types",
  "libc",
 ]
@@ -403,7 +425,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45390e6114f68f718cc7a830514a96f903cccd70d02a8f6d9f643ac4ba45afaf"
 dependencies = [
  "bitflags 1.3.2",
- "core-foundation",
+ "core-foundation 0.9.4",
+ "libc",
+]
+
+[[package]]
+name = "core-graphics-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d44a101f213f6c4cdc1853d4b78aef6db6bdfa3468798cc1d9912f4735013eb"
+dependencies = [
+ "bitflags 2.10.0",
+ "core-foundation 0.10.1",
  "libc",
 ]
 
@@ -1033,13 +1066,13 @@ dependencies = [
 
 [[package]]
 name = "metal"
-version = "0.27.0"
+version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c43f73953f8cbe511f021b58f18c3ce1c3d1ae13fe953293e13345bf83217f25"
+checksum = "00c15a6f673ff72ddcc22394663290f870fb224c1bfce55734a75c414150e605"
 dependencies = [
  "bitflags 2.10.0",
  "block",
- "core-graphics-types",
+ "core-graphics-types 0.2.0",
  "foreign-types",
  "log",
  "objc",
@@ -1221,7 +1254,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
 dependencies = [
  "malloc_buf",
- "objc_exception",
 ]
 
 [[package]]
@@ -1425,15 +1457,6 @@ dependencies = [
  "objc2",
  "objc2-core-location",
  "objc2-foundation",
-]
-
-[[package]]
-name = "objc_exception"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad970fb455818ad6cba4c122ad012fae53ae8b4795f86378bce65e4f6bab2ca4"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -2319,9 +2342,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vulkanalia"
-version = "0.29.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11c9d6ec9a8e29b3c5d7f1719bf790323139b4f9aa36cef692c1a95ca5fa9b3c"
+checksum = "8131e26cc094996df8038e801724438c09874b1bc420644ef3a02bf96de911ed"
 dependencies = [
  "cocoa",
  "libloading",
@@ -2333,9 +2356,9 @@ dependencies = [
 
 [[package]]
 name = "vulkanalia-sys"
-version = "0.29.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4078214d64cad49dcf6362e5a8f2d8db3758704751ab636979fbc2a729a8ff74"
+checksum = "93c2f4617999abdf24672d7a5a54e800f4b2c6fe2fe6744411026aefa4116859"
 dependencies = [
  "bitflags 1.3.2",
 ]
@@ -2829,8 +2852,8 @@ dependencies = [
  "calloop",
  "cfg_aliases",
  "concurrent-queue",
- "core-foundation",
- "core-graphics",
+ "core-foundation 0.9.4",
+ "core-graphics 0.23.2",
  "cursor-icon",
  "dpi",
  "js-sys",

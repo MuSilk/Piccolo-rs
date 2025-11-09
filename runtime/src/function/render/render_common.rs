@@ -168,6 +168,7 @@ impl Default for MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBuffe
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Default)]
 pub struct MeshInefficientPickPerframeStorageBufferObject {
     pub proj_view_matrix: Matrix4x4,
@@ -175,6 +176,7 @@ pub struct MeshInefficientPickPerframeStorageBufferObject {
     pub rt_height: u32,
 }
 
+#[repr(C)]
 pub struct MeshInefficientPickPerdrawcallStorageBufferObject {
     pub model_matrix: [Matrix4x4; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
     pub node_ids: [u32; MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT],
@@ -191,6 +193,7 @@ impl Default for MeshInefficientPickPerdrawcallStorageBufferObject {
     }
 }
 
+#[repr(C)]
 pub struct MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject {
     pub joint_matrices: [Matrix4x4; S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT * S_MESH_VERTEX_BLENDING_MAX_JOINT_COUNT],
 }

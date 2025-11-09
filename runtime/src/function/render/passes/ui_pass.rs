@@ -5,7 +5,7 @@ use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{VulkanRHI, K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER}, render_pass::{Descriptor, RenderPass, RenderPipelineBase, _MAIN_CAMERA_SUBPASS_UI}, render_type::RHISamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, ui::window_ui::WindowUI}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -94,19 +94,22 @@ impl UIPass {
         }
         self.font_texture = upload_font_texture(&rhi, ctx.fonts())?;
 
-        let text_sampler_texture_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.font_texture.view)
-            .sampler(*rhi.get_or_create_default_sampler(
-                RHISamplerType::Linear
-            ).unwrap());
+        let text_sampler_texture_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.font_texture.view)
+                .sampler(*rhi.get_or_create_default_sampler(
+                    RHISamplerType::Linear
+                ).unwrap())
+                .build()
+        ];
 
         let descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[text_sampler_texture_info])
+                .image_info(&text_sampler_texture_info)
                 .build(),
         ];
 
@@ -400,7 +403,7 @@ impl UIPass {
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(_MAIN_CAMERA_SUBPASS_UI)
+            .subpass(MainCameraSubPass::UI as u32)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];
@@ -424,19 +427,22 @@ impl UIPass {
 
         self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
 
-        let text_sampler_texture_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.font_texture.view)
-            .sampler(*rhi.get_or_create_default_sampler(
-                RHISamplerType::Linear
-            ).unwrap());
+        let text_sampler_texture_info = [
+            vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.font_texture.view)
+                .sampler(*rhi.get_or_create_default_sampler(
+                    RHISamplerType::Linear
+                ).unwrap())
+                .build()
+        ];
 
         let descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&[text_sampler_texture_info])
+                .image_info(&text_sampler_texture_info)
                 .build(),
         ];
 
