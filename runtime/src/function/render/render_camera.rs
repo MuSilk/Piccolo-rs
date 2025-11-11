@@ -119,14 +119,13 @@ impl RenderCamera {
         self.m_current_type = camera_type;
     }
 
-    pub fn set_main_view_matrix(&mut self, view_matrix: Matrix4x4, camera_type: RenderCameraType) {
+    pub fn set_main_view_matrix(&mut self, view_matrix: Matrix4x4) {
         let _guard = self.m_view_matrix_mutex.lock().unwrap();
-        self.m_current_type = camera_type;
         self.m_view_matrices[Self::MAIN_VIEW_MATRIX_INDEX as usize] = view_matrix;
 
         let s = Vector3::new(view_matrix[0][0], view_matrix[1][0], view_matrix[2][0]);
         let u = Vector3::new(view_matrix[0][1], view_matrix[1][1], view_matrix[2][1]);
-        let f = Vector3::new(view_matrix[0][2], -view_matrix[1][2], -view_matrix[2][2]);
+        let f = Vector3::new(-view_matrix[0][2], -view_matrix[1][2], -view_matrix[2][2]);
         self.m_position = s *(-view_matrix[3][0]) + u * (-view_matrix[3][1]) + f * view_matrix[3][2];
     }
 

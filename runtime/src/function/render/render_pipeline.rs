@@ -118,7 +118,7 @@ impl RenderPipeline {
         })
     }
 
-    pub fn forward_render(&mut self, render_resource: &mut RenderResource) -> Result<()> {
+    pub fn forward_render(&self, render_resource: &mut RenderResource) -> Result<()> {
         let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
         render_resource.reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
         {

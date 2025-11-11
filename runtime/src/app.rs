@@ -1,7 +1,7 @@
 use std::{cell::RefCell, env, rc::Rc};
 
 use anyhow::anyhow;
-use winit::{application::ApplicationHandler, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
+use winit::{application::ApplicationHandler, event::{DeviceEvent, DeviceId, Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
 
 use crate::{engine::Engine, function::{framework::{scene::scene::SceneTrait}, global::global_context::RuntimeGlobalContext}};
 
@@ -103,6 +103,16 @@ impl ApplicationHandler for App {
                 let window_system = RuntimeGlobalContext::get_window_system().borrow();
                 window_system.on_mouse_wheel(device_id, delta, phase);
             }
+            _ => {}
+        }
+    }
+
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, device_id: DeviceId, event: DeviceEvent) {
+        match event {
+            DeviceEvent::MouseMotion  { delta } => {
+                let window_system = RuntimeGlobalContext::get_window_system().borrow();
+                window_system.on_mouse_motion(device_id, delta);
+            },
             _ => {}
         }
     }

@@ -2,7 +2,7 @@ use std::{any::{TypeId}, cell::{RefCell}, collections::{HashMap, HashSet}, hash:
 
 use itertools::Itertools;
 
-use crate::{function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectDesc}}};
+use crate::{function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, global::global_context::RuntimeGlobalContext, render::{render_object::GameObjectDesc}}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -169,6 +169,9 @@ impl Scene {
         self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
+}
+
+impl Scene {
     pub fn tick_transform_components(&mut self, delta_time: f32) {
         self.query_mut::<TransformComponent>().for_each(|mut transform| {
             transform.tick(delta_time);
@@ -197,7 +200,24 @@ impl Scene {
                 logic_swap_data.borrow_mut().add_dirty_game_object(&GameObjectDesc::new(mesh.m_component.m_parent_object, dirty_mesh_parts));
             }
         });
-        
+    }
+
+    pub fn tick_camera_components(&mut self, delta_time: f32) {
+        self.query_pair_mut::<CameraComponent, CharacterComponent>()
+            .for_each(|(mut camera, mut character)|
+        {
+            match &mut camera.m_camera_res.m_parameter {
+                CameraParameter::FirstPerson(_) => {
+                    camera.tick_first_person_camera(&mut character);
+                }
+                CameraParameter::ThirdPerson(_) => {
+                    camera.tick_third_person_camera(&mut character);
+                }
+                CameraParameter::Free(_) => {
+                    camera.tick_free_camera(delta_time);
+                }
+            }
+        })
     }
 }
 

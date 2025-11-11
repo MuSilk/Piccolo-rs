@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, ops::{Add, AddAssign, Div, Mul, MulAssign, Sub}};
+use std::{f32::consts::PI, ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign}};
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,9 @@ impl Vector3 {
     pub const UNIT_X: Vector3 = Vector3::new(1.0, 0.0, 0.0);
     pub const UNIT_Y: Vector3 = Vector3::new(0.0, 1.0, 0.0);
     pub const UNIT_Z: Vector3 = Vector3::new(0.0, 0.0, 1.0);
+    pub const NEGATIVE_UNIT_X: Vector3 = Vector3::new(-1.0, 0.0, 0.0);
+    pub const NEGATIVE_UNIT_Y: Vector3 = Vector3::new(0.0, -1.0, 0.0);
+    pub const NEGATIVE_UNIT_Z: Vector3 = Vector3::new(0.0, 0.0, -1.0);
     pub const ZERO:   Vector3 = Vector3::new(0.0, 0.0, 0.0);
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Vector3 { x, y, z }
@@ -114,6 +117,20 @@ impl Vector3 {
     }
 }
 
+impl Neg for Vector3 {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Vector3::new(-self.x, -self.y, -self.z)
+    }
+}
+
+impl Neg for &Vector3 {
+    type Output = Vector3;
+    fn neg(self) -> Self::Output {
+        Vector3::new(-self.x, -self.y, -self.z)
+    }
+}
+
 impl Add<Vector3> for Vector3 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
@@ -206,6 +223,23 @@ impl AddAssign<&Vector3> for Vector3 {
         self.z += rhs.z;
     }
 }
+
+impl SubAssign<Vector3> for Vector3 {
+    fn sub_assign(&mut self, rhs: Vector3) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+        self.z -= rhs.z;
+    }
+}
+
+impl SubAssign<&Vector3> for Vector3 {
+    fn sub_assign(&mut self, rhs: &Vector3) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+        self.z -= rhs.z;
+    }
+}
+
 
 impl MulAssign<f32> for Vector3 {
     fn mul_assign(&mut self, rhs: f32) {

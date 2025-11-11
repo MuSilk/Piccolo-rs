@@ -1,4 +1,4 @@
-use crate::{core::math::{matrix4::Matrix4x4, transform::{Transform}, vector3::Vector3}, engine::G_IS_EDITOR_MODE, function::framework::{component::component::{Component, ComponentTrait}, object::object_id_allocator::GObjectID}};
+use crate::{core::math::{matrix4::Matrix4x4, transform::Transform, vector3::Vector3}, engine::Engine, function::framework::{component::component::{Component, ComponentTrait}, object::object_id_allocator::GObjectID}};
 
 
 #[derive(Clone)]
@@ -38,14 +38,6 @@ impl ComponentTrait for TransformComponent {
     fn clone_box(&self) -> Box<dyn ComponentTrait> {
         Box::new(self.clone())
     }
-
-    fn tick(&mut self, _delta_time: f32) {
-        (self.m_current_index, self.m_next_index) = (self.m_next_index, self.m_current_index);
-
-        if unsafe { G_IS_EDITOR_MODE} {
-            self.m_transform_buffer[self.m_next_index] = self.m_transform.clone();
-        }
-    }
 }
 
 impl TransformComponent {
@@ -64,5 +56,13 @@ impl TransformComponent {
         self.m_transform_buffer[self.m_next_index].set_position(position);
         self.m_transform.set_position(position);
         self.m_component.m_is_dirty = true;
+    }
+
+    pub fn tick(&mut self, _delta_time: f32) {
+        (self.m_current_index, self.m_next_index) = (self.m_next_index, self.m_current_index);
+
+        if Engine::is_editor_mode() {
+            self.m_transform_buffer[self.m_next_index] = self.m_transform.clone();
+        }
     }
 }

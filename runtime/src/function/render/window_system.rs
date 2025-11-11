@@ -1,7 +1,7 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::Cell, collections::HashMap, rc::Rc};
 
 use anyhow::Result;
-use winit::{dpi::{LogicalSize, PhysicalPosition, PhysicalSize}, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, event_loop::ActiveEventLoop, window::Window};
+use winit::{dpi::{LogicalSize, PhysicalPosition, PhysicalSize}, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, event_loop::ActiveEventLoop, window::{CursorGrabMode, Window}};
 
 pub struct WindowCreateInfo{
     pub width: u32,
@@ -25,20 +25,22 @@ type OnKeyFunc = dyn Fn(DeviceId, &KeyEvent, bool);
 type OnMouseButtonFunc = dyn Fn(DeviceId, ElementState, MouseButton);
 type OnCursorPosFunc = dyn Fn(DeviceId, PhysicalPosition<f64>);
 type OnMouseWheelFunc = dyn Fn(DeviceId, MouseScrollDelta, TouchPhase);
-type OnWindowSize = dyn Fn(PhysicalSize<u32>);
+type OnWindowSizeFunc = dyn Fn(PhysicalSize<u32>);
+type OnMouseMotionFunc = dyn Fn(DeviceId, (f64, f64));
 
 #[derive(Default)]
 pub struct WindowSystem{
     pub m_window: Option<Rc<Window>>,
     m_width: u32,
     m_height: u32,
-    _m_is_focus_mode: bool,
+    m_is_focus_mode: Cell<bool>,
     m_minimized: bool,
 
     m_on_key_func: Vec<Box<OnKeyFunc>>,
     m_on_mouse_button_func: Vec<Box<OnMouseButtonFunc>>,
     m_on_cursor_pos_func: Vec<Box<OnCursorPosFunc>>,
     m_on_mouse_wheel_func: Vec<Box<OnMouseWheelFunc>>,
+    m_on_mouse_motion_func: Vec<Box<OnMouseMotionFunc>>,
 
     m_is_mouse_button_down: HashMap<MouseButton, bool>,
 }
@@ -73,6 +75,7 @@ impl WindowSystem {
         let physical_size = self.m_window.as_ref().unwrap().inner_size();
         (physical_size.width, physical_size.height)
     }
+    
     pub fn request_redraw(&self) {
         self.m_window.as_ref().unwrap().request_redraw();
     }
@@ -109,6 +112,13 @@ impl WindowSystem {
         self.m_on_mouse_wheel_func.push(Box::new(f));
     }
 
+    pub fn register_on_mouse_motion<F>(&mut self, f: F) 
+    where
+        F: 'static + Fn(DeviceId, (f64, f64)),
+    {
+        self.m_on_mouse_motion_func.push(Box::new(f));
+    }
+
     pub fn on_window_size(&mut self, size: PhysicalSize<u32>) {
         if size.width == 0 || size.height == 0 {
             self.m_minimized = true;
@@ -136,6 +146,26 @@ impl WindowSystem {
 
     pub fn on_cursor_pos(&self, device_id: DeviceId, physical_position: PhysicalPosition<f64>) {
         self.m_on_cursor_pos_func.iter().for_each(|f| f(device_id, physical_position));
+    }
+
+    pub fn on_mouse_motion(&self, device_id: DeviceId, mouse_motion: (f64, f64)) {
+        self.m_on_mouse_motion_func.iter().for_each(|f| f(device_id, mouse_motion));
+    }
+
+    pub fn get_focus_mode(&self) -> bool {
+        self.m_is_focus_mode.get()
+    }
+
+    pub fn set_focus_mode(&self, mode: bool) {
+        self.m_is_focus_mode.set(mode);
+        if mode {
+            self.m_window.as_ref().unwrap().set_cursor_grab(CursorGrabMode::Locked).unwrap();
+            self.m_window.as_ref().unwrap().set_cursor_visible(false);
+        }
+        else{
+            self.m_window.as_ref().unwrap().set_cursor_grab(CursorGrabMode::None).unwrap();
+            self.m_window.as_ref().unwrap().set_cursor_visible(true);
+        }
     }
 
 }

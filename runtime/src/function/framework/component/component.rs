@@ -3,7 +3,6 @@ use std::{any::{Any}};
 use crate::function::framework::{object::object_id_allocator::GObjectID};
 
 pub trait ComponentTrait {
-    fn tick(&mut self, _delta_time: f32) {}
 
     fn is_dirty(&self) -> bool {
         self.get_component().m_is_dirty

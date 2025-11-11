@@ -2,8 +2,8 @@ use std::{cell::RefCell, rc::{Rc}};
 
 use bitflags::bitflags;
 use log::info;
-use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::G_IS_EDITOR_MODE, function::global::global_context::RuntimeGlobalContext};
-use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, keyboard::{KeyCode, PhysicalKey}};
+use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::Engine, function::global::global_context::RuntimeGlobalContext};
+use winit::{event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, keyboard::{KeyCode, PhysicalKey}};
 
 use crate::editor_global_context::EditorGlobalContext;
 
@@ -52,14 +52,19 @@ impl Default for EditorInputManager {
 }
 
 impl EditorInputManager {
+
+    pub fn reset_editor_command(&mut self) {
+        self.m_editor_command = EditorCommand::empty();
+    }
     pub fn set_engine_window_size(&mut self, size: Vector2) {
         self.m_engine_window_size = size;
     }
 }
 
 impl EditorInputManager {
-    fn on_cursor_pos(&mut self, _device_id: DeviceId, position: PhysicalPosition<f64>) {
-        if !unsafe{G_IS_EDITOR_MODE} {
+
+    fn on_mouse_motion(&mut self, _device_id: DeviceId, delta: (f64, f64)) { 
+        if !Engine::is_editor_mode() {
             return;
         }
         let angular_velocity = 180.0 / (self.m_engine_window_size.x).max(self.m_engine_window_size.y);
@@ -71,8 +76,8 @@ impl EditorInputManager {
                 let camera = scene_manager.get_editor_camera();
                 let camera = camera.upgrade().unwrap();
                 camera.borrow_mut().rotate_camera(&(Vector2::new(
-                    position.y as f32 - self.m_mouse_y,
-                    position.x as f32 - self.m_mouse_x
+                    delta.1 as f32,
+                    delta.0 as f32
                 ) * angular_velocity));
             }
             else if window_system.borrow().is_mouse_button_down(MouseButton::Left) {
@@ -82,12 +87,10 @@ impl EditorInputManager {
 
             }
         }
-        self.m_mouse_x = position.x as f32;
-        self.m_mouse_y = position.y as f32;
-    }
+    }  
 
     fn on_cursor_scroll(&mut self, _device_id: DeviceId, delta: MouseScrollDelta, _phase: TouchPhase) {
-        if !unsafe{G_IS_EDITOR_MODE} {
+        if !Engine::is_editor_mode() {
             return;
         }
 
@@ -134,7 +137,7 @@ impl EditorInputManager {
 
     fn on_mouse_button(&mut self, _device_id: DeviceId, state: ElementState, button: MouseButton) {
         
-        if !unsafe{G_IS_EDITOR_MODE} {
+        if !Engine::is_editor_mode() {
             return;
         }
         if self.m_cursor_on_axis != 3 {
@@ -159,7 +162,7 @@ impl EditorInputManager {
     }
 
     fn on_key(&mut self, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) { 
-        if unsafe{G_IS_EDITOR_MODE} {
+        if Engine::is_editor_mode() {
             self.on_key_editor_mode(device_id, event, is_synthetic);
         }
     }
@@ -251,13 +254,45 @@ impl EditorInputManager {
         pos.x <= self.m_mouse_x && self.m_mouse_x <= pos.x + size.x && 
         pos.y <= self.m_mouse_y && self.m_mouse_y <= pos.y + size.y
     }
+
+    fn process_editor_command(&self) {
+        let camera_speed = self.m_camera_speed;
+        let editor_global = EditorGlobalContext::global().borrow();
+        let scene_manager = editor_global.m_scene_manager.borrow();
+        let camera = scene_manager.get_editor_camera();
+        let camera = camera.upgrade().unwrap();
+        let camera_rotate = camera.borrow().rotation().conjugate();
+        let mut camera_relative_pos = Vector3::new(0.0, 0.0, 0.0);
+        
+        if self.m_editor_command.contains(EditorCommand::camera_forward) {
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, camera_speed, 0.0); 
+        }
+        if self.m_editor_command.contains(EditorCommand::camera_back) {
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, -camera_speed, 0.0);
+        }
+        if self.m_editor_command.contains(EditorCommand::camera_left) {
+            camera_relative_pos += camera_rotate * Vector3::new(-camera_speed, 0.0, 0.0);
+        }
+        if self.m_editor_command.contains(EditorCommand::camera_right) {
+            camera_relative_pos += camera_rotate * Vector3::new(camera_speed, 0.0, 0.0);
+        }
+        if self.m_editor_command.contains(EditorCommand::camera_up) {
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, 0.0, camera_speed);
+        }
+        if self.m_editor_command.contains(EditorCommand::camera_down) {
+            camera_relative_pos += camera_rotate * Vector3::new(0.0, 0.0, -camera_speed);
+        }
+        camera.borrow_mut().move_camera(&camera_relative_pos);
+    }
+
+    pub fn tick(&self) {
+        self.process_editor_command();
+    }
 }
 
 pub trait EditorInputManagerExt {
     fn initialize(&self);
-    fn tick(&self, delta_time: f32);
     fn register_input(&self);
-    fn process_editor_command(&self);
 }
 
 impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
@@ -267,16 +302,12 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
         self.register_input();
     }
 
-    fn tick(&self, _delta_time: f32) {
-        self.process_editor_command();
-    }
-
     fn register_input(&self) {
         let mut window_system = RuntimeGlobalContext::get_window_system().borrow_mut();
         let this = Rc::downgrade(&self);
-        window_system.register_on_cursor_pos_func(move |device_id, position| {
+        window_system.register_on_mouse_motion(move |device_id, delta| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_cursor_pos(device_id, position);
+            this.borrow_mut().on_mouse_motion(device_id, delta);
         });
         let this = Rc::downgrade(&self);
         window_system.register_on_key_func(move |device_id, event, is_synthetic| {
@@ -293,36 +324,5 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
             let this = this.upgrade().unwrap();
             this.borrow_mut().on_cursor_scroll(device_id, delta, phase);
         });
-    }
-
-    fn process_editor_command(&self) {
-        let camera_speed = self.borrow().m_camera_speed;
-        let editor_global = EditorGlobalContext::global().borrow();
-        let scene_manager = editor_global.m_scene_manager.borrow();
-        let camera = scene_manager.get_editor_camera();
-        let camera = camera.upgrade().unwrap();
-        let mut editor_camera =  camera.borrow_mut();
-        let camera_rotate = editor_camera.rotation().conjugate();
-        let mut camera_relative_pos = Vector3::new(0.0, 0.0, 0.0);
-        
-        if self.borrow().m_editor_command.contains(EditorCommand::camera_forward) {
-            camera_relative_pos += camera_rotate * Vector3::new(0.0, camera_speed, 0.0); 
-        }
-        if self.borrow().m_editor_command.contains(EditorCommand::camera_back) {
-            camera_relative_pos += camera_rotate * Vector3::new(0.0, -camera_speed, 0.0);
-        }
-        if self.borrow().m_editor_command.contains(EditorCommand::camera_left) {
-            camera_relative_pos += camera_rotate * Vector3::new(-camera_speed, 0.0, 0.0);
-        }
-        if self.borrow().m_editor_command.contains(EditorCommand::camera_right) {
-            camera_relative_pos += camera_rotate * Vector3::new(camera_speed, 0.0, 0.0);
-        }
-        if self.borrow().m_editor_command.contains(EditorCommand::camera_up) {
-            camera_relative_pos += camera_rotate * Vector3::new(0.0, 0.0, camera_speed);
-        }
-        if self.borrow().m_editor_command.contains(EditorCommand::camera_down) {
-            camera_relative_pos += camera_rotate * Vector3::new(0.0, 0.0, -camera_speed);
-        }
-        editor_camera.move_camera(&camera_relative_pos);
     }
 }

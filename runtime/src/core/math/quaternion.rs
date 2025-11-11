@@ -1,7 +1,7 @@
 use std::ops::Mul;
 use serde::{Deserialize, Serialize};
 
-use crate::core::math::{matrix4::Matrix4x4, vector3::Vector3};
+use crate::core::math::{matrix3::Matrix3x3, matrix4::Matrix4x4, vector3::Vector3};
 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -18,6 +18,7 @@ impl Quaternion {
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Quaternion { x, y, z, w }
     }
+    
     pub const fn identity() -> Self {
         Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
     }
@@ -48,6 +49,7 @@ impl Quaternion {
     pub const fn conjugate(&self) -> Self {
         Quaternion { x: -self.x, y: -self.y, z: -self.z, w: self.w }
     }
+    
     pub fn from_angle_axis(angle: f32, axis: &Vector3) -> Self {
         let half_angle = angle * 0.5;
         let (s, c) = half_angle.sin_cos();
@@ -58,6 +60,56 @@ impl Quaternion {
             w: c,
         }
     }
+
+
+    pub fn from_axes(x_axis: &Vector3, y_axis: &Vector3, z_axis: &Vector3) -> Self {
+        let rot = Matrix3x3::from_columns(
+            [x_axis.x, x_axis.y, x_axis.z],
+            [y_axis.x, y_axis.y, y_axis.z],
+            [z_axis.x, z_axis.y, z_axis.z],
+        );
+        Self::from_rotation_matrix(&rot)
+    }
+
+
+    pub fn from_rotation_matrix(rotation: &Matrix3x3) -> Self {
+        let trace = rotation[0][0] + rotation[1][1] + rotation[2][2];
+        if trace > 0.0 {
+            let root = (trace + 1.0).sqrt();
+            let w = 0.5 * root;
+            let root = 0.5 / root;
+            Self::new(
+                (rotation[1][2] - rotation[2][1]) * root, 
+                (rotation[2][0] - rotation[0][2]) * root,
+                (rotation[0][1] - rotation[1][0]) * root, 
+                w
+            )
+        }
+        else{
+            let i_next = [1, 2, 0];
+            let mut i = 0;
+            if rotation[1][1] > rotation[0][0] {
+                i = 1;
+            }
+            if rotation[2][2] > rotation[i][i] {
+                i = 2;
+            }
+            let j = i_next[i];
+            let k = i_next[j];
+
+            let root = (rotation[i][i] - rotation[j][j] - rotation[k][k] + 1.0).sqrt();
+            let mut res = Quaternion::default();
+            let apk_quat = [&mut res.x, &mut res.y, &mut res.z];
+            *apk_quat[i] = root * 0.5;
+            let root = 0.5 / root;
+            res.w = (rotation[j][k] - rotation[k][j]) * root;
+            *apk_quat[j] = (rotation[i][j] + rotation[j][i]) * root;
+            *apk_quat[k] = (rotation[i][k] + rotation[k][i]) * root;
+            res
+        }
+    }
+
+
 
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt()

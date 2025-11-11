@@ -5,7 +5,7 @@ use winit::event_loop::ActiveEventLoop;
 
 use crate::{function::global::global_context::RuntimeGlobalContext};
 
-pub static mut G_IS_EDITOR_MODE: bool = false;
+static mut G_IS_EDITOR_MODE: bool = false;
 
 pub struct Engine {
     m_is_quit: bool,
@@ -60,20 +60,29 @@ impl Engine {
         RuntimeGlobalContext::get_window_system().borrow().set_title(&format!("Editor - FPS: {}", self.m_fps));
         Ok(!RuntimeGlobalContext::get_window_system().borrow().should_close())
     }
+
+    pub fn is_editor_mode() -> bool {
+        unsafe {G_IS_EDITOR_MODE}
+    }
+
+    pub fn set_editor_mode(value: bool) {
+        unsafe {G_IS_EDITOR_MODE = value;}
+    }
 }
 
 impl Engine {
     fn renderer_tick(delta_time: f32) -> Result<()>{
         let window_size = RuntimeGlobalContext::get_window_system().borrow().get_window_size();
-        RuntimeGlobalContext::get_render_system().borrow_mut().update_engine_content_viewport(
+        RuntimeGlobalContext::get_render_system().borrow().update_engine_content_viewport(
             0.0, 0.0, window_size.0 as f32,  window_size.1 as f32
         );
-        RuntimeGlobalContext::get_render_system().borrow_mut().tick(delta_time)?;
+        RuntimeGlobalContext::get_render_system().borrow().tick(delta_time)?;
         Ok(())
     }
 
     fn logical_tick(delta_time: f32) {
         RuntimeGlobalContext::get_world_manager().borrow_mut().tick(delta_time);
+        RuntimeGlobalContext::get_input_system().borrow_mut().tick(delta_time);
     }
 
     const S_FPS_ALPHA: f32 = 1.0 / 100.0;

@@ -2,10 +2,11 @@ use std::{cell::{RefCell}, path::Path, rc::Rc};
 
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{function::{framework::world::world_manager::WorldManager, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 #[derive(Default)]
 pub struct RuntimeGlobalContext {
+    m_input_system: Rc<RefCell<InputSystem>>,
     m_asset_manager: Rc<RefCell<AssetManager>>,
     m_config_manager: Rc<RefCell<ConfigManager>>,
     m_world_manager: Rc<RefCell<WorldManager>>,
@@ -42,6 +43,7 @@ impl RuntimeGlobalContext {
         unsafe{
             let ctx = G_RUNTIME_GLOBAL_CONTEXT.as_mut().unwrap();
             ctx.m_window_system.borrow_mut().initialize(event_loop, WindowCreateInfo::default()).unwrap();
+            ctx.m_input_system.initialize();
 
             let render_system = RenderSystem::create(&RenderSystemCreateInfo {
                 window_system: &ctx.m_window_system.borrow(),
@@ -60,6 +62,10 @@ impl RuntimeGlobalContext {
         self.m_render_system.as_ref().unwrap().borrow().get_rhi().borrow().wait_idle().unwrap();
         self.m_debugdraw_manager.as_ref().unwrap().borrow_mut().destroy();
         self.m_render_system.as_ref().unwrap().borrow().destroy().unwrap();
+    }
+
+    pub fn get_input_system() -> &'static Rc<RefCell<InputSystem>> {
+        &Self::global().m_input_system
     }
 
     pub fn get_window_system() -> &'static Rc<RefCell<WindowSystem>> {

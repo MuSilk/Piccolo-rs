@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use runtime::{core::{algorithm::noise, math::{transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent, transform::transform_component::TransformComponent}, scene::scene::Scene}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
+use runtime::{core::{algorithm::noise, math::{transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, scene::scene::Scene}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
 
 use crate::{block::{BLOCK_DIRT, BLOCK_GRASS, BLOCK_STONE}, block_res::BlockRes, chunk::Chunk};
 

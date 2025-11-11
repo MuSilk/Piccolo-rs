@@ -1,6 +1,6 @@
-use std::{cell::RefCell};
+use std::cell::{RefCell};
 
-use runtime::function::framework::{component::component::ComponentTrait, scene::scene::SceneTrait};
+use runtime::{engine::Engine, function::framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait}, scene::scene::SceneTrait}};
 
 use crate::world::World;
 
@@ -20,12 +20,21 @@ impl Scene {
 impl SceneTrait for Scene {
     fn load(&mut self){
 
-        let object_id  = self.scene.spawn();
+        let object  = self.scene.spawn();
         let world = World::new_box(&mut self.scene);
         let components = vec![
             RefCell::new(world as Box<dyn ComponentTrait>),
         ];
-        self.scene.create_object(object_id, components);
+        self.scene.create_object(object, components);
+
+        let object = self.scene.spawn();
+        let character = Box::new(CharacterComponent::new());
+        let camera = Box::new(CameraComponent::new());
+        let components = vec![
+            RefCell::new(character as Box<dyn ComponentTrait>),
+            RefCell::new(camera as Box<dyn ComponentTrait>),
+        ];
+        self.scene.create_object(object, components);
 
         self.scene.set_loaded(true);
     }
@@ -40,6 +49,10 @@ impl SceneTrait for Scene {
         }
         self.scene.tick_transform_components(delta_time);
         self.scene.tick_mesh_components(delta_time);
+
+        if !Engine::is_editor_mode() {
+            self.scene.tick_camera_components(delta_time);
+        }
     }
 
     fn get_url(&self) -> String {

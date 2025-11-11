@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use runtime::{app, engine::{Engine, G_IS_EDITOR_MODE}, function::{global::global_context::RuntimeGlobalContext, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
+use runtime::{app, engine::{Engine}, function::{global::global_context::RuntimeGlobalContext, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
 
-use crate::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, editor_input_manager::EditorInputManagerExt, editor_ui::EditorUI};
+use crate::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, editor_ui::EditorUI};
 
 
 
@@ -22,7 +22,7 @@ impl Default for Editor {
 
 impl app::System for Editor {
     fn initialize(&mut self, engine_runtime: &Rc<RefCell<Engine>>){
-        unsafe{ G_IS_EDITOR_MODE = true; }
+        Engine::set_editor_mode(true);
         self.m_engine_runtime = Rc::downgrade(engine_runtime);
 
         let info = EditorGlobalContextCreateInfo {
@@ -43,7 +43,7 @@ impl app::System for Editor {
         RuntimeGlobalContext::get_render_system().borrow_mut().initialize_ui_render_backend(&self.m_editor_ui);
     }
 
-    fn tick(&mut self, delta_time: f32) {
-        EditorGlobalContext::global().borrow().m_input_manager.tick(delta_time);
+    fn tick(&mut self, _delta_time: f32) {
+        EditorGlobalContext::global().borrow().m_input_manager.borrow().tick();
     }
 }
