@@ -21,16 +21,9 @@ impl Vector3 {
     pub const NEGATIVE_UNIT_Y: Vector3 = Vector3::new(0.0, -1.0, 0.0);
     pub const NEGATIVE_UNIT_Z: Vector3 = Vector3::new(0.0, 0.0, -1.0);
     pub const ZERO:   Vector3 = Vector3::new(0.0, 0.0, 0.0);
+    pub const ONES:    Vector3 = Vector3::new(1.0, 1.0, 1.0);
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Vector3 { x, y, z }
-    }
-
-    pub const fn one() -> Self {
-        Vector3::new(1.0, 1.0, 1.0)
-    }
-
-    pub const fn zero() -> Self {
-        Vector3::new(0.0, 0.0, 0.0)
     }
 
     pub const fn from_homogeneous(v: &Vector4) -> Vector3 {
@@ -71,6 +64,9 @@ impl Vector3 {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
     
+    pub const fn squared_length(&self) -> f32 {
+        self.x * self.x + self.y * self.y + self.z * self.z
+    }
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
@@ -80,7 +76,11 @@ impl Vector3 {
     }
 
     pub fn normalize(&self) -> Vector3 {
-        let len_inv = 1.0 / self.length();
+        let length = self.squared_length();
+        if length == 0.0 {
+            return self.clone();
+        }
+        let len_inv = 1.0 / length.sqrt();
         Vector3 {
             x: self.x * len_inv,
             y: self.y * len_inv,

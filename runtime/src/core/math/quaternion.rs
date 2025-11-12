@@ -154,6 +154,34 @@ impl Mul<Vector3> for Quaternion {
     }
 }
 
+impl Mul<&Vector3> for &Quaternion {
+    type Output = Vector3;
+
+    fn mul(self, rhs: &Vector3) -> Self::Output {
+        let qvec = Vector3::new(self.x, self.y, self.z);
+        let mut uv = qvec.cross(&rhs);
+        let mut uuv = qvec.cross(&uv);
+        uv *= 2.0 * self.w;
+        uuv *= 2.0;
+        
+        rhs + uv + uuv
+    }
+}
+
+impl Mul<Vector3> for &Quaternion {
+    type Output = Vector3;
+
+    fn mul(self, rhs: Vector3) -> Self::Output {
+        let qvec = Vector3::new(self.x, self.y, self.z);
+        let mut uv = qvec.cross(&rhs);
+        let mut uuv = qvec.cross(&uv);
+        uv *= 2.0 * self.w;
+        uuv *= 2.0;
+        
+        rhs + uv + uuv
+    }
+}
+
 impl Mul<Quaternion> for Quaternion {
     type Output = Quaternion;
 

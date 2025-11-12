@@ -1,47 +1,26 @@
 use std::{cell::RefCell, rc::Rc};
 
-use runtime::{core::{algorithm::noise, math::{transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::{Component, ComponentTrait}, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, scene::scene::Scene}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
+use runtime::{core::{algorithm::noise, math::{axis_aligned::AxisAlignedBox, transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, scene::scene::Scene}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
 
-use crate::{block::{BLOCK_DIRT, BLOCK_GRASS, BLOCK_STONE}, block_res::BlockRes, chunk::Chunk};
+use crate::{block::{BLOCK_AIR, BLOCK_DIRT, BLOCK_GRASS, BLOCK_STONE, Block, BlockType}, block_res::BlockRes, chunk::{Chunk}};
 
 
 #[derive(Clone)]
 pub struct World {
-    pub m_component: Component,
     pub loaded_chunks: [[Box<Chunk>;12];12],
+    pub air_block: Rc<Block>,
     seed: f32,
-}
-
-impl ComponentTrait for World  {
-    fn get_component(&self) ->  &Component {
-        &self.m_component
-    }
-
-    fn get_component_mut(&mut self) ->  &mut Component {
-        &mut self.m_component
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn ComponentTrait> {
-        Box::new(self.clone())
-    }
 }
 
 impl World {
     pub fn new_box(level: &mut Scene) -> Box<Self> {
 
+        let air_block = Rc::new(BLOCK_AIR);
         let mut world = Self {
-            m_component: Component::default(),
             seed: rand::random(),
+            air_block: Rc::clone(&air_block),
             loaded_chunks: std::array::from_fn(|_i|{
-                std::array::from_fn(|_j| Chunk::new_box())
+                std::array::from_fn(|_j| Chunk::new_box(&air_block))
             }),
         };
         
@@ -135,5 +114,33 @@ impl World {
             }
         }
         Box::new(world)
+    }
+
+    pub fn get_aabbs(&self, area: &AxisAlignedBox) -> Vec<AxisAlignedBox> {
+        let mut res = vec![];
+        for i in (area.get_min_corner().x.floor() as i32)..=(area.get_max_corner().x.floor() as i32) {
+            for j in (area.get_min_corner().y.floor() as i32)..=(area.get_max_corner().y.floor() as i32) { 
+                for k in (area.get_min_corner().z.floor() as i32)..=(area.get_max_corner().z.floor() as i32) { 
+                    let chunk_i = i.div_euclid(16);
+                    let chunk_j = j.div_euclid(16);
+
+                    if chunk_i<0 || chunk_i >=12 || chunk_j<0 || chunk_j >=12 {
+                        continue;
+                    }
+                    if k<0 || k >=256 { 
+                        continue; 
+                    }
+                    let chunk = &self.loaded_chunks[chunk_i as usize][chunk_j as usize];
+                    let block = chunk.get_block((i - chunk_i * 16) as u32 , (j - chunk_j * 16) as u32, k as u32);
+                    if  block.m_block_type != BlockType::Air {
+                        res.push(AxisAlignedBox::new(
+                            Vector3::new(i as f32 + 0.5, j as f32 + 0.5, k as f32 + 0.5), 
+                            Vector3::new(0.5, 0.5, 0.5), 
+                        ));
+                    }
+                }
+            }
+        }
+        res
     }
 }

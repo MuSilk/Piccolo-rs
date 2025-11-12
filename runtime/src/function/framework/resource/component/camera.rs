@@ -17,7 +17,7 @@ impl Default for FirstPersonCameraParameter {
     fn default() -> Self {
         FirstPersonCameraParameter {
             m_fov: 50.0,
-            m_vertical_offset: 0.6,
+            m_vertical_offset: 1.5,
         }
     }
 }

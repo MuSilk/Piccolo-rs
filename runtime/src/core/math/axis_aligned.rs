@@ -2,7 +2,7 @@ use std::f32;
 
 use crate::core::math::vector3::Vector3;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AxisAlignedBox {
     m_center: Vector3,
     m_half_extent : Vector3,
@@ -26,7 +26,8 @@ impl AxisAlignedBox {
         AxisAlignedBox { 
             m_center: center, 
             m_half_extent: half_extent, 
-            ..Default::default()
+            m_min_corner: center - half_extent,
+            m_max_corner: center + half_extent,
         }
     }
 

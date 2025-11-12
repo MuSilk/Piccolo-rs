@@ -29,6 +29,10 @@ impl WorldManager {
         self.m_current_scene = self.m_scenes.get(scene_name).map(|s| s.clone());
     }
 
+    pub fn get_current_scene(&self) -> &Option<Rc<RefCell<dyn SceneTrait>>> {
+        &self.m_current_scene
+    }
+
     pub fn tick(&mut self, delta_time: f32) {
         if !self.m_is_world_loaded {
             self.load_world().unwrap();

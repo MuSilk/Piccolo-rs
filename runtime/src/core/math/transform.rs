@@ -32,4 +32,16 @@ impl Transform {
     pub fn set_position(&mut self, position: Vector3) {
         self.m_position = position;
     }
+
+    pub fn set_rotation(&mut self, rotation: Quaternion) {
+        self.m_rotation = rotation;
+    }
+
+    pub fn get_position(&self) -> &Vector3 {
+        &self.m_position
+    }
+
+    pub fn get_rotation(&self) -> &Quaternion {
+        &self.m_rotation
+    }
 }

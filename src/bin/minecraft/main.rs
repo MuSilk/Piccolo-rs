@@ -3,6 +3,7 @@ use runtime::{app::App};
 
 mod block_res;
 mod block;
+mod ecs;
 mod chunk;
 mod world;
 mod scene;

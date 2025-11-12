@@ -1,4 +1,4 @@
-use crate::{core::math::{matrix4::Matrix4x4, transform::Transform, vector3::Vector3}, engine::Engine, function::framework::{component::component::{Component, ComponentTrait}, object::object_id_allocator::GObjectID}};
+use crate::{core::math::{matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3}, engine::Engine, function::framework::{component::component::{Component, ComponentTrait}, object::object_id_allocator::GObjectID}};
 
 
 #[derive(Clone)]
@@ -35,9 +35,6 @@ impl ComponentTrait for TransformComponent {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn clone_box(&self) -> Box<dyn ComponentTrait> {
-        Box::new(self.clone())
-    }
 }
 
 impl TransformComponent {
@@ -56,6 +53,20 @@ impl TransformComponent {
         self.m_transform_buffer[self.m_next_index].set_position(position);
         self.m_transform.set_position(position);
         self.m_component.m_is_dirty = true;
+    }
+
+    pub fn set_rotation(&mut self, rotation: Quaternion) {
+        self.m_transform_buffer[self.m_next_index].set_rotation(rotation);
+        self.m_transform.set_rotation(rotation);
+        self.m_component.m_is_dirty = true;
+    }
+
+    pub fn get_position(&self) -> &Vector3 {
+        self.m_transform_buffer[self.m_current_index].get_position()
+    }
+
+    pub fn get_rotation(&self) -> &Quaternion {
+        self.m_transform_buffer[self.m_current_index].get_rotation()
     }
 
     pub fn tick(&mut self, _delta_time: f32) {

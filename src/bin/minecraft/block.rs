@@ -1,5 +1,4 @@
 use runtime::function::render::render_type::MeshVertexDataDefinition;
-use serde::{Deserialize, Serialize};
 
 pub enum FaceDirection {
     Top,
@@ -202,9 +201,8 @@ pub const FACES:[[MeshVertexDataDefinition; 4];6] = [
     TOP_FACE, BOTTOM_FACE, LEFT_FACE, RIGHT_FACE, FRONT_FACE, BACK_FACE
 ];
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum BlockType {
-    #[default]
     Air,
     Dirt,
     Grass,
@@ -217,16 +215,12 @@ pub struct Block {
     pub get_texture_location: fn(FaceDirection) -> (u32, u32)
 }
 
-impl Default for Block {
-    fn default() -> Self {
-        Block { 
-            m_block_type: BlockType::Air, 
-            get_texture_location: |_d: FaceDirection| (0,0)
-        }
-    }
-}
-
 pub const BLOCK_TEXTURE_DIM: (u32, u32) = (16, 16);
+
+pub const BLOCK_AIR : Block = Block {
+    m_block_type: BlockType::Air,
+    get_texture_location: |_d: FaceDirection| (0,0)
+};
 
 pub const BLOCK_DIRT : Block = Block {
     m_block_type: BlockType::Dirt,

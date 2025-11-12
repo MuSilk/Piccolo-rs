@@ -5,14 +5,14 @@ use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::fr
 pub struct CharacterComponent {
     m_component: Component,
 
-    m_position: Vector3,
-    m_rotation: Quaternion,
+    pub m_position: Vector3,
+    pub m_rotation: Quaternion,
 
-    m_rotation_buffer: Quaternion,
-    m_rotation_dirty: bool,
+    pub m_rotation_buffer: Quaternion,
+    pub m_rotation_dirty: bool,
 
-    m_original_camera: CameraMode,
-    m_is_free_camera: bool,
+    pub m_original_camera: CameraMode,
+    pub m_is_free_camera: bool,
 }
 
 impl ComponentTrait for CharacterComponent {
@@ -27,9 +27,6 @@ impl ComponentTrait for CharacterComponent {
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
-    }
-    fn clone_box(&self) -> Box<dyn ComponentTrait> {
-        Box::new(self.clone())
     }
 }
 

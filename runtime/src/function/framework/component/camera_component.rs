@@ -1,4 +1,4 @@
-use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent, component::{Component, ComponentTrait}}, resource::component::camera::{CameraComponentRes, CameraParameter, ThirdPersonCameraParameter}}, global::global_context::RuntimeGlobalContext, input::input_system::GameCommand, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData}}};
+use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent, component::{Component, ComponentTrait}}, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter}}, global::global_context::RuntimeGlobalContext, input::input_system::GameCommand, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData}}};
 
 #[derive(Clone)]
 pub enum CameraMode{
@@ -32,9 +32,6 @@ impl ComponentTrait for CameraComponent {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    fn clone_box(&self) -> Box<dyn ComponentTrait> {
-        Box::new(self.clone())
-    }
 }
 
 impl CameraComponent {
@@ -43,8 +40,8 @@ impl CameraComponent {
         Self { 
             m_component: Default::default(), 
             m_camera_res: CameraComponentRes {
-                m_parameter: CameraParameter::ThirdPerson(
-                    ThirdPersonCameraParameter::default()
+                m_parameter: CameraParameter::FirstPerson(
+                    FirstPersonCameraParameter::default()
                 )
             }, 
             m_position: Default::default(), 
@@ -71,7 +68,7 @@ impl CameraComponent {
         self.m_up = self.m_forward.cross(&self.m_left);
 
         let desired_mat = math::look_at(&self.m_position, &(self.m_position + self.m_forward), &self.m_up);
-        println!("{:?} {:?} {:?}", self.m_position, self.m_forward, self.m_up);
+
         let render_system = RuntimeGlobalContext::get_render_system().borrow();
         let swap_context = render_system.get_swap_context();
         swap_context.get_logic_swap_data().borrow_mut().m_camera_swap_data = Some(CameraSwapData{

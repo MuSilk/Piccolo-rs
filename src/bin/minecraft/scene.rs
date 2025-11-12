@@ -1,8 +1,8 @@
-use std::cell::{RefCell};
+use std::{cell::RefCell, rc::Rc};
 
-use runtime::{engine::Engine, function::framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait}, scene::scene::SceneTrait}};
+use runtime::{core::math::{transform::Transform, vector3::Vector3}, engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, motor_component::MotorComponent, transform_component::TransformComponent}, resource::component::motor::MotorComponentRes, scene::scene::SceneTrait}, global::global_context::RuntimeGlobalContext}};
 
-use crate::world::World;
+use crate::{ecs::controller::CharacterController, world::World};
 
 
 pub struct Scene {
@@ -20,19 +20,26 @@ impl Scene {
 impl SceneTrait for Scene {
     fn load(&mut self){
 
-        let object  = self.scene.spawn();
-        let world = World::new_box(&mut self.scene);
-        let components = vec![
-            RefCell::new(world as Box<dyn ComponentTrait>),
-        ];
-        self.scene.create_object(object, components);
+        let world = Rc::new(RefCell::new(World::new_box(&mut self.scene)));
+        self.scene.add_resource(world.clone());
 
         let object = self.scene.spawn();
         let character = Box::new(CharacterComponent::new());
         let camera = Box::new(CameraComponent::new());
+        let mut transform = Box::new(TransformComponent::default());
+        let mut trans = Transform::default();
+        trans.set_position(Vector3::new(64.0, 64.0, 256.0));
+        transform.post_load_resource(object, trans);
+        let controller = Box::new(CharacterController::new(world));
+        let mut motor = Box::new(MotorComponent::new(controller));
+        let motor_res: MotorComponentRes = RuntimeGlobalContext::get_asset_manager().borrow()
+            .load_asset("asset/objects/character/components/player.motor.json").unwrap();
+        motor.post_load_resources(&motor_res);
         let components = vec![
             RefCell::new(character as Box<dyn ComponentTrait>),
             RefCell::new(camera as Box<dyn ComponentTrait>),
+            RefCell::new(transform as Box<dyn ComponentTrait>),
+            RefCell::new(motor as Box<dyn ComponentTrait>),
         ];
         self.scene.create_object(object, components);
 
@@ -51,6 +58,26 @@ impl SceneTrait for Scene {
         self.scene.tick_mesh_components(delta_time);
 
         if !Engine::is_editor_mode() {
+
+            self.scene.query_triple_mut::<CharacterComponent, TransformComponent, MotorComponent>()
+            .for_each(|(mut character, mut transform, mut motor)|
+            {
+                motor.tick(delta_time, &mut transform);
+
+                if character.m_rotation_dirty {
+                    transform.set_rotation(character.m_rotation_buffer);
+                    character.m_rotation_dirty = false;
+                }
+
+                if motor.get_is_moving() {
+                    character.m_rotation_buffer = character.m_rotation;
+                    transform.set_rotation(character.m_rotation_buffer);
+                    character.m_rotation_dirty = true;
+                }
+
+                let new_position = motor.get_target_position();
+                character.m_position = *new_position;
+            });
             self.scene.tick_camera_components(delta_time);
         }
     }

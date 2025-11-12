@@ -1,8 +1,8 @@
-use std::{any::{TypeId}, cell::{RefCell}, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
+use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
 
 use itertools::Itertools;
 
-use crate::{function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, global::global_context::RuntimeGlobalContext, render::{render_object::GameObjectDesc}}};
+use crate::function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -60,6 +60,7 @@ pub struct Scene {
     m_archetypes: HashMap<usize, Archetype>,
     m_entity_location: HashMap<GObjectID, (usize, usize)>,
     pub m_entities: HashMap<GObjectID, Rc<RefCell<GObject>>>,
+    m_resources: HashMap<TypeId, Box<dyn Any>>
 }
 
 impl Scene {
@@ -132,7 +133,7 @@ impl Scene {
             })
     }
 
-    fn query_pair_mut<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
+    pub fn query_pair_mut<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
         -> impl Iterator<Item = (std::cell::RefMut<'_, T>, std::cell::RefMut<'_, U>)> 
     {
         self.m_archetypes
@@ -150,6 +151,28 @@ impl Scene {
             })
     }
     
+
+    pub fn query_triple_mut<T: 'static + ComponentTrait, U: 'static + ComponentTrait, V: 'static + ComponentTrait>(&'_ mut self)
+        -> impl Iterator<Item = (std::cell::RefMut<'_, T>, std::cell::RefMut<'_, U>,std::cell::RefMut<'_, V>)>
+        {
+            self.m_archetypes
+                .iter_mut()
+                .filter(|(_type_id, archetype)| archetype.has_component::<T>() && archetype.has_component::<U>()  && archetype.has_component::<V>())
+                .flat_map(|(_type_id, archetype)| {
+                    let column_t = archetype.get_column::<T>().unwrap();
+                    let column_u = archetype.get_column::<U>().unwrap();
+                    let column_v = archetype.get_column::<V>().unwrap();
+                    column_t.iter().zip(column_u.iter()).zip(column_v.iter()).map(|((any_box_t, any_box_u), any_box_v)| {
+                        (
+                            std::cell::RefMut::map(any_box_t.borrow_mut(), |b| b.as_any_mut().downcast_mut::<T>().unwrap()),
+                            std::cell::RefMut::map(any_box_u.borrow_mut(), |b| b.as_any_mut().downcast_mut::<U>().unwrap()),
+                            std::cell::RefMut::map(any_box_v.borrow_mut(), |b| b.as_any_mut().downcast_mut::<V>().unwrap()),
+                        )
+                    })
+                })
+
+    }
+
     pub fn create_object(&mut self, object_id: GObjectID, components: Vec<RefCell<Box<dyn ComponentTrait>>>) {
         let archetype_type_id: usize = {
             let mut ids: Vec<_> = components.iter().map(|c| c.borrow().as_any().type_id()).collect();
@@ -169,6 +192,22 @@ impl Scene {
         self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
+
+    pub fn add_resource<T: 'static>(&mut self, resource: T) {
+        self.m_resources.insert(TypeId::of::<T>(),Box::new(resource));
+    }
+
+    pub fn get_resource<T: 'static>(&self) -> Option<&T> {
+        self.m_resources
+            .get(&TypeId::of::<T>())
+            .and_then(|boxed| boxed.downcast_ref())
+    }
+
+    pub fn get_mut_resource<T: 'static>(&mut self) -> Option<&mut T> {
+        self.m_resources
+            .get_mut(&TypeId::of::<T>())
+            .and_then(|boxed| boxed.downcast_mut())
+    }
 }
 
 impl Scene {

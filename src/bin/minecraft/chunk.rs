@@ -13,22 +13,7 @@ fn get_chunk_offset(x: u32, y: u32, z: u32) -> usize {
 
 #[derive(Clone)]
 pub struct ChunkData {
-    air_block: Rc<Block>,
     pub blocks: [Rc<Block>; CHUNK_SIZE],
-}
-
-impl Default for ChunkData {
-    fn default() -> Self {
-        let air_block = Rc::new(Block {
-            ..Default::default()
-        });
-        Self { 
-            air_block: air_block.clone(),
-            blocks: {
-                std::array::from_fn(|_| air_block.clone())
-            },
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -52,25 +37,16 @@ impl ComponentTrait for Chunk  {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
-    }
-
-    fn clone_box(&self) -> Box<dyn ComponentTrait> {
-        Box::new(self.clone())
-    }
+    }   
 }
 
 impl Chunk {
 
-    pub fn new_box() -> Box<Self> {
+    pub fn new_box(air_block: &Rc<Block>) -> Box<Self> {
         let mut res = Box::<Self>::new_uninit();
         unsafe {
-            let air_block = Rc::new(Block {
-                m_block_type: BlockType::Air,
-                ..Default::default()
-            });
-            std::ptr::write(&mut (*res.as_mut_ptr()).data.air_block, Rc::clone(&air_block));
             for i in 0..CHUNK_SIZE {
-                std::ptr::write(&mut (*res.as_mut_ptr()).data.blocks[i], Rc::clone(&air_block));
+                std::ptr::write(&mut (*res.as_mut_ptr()).data.blocks[i], Rc::clone(air_block));
             }
             res.assume_init()
         }
@@ -142,6 +118,11 @@ impl Chunk {
                 }
             }
         }
+    }
+
+    pub fn get_block(&self, x: u32, y: u32, z: u32) -> &Rc<Block> {
+        let offset = get_chunk_offset(x, y, z);
+        &self.data.blocks[offset]
     }
 }
 
