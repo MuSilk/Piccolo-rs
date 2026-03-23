@@ -92,25 +92,25 @@ const LEFT_FACE: [MeshVertexDataDefinition; 4] = [
     MeshVertexDataDefinition{
         x: 0.0, y: 0.0, z: 1.0,
         nx: -1.0, ny: 0.0, nz: 0.0,
-        tx: 0.0, ty: -1.0, tz: 1.0,
+        tx: 0.0, ty: -1.0, tz: 0.0,
         u:  1.0,  v: 0.0
     },
     MeshVertexDataDefinition{
         x: 0.0, y: 0.0, z: 0.0,
         nx: -1.0, ny: 0.0, nz: 0.0,
-        tx: 0.0, ty: -1.0, tz: 1.0,
+        tx: 0.0, ty: -1.0, tz: 0.0,
         u:  1.0,  v: 1.0
     },
     MeshVertexDataDefinition{
         x: 0.0, y: 1.0, z: 0.0,
         nx: -1.0, ny: 0.0, nz: 0.0,
-        tx: 0.0, ty: -1.0, tz: 1.0,
+        tx: 0.0, ty: -1.0, tz: 0.0,
         u:  0.0,  v: 1.0
     },
     MeshVertexDataDefinition{
         x: 0.0, y: 1.0, z: 1.0,
         nx: -1.0, ny: 0.0, nz: 0.0,
-        tx: 0.0, ty: -1.0, tz: 1.0,
+        tx: 0.0, ty: -1.0, tz: 0.0,
         u:  0.0,  v: 0.0
     }
 ];

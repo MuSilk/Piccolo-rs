@@ -163,7 +163,7 @@ impl RenderCamera {
 
         self.m_rotation = up_rotation * self.m_rotation;
 
-        self.m_rotation = self.m_inv_rotation.conjugate();
+        self.m_inv_rotation = self.m_rotation.conjugate();
     }
 
     pub fn set_aspect(&mut self, aspect: f32) {

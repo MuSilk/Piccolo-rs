@@ -4,7 +4,7 @@ use crate::core::math::{matrix4::Matrix4x4, quaternion::Quaternion, vector3::Vec
 
 
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transform {
     m_position: Vector3,
     m_scale: Vector3,
@@ -22,6 +22,14 @@ impl Default for Transform {
 }
 
 impl Transform {
+
+    pub fn new(position: Vector3, rotation: Quaternion, scale: Vector3) -> Self {
+        Transform {
+            m_position: position,
+            m_rotation: rotation,
+            m_scale: scale,
+        }
+    }
     pub fn get_matrix(&self) -> Matrix4x4 {
         let translation_matrix = self.m_position.to_translate_matrix();
         let rotation_matrix = self.m_rotation.to_rotation_matrix();

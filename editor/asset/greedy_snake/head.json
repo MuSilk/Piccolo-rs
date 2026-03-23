@@ -1,0 +1,26 @@
+{
+    "m_sub_meshs": [
+        {
+            "m_obj_file_ref": "asset/objects/geometry/cube/cube.json",
+            "m_material": "asset/material/default.json",
+            "m_transform": {
+                "m_position": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                "m_scale": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0
+                },
+                "m_rotation": {
+                    "w": 1.0,
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                }
+            }
+        }   
+    ]
+}

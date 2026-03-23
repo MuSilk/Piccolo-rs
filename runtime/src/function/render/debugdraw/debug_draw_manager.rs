@@ -3,7 +3,7 @@ use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, slice, sync::Mutex};
 use anyhow::Result;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{matrix4::Matrix4x4, vector3::Vector3, vector4::Vector4}, function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::K_DEBUG_DRAW_ONE_FRAME}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource}};
+use crate::{core::math::{matrix4::Matrix4x4}, function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::K_DEBUG_DRAW_ONE_FRAME}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource}};
 
 pub struct DebugDrawManagerCreateInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
@@ -87,30 +87,6 @@ impl DebugDrawManager {
     }
 
     pub fn tick(&mut self, delta_time: f32){
-        let group = self.try_get_or_create_debug_draw_group("test");
-        static mut TOTAL_TIME: f32 = 0.0;
-        unsafe{TOTAL_TIME += delta_time;}
-        group.borrow_mut().add_sphere(
-            &Vector3::new(0.5, 0.0, 0.0), 
-            unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vector4::new(unsafe{TOTAL_TIME.sin()} , 0.3, unsafe{TOTAL_TIME.cos()} , 1.0), 
-            K_DEBUG_DRAW_ONE_FRAME, 
-            true
-        );
-        group.borrow_mut().add_sphere(
-            &Vector3::new(0.0, 0.5, 0.0), 
-            unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vector4::new(unsafe{TOTAL_TIME.sin()} , 0.6, unsafe{TOTAL_TIME.cos()} , 1.0), 
-            K_DEBUG_DRAW_ONE_FRAME, 
-            true
-        );
-        group.borrow_mut().add_sphere(
-            &Vector3::new(0.0, 0.0, 0.5), 
-            unsafe{TOTAL_TIME.sin()} * 0.5, 
-            &Vector4::new(unsafe{TOTAL_TIME.sin()} , 0.9, unsafe{TOTAL_TIME.cos()} , 1.0), 
-            K_DEBUG_DRAW_ONE_FRAME, 
-            true
-        );
         let _guard = self.m_mutex.lock().unwrap();
         self.m_buffer_allocator.tick();
         self.m_debug_context.tick(delta_time);

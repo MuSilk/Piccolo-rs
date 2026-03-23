@@ -207,17 +207,33 @@ impl RenderSystem {
                         self.m_render_scene.borrow_mut().add_instance_id_to_map(render_entity.m_instance_id, gobject.get_id());
 
                         match game_object_part.m_mesh_desc {
-                            GameObjectMeshDesc::Mesh(ref mesh_desc) => {
+                            GameObjectMeshDesc::LazyMesh(ref mesh_desc) => {
                                 let mesh_source = MeshSourceDesc {
                                     m_mesh_file: mesh_desc.m_mesh_file.clone(),
                                 };
                                 let is_mesh_loaded = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().has_element(&mesh_source);
                                 render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
                                 if !is_mesh_loaded {
-                                    println!("load mesh data");
                                     let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(&mesh_source);
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                                    println!("load mesh data");
+                                }
+                                else{
+                                    render_entity.m_bounding_box = self.m_render_resource.borrow_mut().get_cached_bounding_box(&mesh_source).unwrap().clone();
+                                }
+                            },
+                            GameObjectMeshDesc::StaticMesh(ref mesh_desc) => {
+                                let mesh_source = MeshSourceDesc {
+                                    m_mesh_file: mesh_desc.borrow().m_mesh_file.clone(),
+                                };
+                                let is_mesh_loaded = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().has_element(&mesh_source);
+                                render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                                if !is_mesh_loaded {
+                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source, &mesh_desc.borrow().m_vertices, &mesh_desc.borrow().m_indices);
+                                    render_entity.m_bounding_box = bounding_box;
+                                    self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
+                                    println!("load static mesh data");
                                 }
                                 else{
                                     render_entity.m_bounding_box = self.m_render_resource.borrow_mut().get_cached_bounding_box(&mesh_source).unwrap().clone();
@@ -229,7 +245,7 @@ impl RenderSystem {
                                 };
                                 render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
                                 if mesh_desc.borrow().m_is_dirty {
-                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source,&mesh_desc.borrow());
+                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source, &mesh_desc.borrow().m_vertices, &mesh_desc.borrow().m_indices);
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
                                     mesh_desc.borrow_mut().m_is_dirty = false;

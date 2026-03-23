@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
+use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, fmt::Debug, hash::{Hash, Hasher}, rc::Rc};
 
 use itertools::Itertools;
 
@@ -91,7 +91,7 @@ impl Scene {
         self.m_is_loaded = loaded;
     }
 
-    fn query<T: 'static + ComponentTrait>(&'_ mut self) -> impl Iterator<Item = std::cell::Ref<'_, T>> {
+    fn query<T: 'static + ComponentTrait>(&'_ self) -> impl Iterator<Item = std::cell::Ref<'_, T>> {
         self.m_archetypes
             .iter()
             .filter(|(_type_id, archetype)| archetype.has_component::<T>())
@@ -103,7 +103,7 @@ impl Scene {
             })
     }
 
-    fn query_mut<T: 'static + ComponentTrait>(&'_ mut self) -> impl Iterator<Item = std::cell::RefMut<'_, T>> {
+    pub fn query_mut<T: 'static + ComponentTrait>(&'_ mut self) -> impl Iterator<Item = std::cell::RefMut<'_, T>> {
         self.m_archetypes
             .iter_mut()
             .filter(|(_type_id, archetype)| archetype.has_component::<T>())
@@ -115,7 +115,7 @@ impl Scene {
             })
     }
 
-    fn query_pair<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
+    pub fn query_pair<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
         -> impl Iterator<Item = (std::cell::Ref<'_, T>, std::cell::Ref<'_, U>)> 
     {
         self.m_archetypes
@@ -134,7 +134,7 @@ impl Scene {
     }
 
     pub fn query_pair_mut<T: 'static + ComponentTrait, U: 'static + ComponentTrait>(&'_ mut self) 
-        -> impl Iterator<Item = (std::cell::RefMut<'_, T>, std::cell::RefMut<'_, U>)> 
+        -> impl Iterator<Item = (std::cell::RefMut<'_, T>, std::cell::RefMut<'_, U>)>
     {
         self.m_archetypes
             .iter_mut()
@@ -181,6 +181,10 @@ impl Scene {
             ids.hash(&mut hasher);
             hasher.finish() as usize
         };
+        for component in &components {
+            component.borrow_mut().set_parent_object(object_id);
+        }
+
         if self.m_archetypes.get(&archetype_type_id).is_none() {
             let mut archetype = Archetype::default();
             for component in &components {
@@ -211,13 +215,13 @@ impl Scene {
 }
 
 impl Scene {
-    pub fn tick_transform_components(&mut self, delta_time: f32) {
+    pub fn tick_transform_components(&mut self) {
         self.query_mut::<TransformComponent>().for_each(|mut transform| {
-            transform.tick(delta_time);
+            transform.tick();
         });
     }
 
-    pub fn tick_mesh_components(&mut self, _delta_time: f32) {
+    pub fn tick_mesh_components(&mut self) {
         self.query_pair_mut::<MeshComponent, TransformComponent>()
             .for_each(|(mut mesh, mut transform)| 
         {

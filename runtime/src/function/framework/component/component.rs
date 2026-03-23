@@ -11,6 +11,9 @@ pub trait ComponentTrait {
     fn set_dirty_flag(&mut self, is_dirty: bool) {
         self.get_component_mut().m_is_dirty = is_dirty;
     }
+    fn set_parent_object(&mut self, object_id: GObjectID) {
+        self.get_component_mut().m_parent_object = object_id;
+    }
 
     fn get_component(&self) -> &Component;
     fn get_component_mut(&mut self) -> &mut Component;
@@ -20,7 +23,7 @@ pub trait ComponentTrait {
 
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Component {
     pub m_parent_object : GObjectID,
     pub m_is_dirty: bool,

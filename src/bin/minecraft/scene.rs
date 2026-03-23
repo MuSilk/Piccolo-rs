@@ -29,7 +29,7 @@ impl SceneTrait for Scene {
         let mut transform = Box::new(TransformComponent::default());
         let mut trans = Transform::default();
         trans.set_position(Vector3::new(64.0, 64.0, 256.0));
-        transform.post_load_resource(object, trans);
+        transform.post_load_resource(trans);
         let controller = Box::new(CharacterController::new(world));
         let mut motor = Box::new(MotorComponent::new(controller));
         let motor_res: MotorComponentRes = RuntimeGlobalContext::get_asset_manager().borrow()
@@ -54,8 +54,8 @@ impl SceneTrait for Scene {
         if !self.is_loaded() {
             return;
         }
-        self.scene.tick_transform_components(delta_time);
-        self.scene.tick_mesh_components(delta_time);
+        self.scene.tick_transform_components();
+        self.scene.tick_mesh_components();
 
         if !Engine::is_editor_mode() {
 

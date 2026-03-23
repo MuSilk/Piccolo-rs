@@ -5,16 +5,23 @@ use serde::{Deserialize, Serialize};
 use crate::{core::math::{matrix4::Matrix4x4, vector4::Vector4}, function::{framework::object::object_id_allocator::{GObjectID, K_INVALID_GOBJECT_ID}, render::render_type::MeshVertexDataDefinition}};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct GameObjectStaticMeshDesc {
+pub struct GameObjectLazyMeshDesc {
     pub m_mesh_file: String,
 }
 
-impl GameObjectStaticMeshDesc {
+impl GameObjectLazyMeshDesc {
     pub fn new(mesh_file: String) -> Self {
         Self {
             m_mesh_file: mesh_file,
         }
     }
+}
+
+#[derive(Clone, Default)]
+pub struct GameObjectStaticMeshDesc {
+    pub m_mesh_file: String,
+    pub m_vertices: Vec<MeshVertexDataDefinition>,
+    pub m_indices: Vec<u32>,
 }
 
 #[derive(Clone, Default)]
@@ -27,13 +34,14 @@ pub struct GameObjectDynamicMeshDesc {
 
 #[derive(Clone)]
 pub enum GameObjectMeshDesc {
-    Mesh(GameObjectStaticMeshDesc),
+    LazyMesh(GameObjectLazyMeshDesc),
+    StaticMesh(Rc<RefCell<GameObjectStaticMeshDesc>>),
     DynamicMesh(Rc<RefCell<GameObjectDynamicMeshDesc>>),
 }
 
 impl Default for GameObjectMeshDesc {
     fn default() -> Self {
-        Self::Mesh(GameObjectStaticMeshDesc::default())
+        Self::LazyMesh(GameObjectLazyMeshDesc::default())
     }
 }
 

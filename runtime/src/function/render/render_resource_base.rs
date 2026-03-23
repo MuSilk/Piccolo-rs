@@ -109,13 +109,13 @@ impl RenderResourceBase {
         (ret, bounding_box)
     }
 
-    pub fn load_mesh_data_from_raw(&mut self, source: &MeshSourceDesc, data: &GameObjectDynamicMeshDesc) -> (RenderMeshData, AxisAlignedBox) {
+    pub fn load_mesh_data_from_raw(&mut self, source: &MeshSourceDesc, vertices: &[MeshVertexDataDefinition],indices: &[u32]) -> (RenderMeshData, AxisAlignedBox) {
         let mut ret: RenderMeshData = RenderMeshData::default();
         let mut bounding_box = AxisAlignedBox::default();
 
-        data.m_vertices.iter().for_each(|vertice| bounding_box.merge(&Vector3::new(vertice.x, vertice.y, vertice.z)));
-        ret.m_static_mesh_data.m_vertex_buffer.m_data = bytemuck::pod_collect_to_vec(&data.m_vertices);
-        ret.m_static_mesh_data.m_index_buffer.m_data = bytemuck::pod_collect_to_vec(&data.m_indices);
+        vertices.iter().for_each(|vertice| bounding_box.merge(&Vector3::new(vertice.x, vertice.y, vertice.z)));
+        ret.m_static_mesh_data.m_vertex_buffer.m_data = bytemuck::pod_collect_to_vec(vertices);
+        ret.m_static_mesh_data.m_index_buffer.m_data = bytemuck::pod_collect_to_vec(indices);
         ret.m_static_mesh_data.m_index_type = vk::IndexType::UINT32;
 
         //todo: skeleton bindings

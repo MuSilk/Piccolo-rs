@@ -1,7 +1,7 @@
 use crate::{core::math::{matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3}, engine::Engine, function::framework::{component::component::{Component, ComponentTrait}, object::object_id_allocator::GObjectID}};
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TransformComponent {
     m_component: Component,
     m_transform: Transform,
@@ -38,8 +38,7 @@ impl ComponentTrait for TransformComponent {
 }
 
 impl TransformComponent {
-    pub fn post_load_resource(&mut self, parent_object: GObjectID, transform: Transform) {
-        self.m_component.m_parent_object = parent_object;
+    pub fn post_load_resource(&mut self, transform: Transform) {
         self.m_transform = transform;
         self.m_transform_buffer[0] = self.m_transform.clone();
         self.m_transform_buffer[1] = self.m_transform.clone();
@@ -69,7 +68,7 @@ impl TransformComponent {
         self.m_transform_buffer[self.m_current_index].get_rotation()
     }
 
-    pub fn tick(&mut self, _delta_time: f32) {
+    pub fn tick(&mut self) {
         (self.m_current_index, self.m_next_index) = (self.m_next_index, self.m_current_index);
 
         if Engine::is_editor_mode() {

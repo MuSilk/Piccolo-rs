@@ -8,17 +8,19 @@ use crate::{engine::Engine, function::{global::global_context::RuntimeGlobalCont
 
 bitflags! {
     #[repr(transparent)]
-    #[derive(Default)]
+    #[derive(Default, Debug)]
     pub struct GameCommand: u32 {
         const forward       = 1 << 0;
         const backward      = 1 << 1;
         const left          = 1 << 2;
         const right         = 1 << 3;
-        const jump          = 1 << 4;
-        const squat         = 1 << 5;
-        const sprint        = 1 << 6;
-        const fire          = 1 << 7;
-        const free_camera   = 1 << 8;
+        const up            = 1 << 4;
+        const down          = 1 << 5;
+        const jump          = 1 << 6;
+        const squat         = 1 << 7;
+        const sprint        = 1 << 8;
+        const fire          = 1 << 9;
+        const free_camera   = 1 << 10;
         const invalid       = 1 << 31;
     }
 }
@@ -73,6 +75,12 @@ impl InputSystem {
                             KeyCode::Space => {
                                 self.m_game_command |= GameCommand::jump;
                             }
+                            KeyCode::KeyQ => {
+                                self.m_game_command |= GameCommand::up;
+                            }
+                            KeyCode::KeyE => {
+                                self.m_game_command |= GameCommand::down;
+                            }
                             KeyCode::ControlLeft => {
                                 self.m_game_command |= GameCommand::squat;
                             }
@@ -107,6 +115,12 @@ impl InputSystem {
                             } 
                             KeyCode::KeyD => {
                                 self.m_game_command &= GameCommand::all() ^ GameCommand::right;
+                            }
+                            KeyCode::KeyQ => {
+                                self.m_game_command &= GameCommand::all() ^ GameCommand::up;
+                            } 
+                            KeyCode::KeyE => {
+                                self.m_game_command &= GameCommand::all() ^ GameCommand::down;
                             }
                             KeyCode::ControlLeft => {
                                 self.m_game_command &= GameCommand::squat;

@@ -98,13 +98,13 @@ impl World {
                 }
                 
                 let mut mesh_component = Box::new(MeshComponent::default());
-                mesh_component.post_load_resource(object_id, &block.m_mesh_res);
+                mesh_component.post_load_resource(&block.m_mesh_res);
                 let mut chunk_data = chunk.update_mesh_data();
                 chunk_data.m_mesh_file = format!("chunk_{}_{}.mesh", i, j);
                 mesh_component.m_raw_meshes.resize(1, GameObjectPartDesc::default());
                 mesh_component.m_raw_meshes[0].m_mesh_desc = GameObjectMeshDesc::DynamicMesh(Rc::new(RefCell::new(chunk_data)));
                 let mut transform_component = Box::new(TransformComponent::default());
-                transform_component.post_load_resource(object_id, Transform::default());
+                transform_component.post_load_resource(Transform::default());
                 transform_component.set_position(Vector3::new(i as f32 * 16.0, j as f32 * 16.0, 0.0));
                 let components = vec![
                     RefCell::new(mesh_component) as RefCell<Box<dyn ComponentTrait>>,

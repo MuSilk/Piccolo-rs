@@ -1,4 +1,4 @@
-use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent, component::{Component, ComponentTrait}}, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter}}, global::global_context::RuntimeGlobalContext, input::input_system::GameCommand, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData}}};
+use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent, component::{Component, ComponentTrait}}, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter, FreeCameraParameter}}, global::global_context::RuntimeGlobalContext, input::input_system::GameCommand, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData}}};
 
 #[derive(Clone)]
 pub enum CameraMode{
@@ -36,6 +36,21 @@ impl ComponentTrait for CameraComponent {
 
 impl CameraComponent {
 
+    pub fn new_free_camera() -> Self {
+        Self { 
+            m_component: Default::default(), 
+            m_camera_res: CameraComponentRes {
+                m_parameter: CameraParameter::Free(
+                    FreeCameraParameter::default()
+                )
+            }, 
+            m_position: Default::default(), 
+            m_forward: Vector3::NEGATIVE_UNIT_Y, 
+            m_up: Vector3::UNIT_Z, 
+            m_left: Vector3::UNIT_X,
+        }
+    }
+
     pub fn new() -> Self {
         Self { 
             m_component: Default::default(), 
@@ -50,6 +65,7 @@ impl CameraComponent {
             m_left: Vector3::UNIT_X,
         }
     }
+    
     pub fn tick_first_person_camera(&mut self, character: &mut CharacterComponent) {
         let q_yaw = Quaternion::from_angle_axis(RuntimeGlobalContext::get_input_system().borrow().m_cursor_delta_yaw, &Vector3::UNIT_Z);
         let q_pitch = Quaternion::from_angle_axis(RuntimeGlobalContext::get_input_system().borrow().m_cursor_delta_pitch, &self.m_left);
@@ -131,7 +147,11 @@ impl CameraComponent {
         self.m_left = q_yaw * q_pitch * self.m_left;
         self.m_up = self.m_forward.cross(&self.m_left);
 
-        if command.contains(GameCommand::forward | GameCommand::backward | GameCommand::left | GameCommand::right) {
+        if command.intersects(
+            GameCommand::forward | GameCommand::backward | 
+            GameCommand::left | GameCommand::right | 
+            GameCommand::up | GameCommand::down
+        ) {
             let mut move_direction = Vector3::ZERO;
             if command.contains(GameCommand::forward) {
                 move_direction += self.m_forward;
@@ -145,6 +165,12 @@ impl CameraComponent {
             if command.contains(GameCommand::right) {
                 move_direction -= self.m_left;
             }
+            if command.contains(GameCommand::up) {
+                move_direction += self.m_up;
+            }
+            if command.contains(GameCommand::down) {
+                move_direction -= self.m_up;
+            }
             self.m_position += move_direction * 2.0 * delta_time;
         }
 
@@ -156,5 +182,16 @@ impl CameraComponent {
             m_camera_type: Some(RenderCameraType::Motor),
             m_view_matrix: Some(desired_mat)
         });
+    }
+
+    pub fn look_at(&mut self, position: Vector3, target: &Vector3, up: &Vector3) {
+        self.m_position = position;
+        let forward = (target - position).normalize();
+
+        let right = forward.cross(&up.normalize()).normalize();
+
+        self.m_forward = forward;
+        self.m_left = -right;
+        self.m_up = right.cross(&forward);
     }
 }
