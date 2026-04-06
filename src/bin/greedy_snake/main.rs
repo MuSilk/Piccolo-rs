@@ -300,10 +300,8 @@ fn sync_entity_transforms(scene: &mut Scene) {
         .query_pair_mut::<SnakeSegment, TransformComponent>()
         .for_each(|(segment, mut transform)| {
             if let Some(cell) = cells.get(segment.pool_index + 1) {
-                println!("segment.pool_index: {} cell: {:?}", segment.pool_index + 1, cell.to_world());
                 transform.set_position(cell.to_world());
             } else {
-                println!("error: segment.pool_index: {} is out of bounds", segment.pool_index + 1);
                 transform.set_position(Vector3::new(0.0, 0.0, HIDDEN_Z));
             }
         });

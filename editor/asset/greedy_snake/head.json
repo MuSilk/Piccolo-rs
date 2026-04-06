@@ -2,7 +2,7 @@
     "m_sub_meshs": [
         {
             "m_obj_file_ref": "asset/objects/geometry/cube/cube.json",
-            "m_material": "asset/material/default.json",
+            "m_material": "asset/greedy_snake/head_material.json",
             "m_transform": {
                 "m_position": {
                     "x": 0.0,

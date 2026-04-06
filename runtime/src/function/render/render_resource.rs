@@ -1,9 +1,13 @@
 use std::{cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
 use itertools::Itertools;
+use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
 use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}};
+
+#[distributed_slice(vulkan_rhi::VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
+static STORAGE_BUFFER_COUNT_RENDER_RESOURCE: u32 = vulkan_rhi::MAX_MATERIAL_COUNT;
 
 #[derive(Default)]
 pub struct IBLResource {

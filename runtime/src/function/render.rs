@@ -1,4 +1,5 @@
 pub mod debugdraw;
+pub mod font_atlas;
 pub mod interface;
 pub mod light;
 pub mod passes;
