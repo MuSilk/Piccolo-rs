@@ -68,10 +68,10 @@ impl TransformComponent {
         self.m_transform_buffer[self.m_current_index].get_rotation()
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, engine: &Engine) {
         (self.m_current_index, self.m_next_index) = (self.m_next_index, self.m_current_index);
 
-        if Engine::is_editor_mode() {
+        if engine.is_editor_mode() {
             self.m_transform_buffer[self.m_next_index] = self.m_transform.clone();
         }
     }

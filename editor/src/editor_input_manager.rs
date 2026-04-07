@@ -70,7 +70,7 @@ impl EditorInputManager {
         _device_id: DeviceId, 
         delta: (f64, f64)
     ) { 
-        if !Engine::is_editor_mode() {
+        if !engine.is_editor_mode() {
             return;
         }
         let angular_velocity = 180.0 / (self.m_engine_window_size.x).max(self.m_engine_window_size.y);
@@ -101,7 +101,7 @@ impl EditorInputManager {
         delta: MouseScrollDelta, 
         _phase: TouchPhase
     ) {
-        if !Engine::is_editor_mode() {
+        if !engine.is_editor_mode() {
             return;
         }
 
@@ -152,7 +152,7 @@ impl EditorInputManager {
         button: MouseButton
     ) {
         
-        if !Engine::is_editor_mode() {
+        if !engine.is_editor_mode() {
             return;
         }
         if self.m_cursor_on_axis != 3 {
@@ -177,8 +177,14 @@ impl EditorInputManager {
         }
     }
 
-    fn on_key(&mut self, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) { 
-        if Engine::is_editor_mode() {
+    fn on_key(
+        &mut self, 
+        engine: &Engine,
+        device_id: DeviceId, 
+        event: &KeyEvent, 
+        is_synthetic: bool
+    ) { 
+        if engine.is_editor_mode() {
             self.on_key_editor_mode(device_id, event, is_synthetic);
         }
     }
@@ -358,9 +364,13 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
             }
         });
         let this = Rc::downgrade(&self);
+        let engine_for_key = engine_weak.clone();
         window_system.register_on_key_func(move |device_id, event, is_synthetic| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_key(device_id, event, is_synthetic);
+            if let Some(engine) = engine_for_key.upgrade() {
+                this.borrow_mut()
+                    .on_key(&*engine.borrow(), device_id, event, is_synthetic);
+            }
         });
         let this = Rc::downgrade(&self);
         let engine_for_mouse_button = engine_weak.clone();

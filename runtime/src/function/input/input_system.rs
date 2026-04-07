@@ -1,9 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use bitflags::bitflags;
 use winit::{event::{DeviceId, ElementState, KeyEvent}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{engine::Engine, function::{render::{render_system::RenderSystem, window_system::WindowSystem}}};
+use crate::{engine::Engine, function::render::{render_system::RenderSystem, window_system::WindowSystem}};
 
 
 bitflags! {
@@ -48,13 +48,14 @@ impl InputSystem {
 
     fn on_key(
         &mut self,
-        window_system: &WindowSystem,
+        engine: &Engine,
         device_id: DeviceId, 
         event: &KeyEvent, 
         is_synthetic: bool
     ) {
-        if !Engine::is_editor_mode() {
-            self.on_key_in_game_mode(window_system, device_id, event, is_synthetic);
+        if !engine.is_editor_mode() {
+            let window_system = engine.m_runtime_context.window_system().borrow();
+            self.on_key_in_game_mode(&window_system, device_id, event, is_synthetic);
         }
     }
 
@@ -207,35 +208,46 @@ impl InputSystem {
 }
 
 pub trait InputSystemExt {
-    fn initialize(&self, window_system: &Rc<RefCell<WindowSystem>>);
+    /// `engine` must be a [`Weak`] from the owning `Rc<RefCell<Engine>>`.
+    /// Do not call while that `RefCell` is already mutably borrowed (e.g. from `App::resumed`).
+    fn initialize(
+        &self,
+        engine: Weak<RefCell<Engine>>,
+        window_system: &Rc<RefCell<WindowSystem>>,
+    );
 }
 
 impl InputSystemExt for Rc<RefCell<InputSystem>> {
-    fn initialize(&self, window_system: &Rc<RefCell<WindowSystem>>) {
-        let mut window_system_ref = window_system.borrow_mut();
-        let window_system_weak = Rc::downgrade(window_system);
-        let this = Rc::downgrade(&self);
-        let ws_for_key = window_system_weak.clone();
-        window_system_ref.register_on_key_func(move |device_id, event, is_synthetic| {
+    fn initialize(
+        &self,
+        engine_weak: Weak<RefCell<Engine>>,
+        window_system: &Rc<RefCell<WindowSystem>>,
+    ) {
+        let window_system_rc = window_system.clone();
+        let window_system_weak = Rc::downgrade(&window_system_rc);
+
+        let mut window_system_mut = window_system_rc.borrow_mut();
+
+        let this = Rc::downgrade(self);
+        let eng_for_key = engine_weak.clone();
+        window_system_mut.register_on_key_func(move |device_id, event, is_synthetic| {
             let this = this.upgrade().unwrap();
-            let window_system = ws_for_key.upgrade().unwrap();
-            this.borrow_mut().on_key(
-                &window_system.borrow(),
-                device_id,
-                event,
-                is_synthetic,
-            );
+            if let Some(engine) = eng_for_key.upgrade() {
+                let eng_ref = engine.borrow();
+                this.borrow_mut()
+                    .on_key(&*eng_ref, device_id, event, is_synthetic);
+            }
         });
-        let this = Rc::downgrade(&self);
+
+        let this = Rc::downgrade(self);
         let ws_for_mouse = window_system_weak.clone();
-        window_system_ref.register_on_mouse_motion(move |device_id, position| {
+        window_system_mut.register_on_mouse_motion(move |device_id, position| {
             let this = this.upgrade().unwrap();
-            let window_system = ws_for_mouse.upgrade().unwrap();
-            this.borrow_mut().on_mouse_motion(
-                &window_system.borrow(),
-                device_id,
-                position,
-            );
+            if let Some(ws) = ws_for_mouse.upgrade() {
+                let ws_ref = ws.borrow();
+                this.borrow_mut()
+                    .on_mouse_motion(&*ws_ref, device_id, position);
+            }
         });
     }
 }

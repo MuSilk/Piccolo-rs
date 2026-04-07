@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use imgui::{Condition, WindowFlags};
 use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem, window_system::WindowSystem}, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
@@ -6,11 +6,22 @@ use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::in
 use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
 
-#[derive(Default)]
 pub struct EditorUI {
     m_state: State,
     m_input_manager: Option<Rc<RefCell<EditorInputManager>>>,
     m_scene_manager: Option<Rc<RefCell<EditorSceneManager>>>,
+    m_engine: Weak<RefCell<Engine>>,
+}
+
+impl Default for EditorUI {
+    fn default() -> Self {
+        Self {
+            m_state: State::default(),
+            m_input_manager: None,
+            m_scene_manager: None,
+            m_engine: Weak::new(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -52,9 +63,11 @@ impl EditorUI {
         &mut self,
         input_manager: Rc<RefCell<EditorInputManager>>,
         scene_manager: Rc<RefCell<EditorSceneManager>>,
+        engine: &Rc<RefCell<Engine>>,
     ) {
         self.m_input_manager = Some(input_manager);
         self.m_scene_manager = Some(scene_manager);
+        self.m_engine = Rc::downgrade(engine);
     }
 
     fn show_editor_ui(
@@ -167,9 +180,12 @@ impl EditorUI {
         ui: &imgui::Ui
     ) {
         if let Some(_) =  ui.begin_menu_bar() {
-            if Engine::is_editor_mode() {
+            let Some(engine_rc) = self.m_engine.upgrade() else {
+                return;
+            };
+            if engine_rc.borrow().is_editor_mode() {
                 if ui.button("Editor Mode") {
-                    Engine::set_editor_mode(false);
+                    engine_rc.borrow_mut().set_editor_mode(false);
                     if let Some(im) = self.m_input_manager.as_ref() {
                         im.borrow_mut().reset_editor_command();
                     }
@@ -177,7 +193,7 @@ impl EditorUI {
                 }
             } else{
                 if ui.button("Game Mode") {
-                    Engine::set_editor_mode(true);
+                    engine_rc.borrow_mut().set_editor_mode(true);
                     input_system.borrow_mut().reset_game_command();
                     let view_matrix = {
                         let sm = self

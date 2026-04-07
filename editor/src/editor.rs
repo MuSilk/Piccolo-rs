@@ -24,7 +24,7 @@ impl Default for Editor {
 
 impl app::System for Editor {
     fn initialize(&mut self, engine_runtime: &Rc<RefCell<Engine>>){
-        Engine::set_editor_mode(true);
+        engine_runtime.borrow_mut().set_editor_mode(true);
         self.m_engine_runtime = Rc::downgrade(engine_runtime);
 
         let t_engine_runtime = engine_runtime.borrow();
@@ -45,6 +45,7 @@ impl app::System for Editor {
         self.m_editor_ui.borrow_mut().set_editor_handles(
             editor_ctx.m_input_manager.clone(),
             editor_ctx.m_scene_manager.clone(),
+            engine_runtime,
         );
 
         self.m_editor_ui.borrow_mut().initialize(WindowUIInitInfo{

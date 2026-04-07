@@ -215,9 +215,9 @@ impl Scene {
 }
 
 impl Scene {
-    pub fn tick_transform_components(&mut self) {
+    pub fn tick_transform_components(&mut self, engine: &Engine) {
         self.query_mut::<TransformComponent>().for_each(|mut transform| {
-            transform.tick();
+            transform.tick(engine);
         });
     }
 

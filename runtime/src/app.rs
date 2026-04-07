@@ -60,7 +60,8 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.engine.borrow_mut().resumed(event_loop);
+        let engine_weak = Rc::downgrade(&self.engine);
+        self.engine.borrow_mut().resumed(event_loop, engine_weak);
         self.engine.borrow_mut().initialize();
         self.systems.iter_mut().for_each(|s| s.initialize(&self.engine));
     }

@@ -1,8 +1,8 @@
-use std::{cell::{RefCell}, path::Path, rc::Rc};
+use std::{cell::{RefCell}, path::Path, rc::{Rc, Weak}};
 
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
     m_config_manager: Rc<RefCell<ConfigManager>>,
@@ -37,12 +37,13 @@ impl RuntimeGlobalContext {
         ctx
     }
 
-    pub fn resumed_instance(&mut self, event_loop: &ActiveEventLoop) {
+    pub fn resumed_instance(&mut self, event_loop: &ActiveEventLoop, engine: Weak<RefCell<Engine>>) {
         self.m_window_system
             .borrow_mut()
             .initialize(event_loop, WindowCreateInfo::default())
             .unwrap();
-        self.m_input_system.initialize(&self.m_window_system);
+        self.m_input_system
+            .initialize(engine, &self.m_window_system);
 
         let render_system = RenderSystem::create(&RenderSystemCreateInfo {
             window_system: &self.m_window_system.borrow(),

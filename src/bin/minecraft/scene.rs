@@ -61,10 +61,10 @@ impl SceneTrait for Scene {
             return;
         }
         let render_system = engine.m_runtime_context.render_system().borrow();
-        self.scene.tick_transform_components();
+        self.scene.tick_transform_components(engine);
         self.scene.tick_mesh_components(&render_system);
 
-        if !Engine::is_editor_mode() {
+        if !engine.is_editor_mode() {
 
             self.scene.query_triple_mut::<CharacterComponent, TransformComponent, MotorComponent>()
             .for_each(|(mut character, mut transform, mut motor)|

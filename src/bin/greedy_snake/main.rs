@@ -149,7 +149,7 @@ impl SceneTrait for Scene {
         self.scene.query_mut::<CameraComponent>().for_each(|mut camera| {
             camera.tick_free_camera(&input_system, &render_system, delta_time);
         });
-        self.scene.tick_transform_components();
+        self.scene.tick_transform_components(engine);
         self.scene.tick_mesh_components(&render_system);
     }
 

@@ -1,11 +1,9 @@
-use std::{path::Path, time::Instant};
+use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, time::Instant};
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::{function::global::global_context::RuntimeGlobalContext};
-
-static mut G_IS_EDITOR_MODE: bool = false;
 
 pub struct Engine {
     pub m_runtime_context: RuntimeGlobalContext,
@@ -13,6 +11,7 @@ pub struct Engine {
     m_last_tick_time_point: Instant,
     m_average_duration: f32,
     m_frame_count: u32,
+    m_is_editor_mode: bool,
     m_fps: u32,
 }
 
@@ -25,12 +24,13 @@ impl Engine {
             m_last_tick_time_point: Instant::now(),
             m_average_duration: 0.0,
             m_frame_count: 0,
+            m_is_editor_mode: false,
             m_fps: 0,
         }
     }
 
-    pub fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.m_runtime_context.resumed_instance(event_loop);
+    pub fn resumed(&mut self, event_loop: &ActiveEventLoop, engine: Weak<RefCell<Engine>>) {
+        self.m_runtime_context.resumed_instance(event_loop, engine);
     }
     pub fn initialize(&mut self){
         self.m_last_tick_time_point = Instant::now();
@@ -66,12 +66,12 @@ impl Engine {
             .should_close())
     }
 
-    pub fn is_editor_mode() -> bool {
-        unsafe {G_IS_EDITOR_MODE}
+    pub fn is_editor_mode(&self) -> bool {
+        self.m_is_editor_mode
     }
 
-    pub fn set_editor_mode(value: bool) {
-        unsafe {G_IS_EDITOR_MODE = value;}
+    pub fn set_editor_mode(&mut self, value: bool) {
+        self.m_is_editor_mode = value;
     }
 }
 
