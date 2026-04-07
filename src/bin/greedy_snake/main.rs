@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 
 use rand::Rng;
+use runtime::engine::Engine;
 use runtime::function::framework::object::object_id_allocator::GObjectID;
 use runtime::function::framework::scene::scene::Scene as EngineScene;
 use runtime::{
@@ -16,7 +17,6 @@ use runtime::{
             },
             scene::scene::SceneTrait,
         },
-        global::global_context::RuntimeGlobalContext,
         input::input_system::GameCommand,
     },
 };
@@ -126,26 +126,31 @@ impl Scene {
 }
 
 impl SceneTrait for Scene {
-    fn load(&mut self) {
-        setup(self);
+    fn load(&mut self, engine: &Engine) {
+        setup(self, engine);
         self.scene.set_loaded(true);
     }
 
     fn save(&self) {}
 
-    fn tick(&mut self, delta_time: f32) {
+    fn tick(&mut self, engine: &Engine, delta_time: f32) {
         if !self.is_loaded() {
             return;
         }
 
-        process_input(self);
-        update(self, delta_time);
+        process_input(self, engine);
+        update(self, engine, delta_time);
+
+        let input_system = engine.m_runtime_context.input_system();
+        let input_system = input_system.borrow();
+        let render_system = engine.m_runtime_context.render_system();
+        let render_system = render_system.borrow();
 
         self.scene.query_mut::<CameraComponent>().for_each(|mut camera| {
-            camera.tick_free_camera(delta_time);
+            camera.tick_free_camera(&input_system, &render_system, delta_time);
         });
         self.scene.tick_transform_components();
-        self.scene.tick_mesh_components();
+        self.scene.tick_mesh_components(&render_system);
     }
 
     fn get_url(&self) -> String {
@@ -157,16 +162,16 @@ impl SceneTrait for Scene {
     }
 }
 
-fn setup(scene: &mut Scene) {
+fn setup(scene: &mut Scene, engine: &Engine) {
     spawn_camera(&mut scene.scene);
-    spawn_ground(&mut scene.scene);
+    spawn_ground(&mut scene.scene, engine);
 
-    let head_id = spawn_head_entity(&mut scene.scene);
+    let head_id = spawn_head_entity(&mut scene.scene, engine);
     let body_ids = vec![
-        spawn_segment_entity(&mut scene.scene, 0),
-        spawn_segment_entity(&mut scene.scene, 1),
+        spawn_segment_entity(&mut scene.scene, engine, 0),
+        spawn_segment_entity(&mut scene.scene, engine, 1),
     ];
-    let food_id = spawn_food_entity(&mut scene.scene);
+    let food_id = spawn_food_entity(&mut scene.scene, engine);
     let mut state = SnakeState::new(head_id, body_ids, food_id);
     state.food_cell = random_free_cell(&state.cells);
 
@@ -174,8 +179,9 @@ fn setup(scene: &mut Scene) {
     sync_entity_transforms(scene);
 }
 
-fn process_input(scene: &mut Scene) {
-    let input_system = RuntimeGlobalContext::get_input_system().borrow();
+fn process_input(scene: &mut Scene, engine: &Engine) {
+    let input_system = 
+        engine.m_runtime_context.input_system().borrow();
     let command = input_system.get_game_command();
 
     let wanted = if command.contains(GameCommand::forward) {
@@ -198,7 +204,7 @@ fn process_input(scene: &mut Scene) {
     }
 }
 
-fn update(scene: &mut Scene, delta_time: f32) {
+fn update(scene: &mut Scene, engine: &Engine, delta_time: f32) {
     let step = 1.0 / MOVE_SPEED;
     let mut steps = 0usize;
 
@@ -216,7 +222,7 @@ fn update(scene: &mut Scene, delta_time: f32) {
             break;
         }
 
-        snake_step(scene);
+        snake_step(scene, engine);
         sync_entity_transforms(scene);
         let state = scene.scene.get_mut_resource::<SnakeState>().unwrap();
         state.accumulator -= step;
@@ -224,7 +230,7 @@ fn update(scene: &mut Scene, delta_time: f32) {
     }
 }
 
-fn snake_step(scene: &mut Scene) {
+fn snake_step(scene: &mut Scene, engine: &Engine) {
     let mut ate_food = false;
     let mut need_reset = false;
 
@@ -270,7 +276,7 @@ fn snake_step(scene: &mut Scene) {
                 let state = scene.scene.get_resource::<SnakeState>().unwrap();
                 state.body_ids.len()
             };
-            let new_segment_id = spawn_segment_entity(&mut scene.scene, next_pool_index);
+            let new_segment_id = spawn_segment_entity(&mut scene.scene, engine, next_pool_index);
             let state = scene.scene.get_mut_resource::<SnakeState>().unwrap();
             state.body_ids.push(new_segment_id);
         }
@@ -342,14 +348,18 @@ fn spawn_camera(scene: &mut EngineScene) {
     scene.create_object(object, vec![RefCell::new(camera as Box<dyn ComponentTrait>)]);
 }
 
-fn spawn_ground(scene: &mut EngineScene) {
+fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
     let object = scene.spawn();
     let mut ground = Box::new(MeshComponent::default());
-    let mesh_res = RuntimeGlobalContext::get_asset_manager()
-        .borrow()
-        .load_asset("asset/greedy_snake/ground.json")
+    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
+    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let mesh_res = asset_manager
+        .load_asset(
+            &config_manager,
+            "asset/greedy_snake/ground.json"
+        )
         .unwrap();
-    ground.post_load_resource(&mesh_res);
+    ground.post_load_resource(&asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -367,15 +377,19 @@ fn spawn_ground(scene: &mut EngineScene) {
     );
 }
 
-fn spawn_head_entity(scene: &mut EngineScene) -> GObjectID {
+fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let object = scene.spawn();
     let head = Box::new(SnakeHead::default());
     let mut mesh = Box::new(MeshComponent::default());
-    let mesh_res = RuntimeGlobalContext::get_asset_manager()
-        .borrow()
-        .load_asset("asset/greedy_snake/head.json")
+    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
+    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let mesh_res = asset_manager
+        .load_asset(
+            &config_manager,
+            "asset/greedy_snake/head.json"
+        )
         .unwrap();
-    mesh.post_load_resource(&mesh_res);
+    mesh.post_load_resource(&asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -395,18 +409,22 @@ fn spawn_head_entity(scene: &mut EngineScene) -> GObjectID {
     object
 }
 
-fn spawn_segment_entity(scene: &mut EngineScene, pool_index: usize) -> GObjectID {
+fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: usize) -> GObjectID {
     let object = scene.spawn();
     let segment = Box::new(SnakeSegment {
         component: Component::default(),
         pool_index,
     });
     let mut mesh = Box::new(MeshComponent::default());
-    let mesh_res = RuntimeGlobalContext::get_asset_manager()
-        .borrow()
-        .load_asset("asset/greedy_snake/head.json")
+    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
+    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let mesh_res = asset_manager
+        .load_asset(
+            &config_manager,
+            "asset/greedy_snake/head.json"
+        )
         .unwrap();
-    mesh.post_load_resource(&mesh_res);
+    mesh.post_load_resource(&asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -426,15 +444,19 @@ fn spawn_segment_entity(scene: &mut EngineScene, pool_index: usize) -> GObjectID
     object
 }
 
-fn spawn_food_entity(scene: &mut EngineScene) -> GObjectID {
+fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let object = scene.spawn();
     let food = Box::new(Food::default());
     let mut mesh = Box::new(MeshComponent::default());
-    let mesh_res = RuntimeGlobalContext::get_asset_manager()
-        .borrow()
-        .load_asset("asset/greedy_snake/head.json")
+    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
+    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let mesh_res = asset_manager
+        .load_asset(
+            &config_manager,
+            "asset/greedy_snake/head.json"
+        )
         .unwrap();
-    mesh.post_load_resource(&mesh_res);
+    mesh.post_load_resource(&asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(

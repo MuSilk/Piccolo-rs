@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use bitflags::bitflags;
 use winit::{event::{DeviceId, ElementState, KeyEvent}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{engine::Engine, function::{global::global_context::RuntimeGlobalContext}};
+use crate::{engine::Engine, function::{render::{render_system::RenderSystem, window_system::WindowSystem}}};
 
 
 bitflags! {
@@ -46,13 +46,25 @@ impl InputSystem {
         self.m_game_command = GameCommand::empty();
     }
 
-    fn on_key(&mut self, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) {
+    fn on_key(
+        &mut self,
+        window_system: &WindowSystem,
+        device_id: DeviceId, 
+        event: &KeyEvent, 
+        is_synthetic: bool
+    ) {
         if !Engine::is_editor_mode() {
-            self.on_key_in_game_mode(device_id, event, is_synthetic);
+            self.on_key_in_game_mode(window_system, device_id, event, is_synthetic);
         }
     }
 
-    fn on_key_in_game_mode(&mut self, _device_id: DeviceId, event: &KeyEvent, _is_synthetic: bool) { 
+    fn on_key_in_game_mode(
+        &mut self, 
+        window_system: &WindowSystem,
+        _device_id: DeviceId, 
+        event: &KeyEvent, 
+        _is_synthetic: bool
+    ) { 
         self.m_game_command &= GameCommand::all() ^ GameCommand::jump;
 
         match event.state {
@@ -85,8 +97,8 @@ impl InputSystem {
                                 self.m_game_command |= GameCommand::squat;
                             }
                             KeyCode::AltLeft => {
-                                let mode =  RuntimeGlobalContext::get_window_system().borrow().get_focus_mode();
-                                RuntimeGlobalContext::get_window_system().borrow().set_focus_mode(!mode);
+                                let mode =  window_system.get_focus_mode();
+                                window_system.set_focus_mode(!mode);
                             }
                             KeyCode::ShiftLeft => {
                                 self.m_game_command |= GameCommand::sprint;
@@ -137,8 +149,13 @@ impl InputSystem {
         }
     }
 
-    fn on_mouse_motion(&mut self, _device_id: DeviceId, delta: (f64, f64)) {
-        if RuntimeGlobalContext::get_window_system().borrow().get_focus_mode() {
+    fn on_mouse_motion(
+        &mut self, 
+        window_system: &WindowSystem,
+        _device_id: DeviceId, 
+        delta: (f64, f64)
+    ) {
+        if window_system.get_focus_mode() {
             self.m_cursor_delta_x = -delta.0 as i32;
             self.m_cursor_delta_y = -delta.1 as i32;
         }
@@ -149,14 +166,17 @@ impl InputSystem {
         self.m_cursor_delta_y = 0;
     }
     
-    fn calculate_cursor_delta_angles(&mut self) {
-        let window_size = RuntimeGlobalContext::get_window_system().borrow().get_window_size();
+    fn calculate_cursor_delta_angles(
+        &mut self,
+        window_system: &WindowSystem,
+        render_system: &RenderSystem,
+    ) {
+        let window_size = window_system.get_window_size();
 
         if window_size.0 < 1 || window_size.1 < 1 {
             return;
         }
 
-        let render_system = RuntimeGlobalContext::get_render_system().borrow();
         let render_camera = render_system.get_render_camera();
         let fov = render_camera.borrow().get_fov();
 
@@ -168,11 +188,16 @@ impl InputSystem {
 
     }
 
-    pub fn tick(&mut self, _delta_time: f32) {
-        self.calculate_cursor_delta_angles();
+    pub fn tick(
+        &mut self, 
+        window_system: &WindowSystem,
+        render_system: &RenderSystem,
+        _delta_time: f32
+    ) {
+        self.calculate_cursor_delta_angles(window_system, render_system);
         self.clear();        
 
-        if RuntimeGlobalContext::get_window_system().borrow().get_focus_mode() {
+        if window_system.get_focus_mode() {
             self.m_game_command &= GameCommand::all() ^ GameCommand::invalid;
         }
         else {
@@ -182,21 +207,35 @@ impl InputSystem {
 }
 
 pub trait InputSystemExt {
-    fn initialize(&self);
+    fn initialize(&self, window_system: &Rc<RefCell<WindowSystem>>);
 }
 
 impl InputSystemExt for Rc<RefCell<InputSystem>> {
-    fn initialize(&self) {
-        let mut window_system = RuntimeGlobalContext::get_window_system().borrow_mut();
+    fn initialize(&self, window_system: &Rc<RefCell<WindowSystem>>) {
+        let mut window_system_ref = window_system.borrow_mut();
+        let window_system_weak = Rc::downgrade(window_system);
         let this = Rc::downgrade(&self);
-        window_system.register_on_key_func(move |device_id, event, is_synthetic| {
+        let ws_for_key = window_system_weak.clone();
+        window_system_ref.register_on_key_func(move |device_id, event, is_synthetic| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_key(device_id, event, is_synthetic);
+            let window_system = ws_for_key.upgrade().unwrap();
+            this.borrow_mut().on_key(
+                &window_system.borrow(),
+                device_id,
+                event,
+                is_synthetic,
+            );
         });
         let this = Rc::downgrade(&self);
-        window_system.register_on_mouse_motion(move |device_id, position| {
+        let ws_for_mouse = window_system_weak.clone();
+        window_system_ref.register_on_mouse_motion(move |device_id, position| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_mouse_motion(device_id, position);
+            let window_system = ws_for_mouse.upgrade().unwrap();
+            this.borrow_mut().on_mouse_motion(
+                &window_system.borrow(),
+                device_id,
+                position,
+            );
         });
     }
 }

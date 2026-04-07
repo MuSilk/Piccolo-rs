@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use imgui_winit_support::WinitPlatform;
 
-use crate::function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, pick_pass::PickPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI};
+use crate::{function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, pick_pass::PickPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI}, resource::config_manager::ConfigManager};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -10,6 +10,7 @@ pub struct RenderPipelineCreateInfo<'a>{
     pub enable_fxaa : bool,
     pub imgui_context : &'a Rc<RefCell<imgui::Context>>,
     pub imgui_platform : &'a Rc<RefCell<WinitPlatform>>,
+    pub config_manager : &'a ConfigManager,
 }
 
 pub struct RenderPipelineBase{
@@ -27,12 +28,16 @@ pub struct RenderPipelineBase{
 }
 
 impl RenderPipelineBase{
-    pub fn prepare_pass_data(&mut self, render_resource : &RenderResource){
+    pub fn prepare_pass_data(
+        &mut self, 
+        debugdraw_manager: &mut DebugDrawManager,
+        render_resource : &RenderResource,
+    ){
         self.m_directional_light_pass.prepare_pass_data(render_resource);
         self.m_point_light_pass.prepare_pass_data(render_resource);
         self.m_main_camera_pass.prepare_pass_data(render_resource);
         self.m_pick_pass.prepare_pass_data(render_resource);
-        RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().prepare_pass_data(render_resource);
+        debugdraw_manager.prepare_pass_data(render_resource);
     }   
 
     pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {

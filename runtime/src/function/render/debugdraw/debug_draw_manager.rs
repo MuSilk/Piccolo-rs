@@ -3,7 +3,7 @@ use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, slice, sync::Mutex};
 use anyhow::Result;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{matrix4::Matrix4x4}, function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}, debug_draw_primitive::K_DEBUG_DRAW_ONE_FRAME}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource}};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{debugdraw::{debug_draw_buffer::DebugDrawAllocator, debug_draw_context::DebugDrawContext, debug_draw_font::DebugDrawFont, debug_draw_group::DebugDrawGroup, debug_draw_pipeline::{DebugDrawPipeline, DebugDrawPipelineType}}, interface::vulkan::vulkan_rhi::VulkanRHI, render_resource::RenderResource, render_system::RenderSystem}};
 
 pub struct DebugDrawManagerCreateInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
@@ -73,12 +73,12 @@ impl DebugDrawManager {
         self.m_proj_view_matrix = render_resource.m_mesh_perframe_storage_buffer_object.proj_view_matrix;
     }
 
-    pub fn destroy(&mut self){
+    pub fn destroy(&mut self, render_system: &RenderSystem){
         for pipeline in self.m_debug_draw_pipelines.iter_mut(){
             pipeline.destroy();
         }
         self.m_buffer_allocator.destroy();
-        self.m_font.destroy();
+        self.m_font.destroy(render_system);
     }
 
     pub fn clear(&mut self){

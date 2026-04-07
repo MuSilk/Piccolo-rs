@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::function::render::{render_system::RenderSystem, window_system::WindowSystem};
+use crate::function::{input::input_system::InputSystem, render::{render_system::RenderSystem, window_system::WindowSystem}};
 
 pub struct WindowUIInitInfo<'a> {
     pub window_system: &'a Rc<RefCell<WindowSystem>>,
@@ -9,6 +9,11 @@ pub struct WindowUIInitInfo<'a> {
 
 pub trait WindowUI {
     fn initialize(&mut self, init_info: WindowUIInitInfo);
-    fn pre_render(&mut self, ui: &mut imgui::Ui);
+    fn pre_render(&mut self, 
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem, 
+        input_system: &RefCell<InputSystem>, 
+        ui: &mut imgui::Ui
+    );
 }
 

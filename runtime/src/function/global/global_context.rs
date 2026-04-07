@@ -4,91 +4,93 @@ use winit::event_loop::ActiveEventLoop;
 
 use crate::{function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
-#[derive(Default)]
 pub struct RuntimeGlobalContext {
-    m_input_system: Rc<RefCell<InputSystem>>,
-    m_asset_manager: Rc<RefCell<AssetManager>>,
     m_config_manager: Rc<RefCell<ConfigManager>>,
+    m_asset_manager: Rc<RefCell<AssetManager>>,
+    m_input_system: Rc<RefCell<InputSystem>>,
     m_world_manager: Rc<RefCell<WorldManager>>,
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<Rc<RefCell<RenderSystem>>>,
     m_debugdraw_manager: Option<Rc<RefCell<DebugDrawManager>>>,
 }
 
-static mut G_RUNTIME_GLOBAL_CONTEXT: Option<RuntimeGlobalContext> = None;
-
-unsafe impl Send for RuntimeGlobalContext {}
-unsafe impl Sync for RuntimeGlobalContext {}
-
 impl RuntimeGlobalContext {
-    #[allow(static_mut_refs)]
-    pub fn global() -> &'static Self {
-        unsafe{
-            G_RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap()
-        }   
-    }
-    
-    #[allow(static_mut_refs)]
-    pub fn start_systems(config_file_path: &Path) {
-        unsafe{
-            G_RUNTIME_GLOBAL_CONTEXT = Some(RuntimeGlobalContext::default());
-            let ctx = G_RUNTIME_GLOBAL_CONTEXT.as_ref().unwrap();
-            ctx.m_config_manager.borrow_mut().initialize(config_file_path);
-            ctx.m_world_manager.borrow_mut().initialize();
-        }
-    }
+    pub fn new(config_file_path: &Path) -> Self {
+        let config_manager = 
+            Rc::new(RefCell::new(ConfigManager::default()));
+        let asset_manager = 
+            Rc::new(RefCell::new(AssetManager::new()));
 
-    #[allow(static_mut_refs)]
-    pub fn resumed(event_loop: &ActiveEventLoop) {
-        unsafe{
-            let ctx = G_RUNTIME_GLOBAL_CONTEXT.as_mut().unwrap();
-            ctx.m_window_system.borrow_mut().initialize(event_loop, WindowCreateInfo::default()).unwrap();
-            ctx.m_input_system.initialize();
-
-            let render_system = RenderSystem::create(&RenderSystemCreateInfo {
-                window_system: &ctx.m_window_system.borrow(),
-            });
-            let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
-                rhi: render_system.get_rhi(),
-                font_path: ctx.m_config_manager.borrow().get_editor_font_path(),
-            }).unwrap();
-            ctx.m_render_system = Some(Rc::new(RefCell::new(render_system)));
-            ctx.m_debugdraw_manager = Some(Rc::new(RefCell::new(debugdraw_manager)));
-        }
+        let ctx= RuntimeGlobalContext {
+            m_config_manager: config_manager,
+            m_asset_manager: asset_manager,
+            m_input_system: Rc::new(RefCell::new(InputSystem::default())),
+            m_world_manager: Rc::new(RefCell::new(WorldManager::default())),
+            m_window_system: Rc::new(RefCell::new(WindowSystem::default())),
+            m_render_system: None,
+            m_debugdraw_manager: None,
+        };
+        ctx.m_config_manager.borrow_mut().initialize(config_file_path);
+        ctx.m_world_manager.borrow_mut().initialize(
+            &ctx.m_config_manager.borrow()
+        );
+        ctx
     }
 
+    pub fn resumed_instance(&mut self, event_loop: &ActiveEventLoop) {
+        self.m_window_system
+            .borrow_mut()
+            .initialize(event_loop, WindowCreateInfo::default())
+            .unwrap();
+        self.m_input_system.initialize(&self.m_window_system);
+
+        let render_system = RenderSystem::create(&RenderSystemCreateInfo {
+            window_system: &self.m_window_system.borrow(),
+            asset_manager: &self.m_asset_manager.borrow(),
+            config_manager: &self.m_config_manager.borrow(),
+        });
+        let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
+            rhi: render_system.get_rhi(),
+            font_path: self.m_config_manager.borrow().get_editor_font_path(),
+        })
+        .unwrap();
+        self.m_render_system = Some(Rc::new(RefCell::new(render_system)));
+        self.m_debugdraw_manager = Some(Rc::new(RefCell::new(debugdraw_manager)));
+    }
+
+    pub fn input_system(&self) -> &Rc<RefCell<InputSystem>> {
+        &self.m_input_system
+    }
+
+    pub fn window_system(&self) -> &Rc<RefCell<WindowSystem>> {
+        &self.m_window_system
+    }
+
+    pub fn render_system(&self) -> &Rc<RefCell<RenderSystem>> {
+        self.m_render_system.as_ref().unwrap()
+    }
+
+    pub fn debugdraw_manager(&self) -> &Rc<RefCell<DebugDrawManager>> {
+        self.m_debugdraw_manager.as_ref().unwrap()
+    }
+
+    pub fn config_manager(&self) -> &Rc<RefCell<ConfigManager>> {
+        &self.m_config_manager
+    }
+
+    pub fn asset_manager(&self) -> &Rc<RefCell<AssetManager>> {
+        &self.m_asset_manager
+    }
+
+    pub fn world_manager(&self) -> &Rc<RefCell<WorldManager>> {
+        &self.m_world_manager
+    }
 
     pub fn shutdown_systems(&self){
         self.m_render_system.as_ref().unwrap().borrow().get_rhi().borrow().wait_idle().unwrap();
-        self.m_debugdraw_manager.as_ref().unwrap().borrow_mut().destroy();
+        self.m_debugdraw_manager
+            .as_ref().unwrap().borrow_mut()
+            .destroy(&self.m_render_system.as_ref().unwrap().borrow());
         self.m_render_system.as_ref().unwrap().borrow().destroy().unwrap();
-    }
-
-    pub fn get_input_system() -> &'static Rc<RefCell<InputSystem>> {
-        &Self::global().m_input_system
-    }
-
-    pub fn get_window_system() -> &'static Rc<RefCell<WindowSystem>> {
-        &Self::global().m_window_system
-    }
-
-    pub fn get_render_system() -> &'static Rc<RefCell<RenderSystem>> {
-        &Self::global().m_render_system.as_ref().unwrap()
-    }
-
-    pub fn get_debugdraw_manager() -> &'static Rc<RefCell<DebugDrawManager>> {
-        &Self::global().m_debugdraw_manager.as_ref().unwrap()
-    }
-
-    pub fn get_config_manager() -> &'static Rc<RefCell<ConfigManager>> {
-        &Self::global().m_config_manager
-    }
-
-    pub fn get_asset_manager() -> &'static Rc<RefCell<AssetManager>> {
-        &Self::global().m_asset_manager
-    }
-
-    pub fn get_world_manager() -> &'static Rc<RefCell<WorldManager>> {
-        &Self::global().m_world_manager
     }
 }

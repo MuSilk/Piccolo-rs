@@ -1,8 +1,8 @@
-use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, fmt::Debug, hash::{Hash, Hasher}, rc::Rc};
+use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, hash::{Hash, Hasher}, rc::Rc};
 
 use itertools::Itertools;
 
-use crate::function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, global::global_context::RuntimeGlobalContext, render::render_object::GameObjectDesc};
+use crate::{engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, input::input_system::InputSystem, render::{render_object::GameObjectDesc, render_system::RenderSystem}}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -221,7 +221,10 @@ impl Scene {
         });
     }
 
-    pub fn tick_mesh_components(&mut self) {
+    pub fn tick_mesh_components(
+        &mut self,
+        render_system: &RenderSystem,
+    ) {
         self.query_pair_mut::<MeshComponent, TransformComponent>()
             .for_each(|(mut mesh, mut transform)| 
         {
@@ -236,7 +239,6 @@ impl Scene {
                     mesh_part.m_transform_desc.m_transform_matrix = object_transform_matrix;
                 }
 
-                let render_system = RuntimeGlobalContext::get_render_system().borrow();
                 let render_swap_context = render_system.get_swap_context();
                 let logic_swap_data = render_swap_context.get_logic_swap_data();
                 transform.set_dirty_flag(false);
@@ -245,19 +247,24 @@ impl Scene {
         });
     }
 
-    pub fn tick_camera_components(&mut self, delta_time: f32) {
+    pub fn tick_camera_components(
+        &mut self, 
+        input_system: &InputSystem,
+        render_system: &RenderSystem,
+        delta_time: f32
+    ) {
         self.query_pair_mut::<CameraComponent, CharacterComponent>()
             .for_each(|(mut camera, mut character)|
         {
             match &mut camera.m_camera_res.m_parameter {
                 CameraParameter::FirstPerson(_) => {
-                    camera.tick_first_person_camera(&mut character);
+                    camera.tick_first_person_camera(input_system, render_system, &mut character);
                 }
                 CameraParameter::ThirdPerson(_) => {
-                    camera.tick_third_person_camera(&mut character);
+                    camera.tick_third_person_camera(input_system, render_system, &mut character);
                 }
                 CameraParameter::Free(_) => {
-                    camera.tick_free_camera(delta_time);
+                    camera.tick_free_camera(input_system, render_system, delta_time);
                 }
             }
         })
@@ -265,9 +272,9 @@ impl Scene {
 }
 
 pub trait SceneTrait {
-    fn load(&mut self);
+    fn load(&mut self, engine: &Engine);
     fn save(&self);
-    fn tick(&mut self, delta_time: f32);
+    fn tick(&mut self, engine_runtime: &Engine, delta_time: f32);
     fn get_url(&self) -> String;
     fn is_loaded(&self) -> bool;
 }

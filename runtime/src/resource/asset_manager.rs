@@ -5,21 +5,33 @@ use anyhow::anyhow;
 use log::error;
 use serde::de::DeserializeOwned;
 
-use crate::{function::global::global_context::RuntimeGlobalContext};
+use crate::resource::config_manager::ConfigManager;
 
 
-#[derive(Default)]
 pub struct AssetManager {}
 
 impl AssetManager {
-    pub fn get_full_path(&self, relative_path: &str) -> PathBuf {
-        let config_manager = RuntimeGlobalContext::get_config_manager().borrow();
+
+    pub fn new() -> Self {
+        AssetManager {
+        }
+    }
+
+    pub fn get_full_path(
+        &self, 
+        config_manager: &ConfigManager,
+        relative_path: &str,
+    ) -> PathBuf {
         let root_folder = config_manager.get_root_folder();
         root_folder.join(relative_path)
     }
 
-    pub fn load_asset<AssetType : DeserializeOwned>(&self, asset_url: &str) -> Result<AssetType> {
-        let asset_path = self.get_full_path(asset_url);
+    pub fn load_asset<AssetType : DeserializeOwned>(
+        &self, 
+        config_manager: &ConfigManager,
+        asset_url: &str
+    ) -> Result<AssetType> {
+        let asset_path = self.get_full_path(config_manager, asset_url);
         let reader = std::fs::File::open(asset_path).map(std::io::BufReader::new);
         if let Err(e) = reader {
             error!("Failed to open asset file {}: {}", asset_url, e);
@@ -33,8 +45,12 @@ impl AssetManager {
         Ok(asset_json.unwrap())
     }
 
-    pub fn save_asset<AssetType : serde::Serialize>(&self, asset_url: &str, asset: AssetType) -> Result<()> {
-        let asset_path = self.get_full_path(asset_url);
+    pub fn save_asset<AssetType : serde::Serialize>(
+        &self, asset_url: &str, 
+        config_manager: &ConfigManager,
+        asset: AssetType
+    ) -> Result<()> {
+        let asset_path = self.get_full_path(config_manager, asset_url);
         let writer = std::fs::File::create(asset_path).map(std::io::BufWriter::new);
         if let Err(e) = writer {
             error!("Failed to create asset file {}: {}", asset_url, e);

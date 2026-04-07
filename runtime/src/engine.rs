@@ -8,6 +8,7 @@ use crate::{function::global::global_context::RuntimeGlobalContext};
 static mut G_IS_EDITOR_MODE: bool = false;
 
 pub struct Engine {
+    pub m_runtime_context: RuntimeGlobalContext,
     m_is_quit: bool,
     m_last_tick_time_point: Instant,
     m_average_duration: f32,
@@ -15,9 +16,11 @@ pub struct Engine {
     m_fps: u32,
 }
 
-impl Default for Engine {
-    fn default() -> Self {
+impl Engine {
+
+    pub fn new(config_file_path: &Path) -> Self {
         Engine {
+            m_runtime_context: RuntimeGlobalContext::new(config_file_path),
             m_is_quit: false,
             m_last_tick_time_point: Instant::now(),
             m_average_duration: 0.0,
@@ -25,24 +28,16 @@ impl Default for Engine {
             m_fps: 0,
         }
     }
-}
 
-impl Engine {
-
-    pub fn new(config_file_path: &Path) -> Self {
-        RuntimeGlobalContext::start_systems(config_file_path);
-        Default::default()
-    }
-
-    pub fn resumed(&self, event_loop: &ActiveEventLoop) {
-        RuntimeGlobalContext::resumed(event_loop);
+    pub fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.m_runtime_context.resumed_instance(event_loop);
     }
     pub fn initialize(&mut self){
         self.m_last_tick_time_point = Instant::now();
     }
 
     pub fn shutdown_engine(&self){
-        RuntimeGlobalContext::global().shutdown_systems();
+        self.m_runtime_context.shutdown_systems();
     }
 
     pub fn calculate_delta_time(&mut self) -> f32 {
@@ -53,12 +48,22 @@ impl Engine {
     }
 
     pub fn tick_one_frame(&mut self, delta_time: f32) -> Result<bool> {
-        RuntimeGlobalContext::get_render_system().borrow_mut().swap_logic_render_data();
-        Self::logical_tick(delta_time);
+        self.m_runtime_context
+            .render_system()
+            .borrow_mut()
+            .swap_logic_render_data();
+        self.logical_tick(delta_time);
         self.calculate_fps(delta_time);
-        Self::renderer_tick(delta_time)?;
-        RuntimeGlobalContext::get_window_system().borrow().set_title(&format!("Editor - FPS: {}", self.m_fps));
-        Ok(!RuntimeGlobalContext::get_window_system().borrow().should_close())
+        self.renderer_tick(delta_time)?;
+        self.m_runtime_context
+            .window_system()
+            .borrow()
+            .set_title(&format!("Editor - FPS: {}", self.m_fps));
+        Ok(!self
+            .m_runtime_context
+            .window_system()
+            .borrow()
+            .should_close())
     }
 
     pub fn is_editor_mode() -> bool {
@@ -71,18 +76,35 @@ impl Engine {
 }
 
 impl Engine {
-    fn renderer_tick(delta_time: f32) -> Result<()>{
-        let window_size = RuntimeGlobalContext::get_window_system().borrow().get_window_size();
-        RuntimeGlobalContext::get_render_system().borrow().update_engine_content_viewport(
+    fn renderer_tick(&self, delta_time: f32) -> Result<()>{
+        let window_size = self.m_runtime_context.window_system().borrow().get_window_size();
+        self.m_runtime_context.render_system().borrow().update_engine_content_viewport(
             0.0, 0.0, window_size.0 as f32,  window_size.1 as f32
         );
-        RuntimeGlobalContext::get_render_system().borrow().tick(delta_time)?;
+        self.m_runtime_context.render_system().borrow().tick(
+            &self.m_runtime_context.render_system(),
+            &self.m_runtime_context.debugdraw_manager(),
+            &self.m_runtime_context.window_system().borrow(),
+            &self.m_runtime_context.input_system(),
+            &self.m_runtime_context.asset_manager().borrow(),
+            &self.m_runtime_context.config_manager().borrow(),
+            delta_time
+        )?;
         Ok(())
     }
 
-    fn logical_tick(delta_time: f32) {
-        RuntimeGlobalContext::get_world_manager().borrow_mut().tick(delta_time);
-        RuntimeGlobalContext::get_input_system().borrow_mut().tick(delta_time);
+    fn logical_tick(&self, delta_time: f32) {
+        self.m_runtime_context.world_manager().borrow_mut().tick(
+            &self,
+            &self.m_runtime_context.asset_manager().borrow(),
+            &self.m_runtime_context.config_manager().borrow(),
+            delta_time
+        );
+        self.m_runtime_context.input_system().borrow_mut().tick(
+            &self.m_runtime_context.window_system().borrow(),
+            &self.m_runtime_context.render_system().borrow(),
+            delta_time
+        );
     }
 
     const S_FPS_ALPHA: f32 = 1.0 / 100.0;

@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::{core::math::vector2::Vector2, function::{global::global_context::RuntimeGlobalContext, render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_pass::{_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}}};
+use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_pass::{_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource, render_system::RenderSystem, window_system::WindowSystem}}};
 
 
 pub struct RenderPipeline {
@@ -88,6 +88,7 @@ impl RenderPipeline {
             render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
             ctx: create_info.imgui_context,
             platform: create_info.imgui_platform,
+            config_manager: create_info.config_manager,
         })?;
 
         m_combine_ui_pass.initialize(&CombineUIPassInitInfo {
@@ -118,7 +119,14 @@ impl RenderPipeline {
         })
     }
 
-    pub fn forward_render(&self, render_resource: &mut RenderResource) -> Result<()> {
+    pub fn forward_render(
+        &self, 
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem,
+        input_system: &RefCell<InputSystem>,
+        debugdraw_manager: &RefCell<DebugDrawManager>,
+        render_resource: &mut RenderResource,
+    ) -> Result<()> {
         let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
         render_resource.reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
         {
@@ -126,7 +134,8 @@ impl RenderPipeline {
             rhi.wait_for_fence()?;
             rhi.reset_command_pool()?;
             if rhi.prepare_before_pass(
-                &|rhi: &VulkanRHI|self.pass_update_after_recreate_swapchain(&rhi)
+                &|rhi: &VulkanRHI|
+                self.pass_update_after_recreate_swapchain(&debugdraw_manager, &rhi)
             )? {
                 return Ok(());
             }
@@ -138,6 +147,9 @@ impl RenderPipeline {
             self.m_base.borrow().m_point_light_pass.draw();
 
             self.m_base.borrow().m_main_camera_pass.draw_forward(
+                render_system,
+                window_system,
+                input_system,
                 &self.m_base.borrow().m_tone_mapping_pass,
                 &self.m_base.borrow().m_color_grading_pass,
                 &self.m_base.borrow().m_fxaa_pass,
@@ -146,17 +158,24 @@ impl RenderPipeline {
                 rhi.get_current_swapchain_image_index()
             )?;
 
-            let mut debugdraw_manager = RuntimeGlobalContext::get_debugdraw_manager().borrow_mut();
-            debugdraw_manager.draw(rhi.get_current_swapchain_image_index())?;
+            debugdraw_manager.borrow_mut().draw(rhi.get_current_swapchain_image_index())?;
         }
         {
             let mut rhi = rhi.borrow_mut();
-            rhi.submit_rendering(&|rhi: &VulkanRHI|self.pass_update_after_recreate_swapchain(&rhi))?;
+            rhi.submit_rendering(&|rhi: &VulkanRHI|
+                self.pass_update_after_recreate_swapchain(&debugdraw_manager, &rhi))?;
         }
         Ok(())
     }
 
-    pub fn deferred_render(&self, render_resource: &mut RenderResource) -> Result<()> {
+    pub fn deferred_render(
+        &self, 
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem,
+        input_system: &RefCell<InputSystem>,
+        debugdraw_manager: &RefCell<DebugDrawManager>,
+        render_resource: &mut RenderResource
+    ) -> Result<()> {
         let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
         render_resource.reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
         {
@@ -164,7 +183,8 @@ impl RenderPipeline {
             rhi.wait_for_fence()?;
             rhi.reset_command_pool()?;
             if rhi.prepare_before_pass(
-                &|rhi: &VulkanRHI|self.pass_update_after_recreate_swapchain(&rhi)
+                &|rhi: &VulkanRHI|
+                    self.pass_update_after_recreate_swapchain(debugdraw_manager, &rhi)
             )? {
                 return Ok(());
             }
@@ -176,6 +196,9 @@ impl RenderPipeline {
             self.m_base.borrow().m_point_light_pass.draw();
 
             self.m_base.borrow().m_main_camera_pass.draw(
+                render_system,
+                window_system,
+                input_system,
                 &self.m_base.borrow().m_tone_mapping_pass,
                 &self.m_base.borrow().m_color_grading_pass,
                 &self.m_base.borrow().m_fxaa_pass,
@@ -184,12 +207,12 @@ impl RenderPipeline {
                 rhi.get_current_swapchain_image_index()
             )?;
 
-            let mut debugdraw_manager = RuntimeGlobalContext::get_debugdraw_manager().borrow_mut();
-            debugdraw_manager.draw(rhi.get_current_swapchain_image_index())?;
+            debugdraw_manager.borrow_mut().draw(rhi.get_current_swapchain_image_index())?;
         }
         {
             let mut rhi = rhi.borrow_mut();
-            rhi.submit_rendering(&|rhi: &VulkanRHI|self.pass_update_after_recreate_swapchain(&rhi))?;
+            rhi.submit_rendering(&|rhi: &VulkanRHI|
+                self.pass_update_after_recreate_swapchain(debugdraw_manager, &rhi))?;
         }
         Ok(())
     }
@@ -201,7 +224,12 @@ impl RenderPipeline {
 }
 
 impl RenderPipeline {
-    fn pass_update_after_recreate_swapchain(&self, rhi: &VulkanRHI) {
+    fn pass_update_after_recreate_swapchain(
+        &self, 
+        debugdraw_manager: &RefCell<DebugDrawManager>,
+        rhi: &VulkanRHI
+    ) {
+        let mut debugdraw_manager = debugdraw_manager.borrow_mut();
         self.m_base.borrow_mut().m_main_camera_pass.recreate_after_swapchain(rhi).unwrap();
         let image_views = self.m_base.borrow().m_main_camera_pass.m_render_pass.get_framebuffer_image_views();
         self.m_base.borrow_mut().m_tone_mapping_pass.update_after_framebuffer_recreate(
@@ -221,6 +249,6 @@ impl RenderPipeline {
             image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
             image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
         ).unwrap();
-        RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().update_after_recreate_swap_chain(rhi);
+        debugdraw_manager.update_after_recreate_swap_chain(rhi);
     }
 }

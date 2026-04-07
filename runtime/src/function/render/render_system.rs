@@ -4,10 +4,12 @@ use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::{core::math::vector2::Vector2, function::{global::global_context::RuntimeGlobalContext, render::{interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::{RenderCamera}, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::res_type::global::global_rendering::GlobalRenderingRes};
+use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::RenderCamera, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::global::global_rendering::GlobalRenderingRes}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
+    pub asset_manager: &'a AssetManager,
+    pub config_manager: &'a ConfigManager,
 }
 
 pub struct RenderSystem{
@@ -36,10 +38,10 @@ impl RenderSystem {
         let imgui_context = Rc::new(RefCell::new(imgui_context));
         let imgui_platform = Rc::new(RefCell::new(platform));
 
-        let asset_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        let config_manager = RuntimeGlobalContext::get_config_manager().borrow();
+        let asset_manager = create_info.asset_manager;
+        let config_manager = create_info.config_manager;
         let global_rendering_res_url = config_manager.get_global_rendering_res_url();
-        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(global_rendering_res_url).unwrap();
+        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(config_manager, &global_rendering_res_url).unwrap();
 
         let swap_context = RenderSwapContext::default();
 
@@ -72,7 +74,7 @@ impl RenderSystem {
         };
 
         let mut render_resource = RenderResource::default();
-        render_resource.upload_global_render_resource(&vulkan_rhi.borrow(), &level_resource_desc);
+        render_resource.upload_global_render_resource(asset_manager, config_manager, &vulkan_rhi.borrow(), &level_resource_desc);
         let render_resource = Rc::new(RefCell::new(render_resource));
 
         let create_info = RenderPipelineCreateInfo {
@@ -81,6 +83,7 @@ impl RenderSystem {
             enable_fxaa: global_rendering_res.enable_fxaa,
             imgui_context: &imgui_context,
             imgui_platform: &imgui_platform,
+            config_manager: config_manager,
         };
         let render_pipeline = RenderPipeline::create(&create_info).unwrap();
 
@@ -103,22 +106,35 @@ impl RenderSystem {
         }
     }
     
-    pub fn tick(&self, delta_time: f32) -> Result<()>{
-        self.process_swap_data();
+    pub fn tick(
+        &self, 
+        render_system: &RefCell<RenderSystem>,
+        debugdraw_manager: &RefCell<DebugDrawManager>,
+        window_system: &WindowSystem,
+        input_system: &RefCell<InputSystem>,
+        asset_manager: &AssetManager,
+        config_manager: &ConfigManager,
+        delta_time: f32
+    ) -> Result<()>{
+        self.process_swap_data(asset_manager, config_manager);
         self.m_rhi.borrow_mut().prepare_context();
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene.borrow(), &self.m_render_camera.borrow());
         self.m_render_scene.borrow_mut().update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
-        self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
-        RuntimeGlobalContext::get_debugdraw_manager().borrow_mut().tick(delta_time);
-        let window_system = RuntimeGlobalContext::get_window_system().borrow();
+        self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&mut debugdraw_manager.borrow_mut(), &self.m_render_resource.borrow());
+        debugdraw_manager.borrow_mut().tick(delta_time);
         self.m_imgui_context.borrow_mut().io_mut().update_delta_time(Duration::from_secs_f32(delta_time));
         self.m_imgui_platform.borrow_mut().prepare_frame(self.m_imgui_context.borrow_mut().io_mut(), window_system.get_window()).unwrap();
         match self.m_render_pipeline_type {
             RenderPipelineType::ForwardPipeline => {
-                self.m_render_pipeline.forward_render(&mut self.m_render_resource.borrow_mut())?;
+                self.m_render_pipeline.forward_render(
+                    render_system,
+                    window_system, 
+                    input_system,
+                    debugdraw_manager, 
+                    &mut self.m_render_resource.borrow_mut())?;
             },
             RenderPipelineType::DeferredPipeline => {
-                self.m_render_pipeline.deferred_render(&mut self.m_render_resource.borrow_mut())?;
+                self.m_render_pipeline.deferred_render(render_system, window_system, input_system, debugdraw_manager, &mut self.m_render_resource.borrow_mut())?;
             },
             _ => {panic!("Unknown render pipeline type")}
         }
@@ -169,10 +185,10 @@ impl RenderSystem {
         self.m_render_pipeline.m_base.borrow_mut().initialize_ui_render_backend(window_ui);
     }
 
-    pub fn handle_event<T>(&self, event: &Event<T>) {
+    pub fn handle_event<T>(&self,window_system: &WindowSystem, event: &Event<T>) {
         self.m_imgui_platform.borrow_mut().handle_event(
             self.m_imgui_context.borrow_mut().io_mut(), 
-            RuntimeGlobalContext::get_window_system().borrow().get_window(), 
+            window_system.get_window(), 
             event
         );
     }
@@ -183,7 +199,11 @@ impl RenderSystem {
 }
 
 impl RenderSystem {
-    fn process_swap_data(&self) {
+    fn process_swap_data(
+        &self,
+        asset_manager: &AssetManager,
+        config_manager: &ConfigManager,
+    ) {
         let swap_data = self.m_swap_context.get_render_swap_data();
         if swap_data.borrow().m_game_object_resource_descs.is_some() {
             {
@@ -214,7 +234,7 @@ impl RenderSystem {
                                 let is_mesh_loaded = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().has_element(&mesh_source);
                                 render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
                                 if !is_mesh_loaded {
-                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(&mesh_source);
+                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(asset_manager, config_manager, &mesh_source);
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
                                     println!("load mesh data");
@@ -283,7 +303,7 @@ impl RenderSystem {
                         render_entity.m_material_asset_id = self.m_render_scene.borrow_mut().get_material_asset_id_allocator().alloc_guid(&material_source);
                         if !is_material_loaded {
                             println!("load material data");
-                            let material_data = RenderResourceBase::load_material_data(&material_source);
+                            let material_data = RenderResourceBase::load_material_data(asset_manager, config_manager, &material_source);
                             self.m_render_resource.borrow_mut().upload_game_object_render_resource_material(&self.m_rhi.borrow(), &render_entity, &material_data);
                         }
 

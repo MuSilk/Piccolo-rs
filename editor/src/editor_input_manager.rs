@@ -1,11 +1,11 @@
-use std::{cell::RefCell, rc::{Rc}};
+use std::{cell::RefCell, rc::Rc};
 
 use bitflags::bitflags;
 use log::info;
-use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::Engine, function::global::global_context::RuntimeGlobalContext};
+use runtime::{core::math::{vector2::Vector2, vector3::Vector3}, engine::Engine};
 use winit::{event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::editor_global_context::EditorGlobalContext;
+use crate::editor_scene_manager::EditorSceneManager;
 
 
 bitflags! {
@@ -63,16 +63,20 @@ impl EditorInputManager {
 
 impl EditorInputManager {
 
-    fn on_mouse_motion(&mut self, _device_id: DeviceId, delta: (f64, f64)) { 
+    fn on_mouse_motion(
+        &mut self,
+        engine: &Engine, 
+        scene_manager: &EditorSceneManager,
+        _device_id: DeviceId, 
+        delta: (f64, f64)
+    ) { 
         if !Engine::is_editor_mode() {
             return;
         }
         let angular_velocity = 180.0 / (self.m_engine_window_size.x).max(self.m_engine_window_size.y);
         if self.m_mouse_x >= 0.0 && self.m_mouse_y >=0.0 {
-            let editor_global = EditorGlobalContext::global().borrow();
-            let window_system = editor_global.m_window_system.upgrade().unwrap();
-            if window_system.borrow().is_mouse_button_down(MouseButton::Right) {
-                let scene_manager = editor_global.m_scene_manager.borrow();
+            let window_system = engine.m_runtime_context.window_system().borrow();
+            if window_system.is_mouse_button_down(MouseButton::Right) {
                 let camera = scene_manager.get_editor_camera();
                 let camera = camera.upgrade().unwrap();
                 camera.borrow_mut().rotate_camera(&(Vector2::new(
@@ -80,7 +84,7 @@ impl EditorInputManager {
                     delta.0 as f32
                 ) * angular_velocity));
             }
-            else if window_system.borrow().is_mouse_button_down(MouseButton::Left) {
+            else if window_system.is_mouse_button_down(MouseButton::Left) {
 
             }
             else{
@@ -89,7 +93,14 @@ impl EditorInputManager {
         }
     }  
 
-    fn on_cursor_scroll(&mut self, _device_id: DeviceId, delta: MouseScrollDelta, _phase: TouchPhase) {
+    fn on_cursor_scroll(
+        &mut self,
+        engine: &Engine, 
+        scene_manager: &EditorSceneManager,
+        _device_id: DeviceId, 
+        delta: MouseScrollDelta, 
+        _phase: TouchPhase
+    ) {
         if !Engine::is_editor_mode() {
             return;
         }
@@ -97,9 +108,8 @@ impl EditorInputManager {
         if !self.is_cursor_in_rect(&self.m_engine_window_pos, &self.m_engine_window_size){
             return;
         }
-        let global = EditorGlobalContext::global().borrow();
-        let window_system = global.m_window_system.upgrade().unwrap();
-        if window_system.borrow().is_mouse_button_down(MouseButton::Right) {
+        let window_system = engine.m_runtime_context.window_system().borrow();
+        if window_system.is_mouse_button_down(MouseButton::Right) {
             match delta {
                 MouseScrollDelta::LineDelta(_x, y) => {
                     if y > 0.0 {
@@ -122,12 +132,10 @@ impl EditorInputManager {
         else{
             match delta {
                 MouseScrollDelta::LineDelta(_x, y) => {
-                    let scene_manager = global.m_scene_manager.borrow();
                     let editor_camera = scene_manager.get_editor_camera().upgrade().unwrap();
                     editor_camera.borrow_mut().zoom_camera((y * 2.0) as f32);
                 }
                 MouseScrollDelta::PixelDelta(position) => {
-                    let scene_manager = global.m_scene_manager.borrow();
                     let editor_camera = scene_manager.get_editor_camera().upgrade().unwrap();
                     editor_camera.borrow_mut().zoom_camera((position.y * 2.0) as f32);
                 }
@@ -135,7 +143,14 @@ impl EditorInputManager {
         }
     }
 
-    fn on_mouse_button(&mut self, _device_id: DeviceId, state: ElementState, button: MouseButton) {
+    fn on_mouse_button(
+        &mut self, 
+        engine: &Engine, 
+        scene_manager: &EditorSceneManager,
+        _device_id: DeviceId, 
+        state: ElementState, 
+        button: MouseButton
+    ) {
         
         if !Engine::is_editor_mode() {
             return;
@@ -154,7 +169,8 @@ impl EditorInputManager {
                     (self.m_mouse_x - self.m_engine_window_pos.x) / self.m_engine_window_size.x,
                     (self.m_mouse_y - self.m_engine_window_pos.y) / self.m_engine_window_size.y
                 );
-                let select_mesh_id = EditorGlobalContext::global().borrow().m_scene_manager.borrow().get_guid_of_picked_mesh(&picked_uv);
+                let select_mesh_id = scene_manager
+                    .get_guid_of_picked_mesh(engine, &picked_uv);
                 info!("Picked Mesh Id: {:?}", select_mesh_id);
             }
             _ => {} 
@@ -255,10 +271,11 @@ impl EditorInputManager {
         pos.y <= self.m_mouse_y && self.m_mouse_y <= pos.y + size.y
     }
 
-    fn process_editor_command(&self) {
+    fn process_editor_command(
+        &self,
+        scene_manager: &EditorSceneManager,
+    ) {
         let camera_speed = self.m_camera_speed;
-        let editor_global = EditorGlobalContext::global().borrow();
-        let scene_manager = editor_global.m_scene_manager.borrow();
         let camera = scene_manager.get_editor_camera();
         let camera = camera.upgrade().unwrap();
         let camera_rotate = camera.borrow().rotation().conjugate();
@@ -285,29 +302,60 @@ impl EditorInputManager {
         camera.borrow_mut().move_camera(&camera_relative_pos);
     }
 
-    pub fn tick(&self) {
-        self.process_editor_command();
+    pub fn tick(&self, scene_manager: &EditorSceneManager) {
+        self.process_editor_command(scene_manager);
     }
 }
 
 pub trait EditorInputManagerExt {
-    fn initialize(&self);
-    fn register_input(&self);
+    fn initialize(
+        &self, 
+        engine_runtime: &Rc<RefCell<Engine>>, 
+        scene_manager: &Rc<RefCell<EditorSceneManager>>,
+    );
+    fn register_input(
+        &self, 
+        engine_runtime: &Rc<RefCell<Engine>>,
+        scene_manager: &Rc<RefCell<EditorSceneManager>>,
+    );
 }
 
 impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
-    fn initialize(&self) {
+    fn initialize(
+        &self, 
+        engine_runtime: &Rc<RefCell<Engine>>,
+        scene_manager: &Rc<RefCell<EditorSceneManager>>,
+    ) {
         self.borrow_mut().m_engine_window_size = Vector2::new(1024.0, 768.0);
         self.borrow_mut().m_camera_speed = 0.05;
-        self.register_input();
+        self.register_input(engine_runtime, scene_manager);
     }
 
-    fn register_input(&self) {
-        let mut window_system = RuntimeGlobalContext::get_window_system().borrow_mut();
+    fn register_input(
+        &self, 
+        engine: &Rc<RefCell<Engine>>, 
+        scene_manager: &Rc<RefCell<EditorSceneManager>>,
+    ) {
+        let engine_weak = Rc::downgrade(engine);
+        let scene_weak = Rc::downgrade(scene_manager);
+        let t_engine = engine.borrow();
+        let mut window_system = t_engine
+            .m_runtime_context
+            .window_system()
+            .borrow_mut();
         let this = Rc::downgrade(&self);
+        let engine_for_mouse = engine_weak.clone();
+        let scene_for_mouse = scene_weak.clone();
         window_system.register_on_mouse_motion(move |device_id, delta| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_mouse_motion(device_id, delta);
+            if let (Some(engine), Some(sm)) =
+                (engine_for_mouse.upgrade(), scene_for_mouse.upgrade())
+            {
+                let engine_ref = engine.borrow();
+                let sm_ref = sm.borrow();
+                this.borrow_mut()
+                    .on_mouse_motion(&*engine_ref, &*sm_ref, device_id, delta);
+            }
         });
         let this = Rc::downgrade(&self);
         window_system.register_on_key_func(move |device_id, event, is_synthetic| {
@@ -315,14 +363,32 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
             this.borrow_mut().on_key(device_id, event, is_synthetic);
         });
         let this = Rc::downgrade(&self);
+        let engine_for_mouse_button = engine_weak.clone();
+        let scene_for_mouse_button = scene_weak.clone();
         window_system.register_on_mouse_button_func(move |device_id, state, button| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_mouse_button(device_id, state, button);
+            if let (Some(engine), Some(sm)) =
+                (engine_for_mouse_button.upgrade(), scene_for_mouse_button.upgrade())
+            {
+                let engine_ref = engine.borrow();
+                let sm_ref = sm.borrow();
+                this.borrow_mut()
+                    .on_mouse_button(&*engine_ref, &*sm_ref, device_id, state, button);
+            }
         });
         let this = Rc::downgrade(&self);
+        let engine_for_scroll = engine_weak.clone();
+        let scene_for_scroll = scene_weak.clone();
         window_system.register_on_mouse_wheel_func(move |device_id, delta,phase| {
             let this = this.upgrade().unwrap();
-            this.borrow_mut().on_cursor_scroll(device_id, delta, phase);
+            if let (Some(engine), Some(sm)) =
+                (engine_for_scroll.upgrade(), scene_for_scroll.upgrade())
+            {
+                let engine_ref = engine.borrow();
+                let sm_ref = sm.borrow();
+                this.borrow_mut()
+                    .on_cursor_scroll(&*engine_ref, &*sm_ref, device_id, delta, phase);
+            }
         });
     }
 }

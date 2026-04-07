@@ -5,13 +5,14 @@ use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{global::global_context::RuntimeGlobalContext, render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, ui::{ui2::{UiDrawCmd, UiDrawList, UiInputSnapshot, UiRuntime, UiVertex}, window_ui::WindowUI}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{input::input_system::InputSystem, render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::{ui2::{UiDrawCmd, UiDrawList, UiInputSnapshot, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
     pub ctx: &'a Rc<RefCell<Context>>,
     pub platform: &'a Rc<RefCell<WinitPlatform>>,
+    pub config_manager: &'a ConfigManager
 }
 
 #[derive(Default)]
@@ -40,7 +41,7 @@ impl UIPass {
 
         self.ctx = Rc::downgrade(info.ctx);
         self.platform = Rc::downgrade(info.platform);
-        self.font_texture = upload_font_texture(&info.rhi.borrow())?;
+        self.font_texture = upload_font_texture(&info.rhi.borrow(), info.config_manager)?;
         info.ctx.borrow_mut().set_renderer_name(Some("imgui_vulkanalia_renderer".to_string()));
         info.ctx.borrow_mut().io_mut().backend_flags.insert(BackendFlags::RENDERER_HAS_VTX_OFFSET);
 
@@ -52,7 +53,12 @@ impl UIPass {
         Ok(())
     }
     
-    pub fn draw(&self) {
+    pub fn draw(
+        &self, 
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem, 
+        input_system: &RefCell<InputSystem>,
+    ) {
         let color = [1.0;4];
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
@@ -73,10 +79,14 @@ impl UIPass {
             let mut ui = ctx.new_frame();
 
             if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
-                window_ui.borrow_mut().pre_render(&mut ui);
+                window_ui.borrow_mut().pre_render(
+                    render_system, 
+                    window_system, 
+                    input_system, 
+                    &mut ui
+                );
             }
 
-            let window_system = RuntimeGlobalContext::get_window_system().borrow();
             let platform = self.platform.upgrade().unwrap();
             platform.borrow_mut().prepare_render(&ui, window_system.get_window());
             let draw_data = ctx.render();
@@ -94,7 +104,11 @@ impl UIPass {
         self.m_window_ui = Some(Rc::downgrade(_window_ui));
     }
 
-    pub fn reload_font_texture(&mut self, _ctx: &mut imgui::Context) -> Result<()> {
+    pub fn reload_font_texture(
+        &mut self, 
+        _ctx: &mut imgui::Context,
+        config_manager: &ConfigManager
+    ) -> Result<()> {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         if self.font_texture.image != vk::Image::null() {
@@ -102,7 +116,7 @@ impl UIPass {
             rhi.destroy_image(self.font_texture.image);
             rhi.free_memory(self.font_texture.memory);
         }
-        self.font_texture = upload_font_texture(&rhi)?;
+        self.font_texture = upload_font_texture(&rhi, config_manager)?;
 
         let text_sampler_texture_info = [
             vk::DescriptorImageInfo::builder()
@@ -646,11 +660,11 @@ impl ImguiDrawVertex {
     }
 }
 
-fn upload_font_texture(rhi: &VulkanRHI) -> Result<Texture> {
-    let font_path = RuntimeGlobalContext::get_config_manager()
-        .borrow()
-        .get_editor_font_path()
-        .to_path_buf();
+fn upload_font_texture(
+    rhi: &VulkanRHI,
+    config_manager: &ConfigManager
+) -> Result<Texture> {
+    let font_path = config_manager.get_editor_font_path().to_path_buf();
     let (texture_image, texture_image_memory, texture_image_view) =
         create_ascii_font_texture_rgba(rhi, font_path.as_path())?;
     Ok(Texture { image: texture_image, view: texture_image_view, memory: texture_image_memory })

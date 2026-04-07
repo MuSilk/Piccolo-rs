@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use runtime::{core::{algorithm::noise, math::{axis_aligned::AxisAlignedBox, transform::Transform, vector3::Vector3}}, function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, scene::scene::Scene}, global::global_context::RuntimeGlobalContext, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
+use runtime::{core::{algorithm::noise, math::{axis_aligned::AxisAlignedBox, transform::Transform, vector3::Vector3}}, engine::Engine, function::{framework::{component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, scene::scene::Scene}, render::render_object::{GameObjectMeshDesc, GameObjectPartDesc}}};
 
 use crate::{block::{BLOCK_AIR, BLOCK_DIRT, BLOCK_GRASS, BLOCK_STONE, Block, BlockType}, block_res::BlockRes, chunk::{Chunk}};
 
@@ -13,7 +13,7 @@ pub struct World {
 }
 
 impl World {
-    pub fn new_box(level: &mut Scene) -> Box<Self> {
+    pub fn new_box(engine: &Engine, level: &mut Scene) -> Box<Self> {
 
         let air_block = Rc::new(BLOCK_AIR);
         let mut world = Self {
@@ -24,8 +24,9 @@ impl World {
             }),
         };
         
-        let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        let block: BlockRes = assert_manager.load_asset("asset/minecraft/block.json").unwrap();
+        let asset_manager = engine.m_runtime_context.asset_manager().borrow();
+        let config_manager = engine.m_runtime_context.config_manager().borrow();
+        let block: BlockRes = asset_manager.load_asset(&config_manager, "asset/minecraft/block.json").unwrap();
         let dirt_block = Rc::new(BLOCK_DIRT);
         let grass_block = Rc::new(BLOCK_GRASS);
         let stone_block = Rc::new(BLOCK_STONE);
@@ -96,9 +97,12 @@ impl World {
                         }
                     }
                 }
+
+                let asset_manager = engine.m_runtime_context.asset_manager().borrow();
+                let config_manager = engine.m_runtime_context.config_manager().borrow();
                 
                 let mut mesh_component = Box::new(MeshComponent::default());
-                mesh_component.post_load_resource(&block.m_mesh_res);
+                mesh_component.post_load_resource(&asset_manager, &config_manager, &block.m_mesh_res);
                 let mut chunk_data = chunk.update_mesh_data();
                 chunk_data.m_mesh_file = format!("chunk_{}_{}.mesh", i, j);
                 mesh_component.m_raw_meshes.resize(1, GameObjectPartDesc::default());

@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::{Rc}};
 
 use anyhow::Result;
 use log::info;
-use crate::{function::{framework::scene::scene::{SceneTrait}, global::global_context::RuntimeGlobalContext}, resource::res_type::common::world::WorldRes};
+use crate::{engine::Engine, function::framework::scene::scene::SceneTrait, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::common::world::WorldRes}};
 
 #[derive(Default)]
 pub struct WorldManager {
@@ -15,9 +15,11 @@ pub struct WorldManager {
 }
 
 impl WorldManager {
-    pub fn initialize(&mut self) {
+    pub fn initialize(
+        &mut self,
+        config_manager: &ConfigManager,
+    ) {
         self.m_is_world_loaded = false;
-        let config_manager = RuntimeGlobalContext::get_config_manager().borrow();
         self.m_current_world_url = config_manager.get_default_world_url().to_string();
     }
 
@@ -33,23 +35,32 @@ impl WorldManager {
         &self.m_current_scene
     }
 
-    pub fn tick(&mut self, delta_time: f32) {
+    pub fn tick(
+        &mut self, 
+        engine: &Engine,
+        asset_manager: &AssetManager,
+        config_manager: &ConfigManager,
+        delta_time: f32
+    ) {
         if !self.m_is_world_loaded {
-            self.load_world().unwrap();
+            self.load_world(asset_manager, config_manager).unwrap();
         }
         if let Some(scene) = self.m_current_scene.as_ref() {
             let mut scene = scene.borrow_mut();
             if !scene.is_loaded() {
-                scene.load();
+                scene.load(engine);
             }
-            scene.tick(delta_time);
+            scene.tick(engine, delta_time);
         }
     }
 
-    fn load_world(&mut self) -> Result<()> {
+    fn load_world(
+        &mut self,
+        asset_manager: &AssetManager,
+        config_manager: &ConfigManager,
+    ) -> Result<()> {
         info!("Loading world: {}", self.m_current_world_url);
-        let assert_manager = RuntimeGlobalContext::get_asset_manager().borrow();
-        let world_res: WorldRes = assert_manager.load_asset(&self.m_current_world_url)?;
+        let world_res: WorldRes = asset_manager.load_asset(config_manager, &self.m_current_world_url)?;
         self.m_current_world_resource = world_res;
         self.m_is_world_loaded = true;
         info!("World load succeed!");

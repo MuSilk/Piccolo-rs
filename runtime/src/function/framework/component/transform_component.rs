@@ -1,4 +1,4 @@
-use crate::{core::math::{matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3}, engine::Engine, function::framework::{component::component::{Component, ComponentTrait}, object::object_id_allocator::GObjectID}};
+use crate::{core::math::{matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3}, engine::Engine, function::framework::{component::component::{Component, ComponentTrait}}};
 
 
 #[derive(Clone, Debug)]

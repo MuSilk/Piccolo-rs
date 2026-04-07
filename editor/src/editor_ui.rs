@@ -1,13 +1,16 @@
-use std::{cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
 use imgui::{Condition, WindowFlags};
-use runtime::{core::math::vector2::Vector2, engine::Engine, function::{global::global_context::RuntimeGlobalContext, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData}, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
+use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem, window_system::WindowSystem}, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
 
-use crate::editor_global_context::EditorGlobalContext;
+use crate::editor_input_manager::EditorInputManager;
+use crate::editor_scene_manager::EditorSceneManager;
 
 #[derive(Default)]
 pub struct EditorUI {
     m_state: State,
+    m_input_manager: Option<Rc<RefCell<EditorInputManager>>>,
+    m_scene_manager: Option<Rc<RefCell<EditorSceneManager>>>,
 }
 
 #[derive(Default)]
@@ -26,18 +29,41 @@ impl WindowUI for EditorUI  {
     
     }
 
-    fn pre_render(&mut self, ui: &mut imgui::Ui) {
-        self.show_editor_ui(ui);
-        let global = EditorGlobalContext::global().borrow();
-        let window_system = global.m_window_system.upgrade().unwrap();
-        let window_size = window_system.borrow().get_window_size();
-        let mut input_manager = global.m_input_manager.borrow_mut();
-        input_manager.set_engine_window_size(Vector2::new(window_size.0 as f32, window_size.1 as f32));
+    fn pre_render(
+        &mut self, 
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem, 
+        input_system: &RefCell<InputSystem>,
+        ui: &mut imgui::Ui
+    ) {
+        self.show_editor_ui(ui, render_system, window_system, input_system);
+        let window_size = window_system.get_window_size();
+        if let Some(input_manager) = self.m_input_manager.as_ref() {
+            input_manager.borrow_mut().set_engine_window_size(Vector2::new(
+                window_size.0 as f32,
+                window_size.1 as f32,
+            ));
+        }
     }
 }
 
 impl EditorUI {
-    fn show_editor_ui(&mut self, ui: &mut imgui::Ui) {
+    pub fn set_editor_handles(
+        &mut self,
+        input_manager: Rc<RefCell<EditorInputManager>>,
+        scene_manager: Rc<RefCell<EditorSceneManager>>,
+    ) {
+        self.m_input_manager = Some(input_manager);
+        self.m_scene_manager = Some(scene_manager);
+    }
+
+    fn show_editor_ui(
+        &mut self, 
+        ui: &mut imgui::Ui,
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem,
+        input_system: &RefCell<InputSystem>,
+    ) {
 
         let size = ui.io().display_size;
         let main_window = ui
@@ -92,7 +118,7 @@ impl EditorUI {
             self.show_editor_world_objects_window(ui);
         });
         editor_game_window.build(||{
-            self.show_editor_game_window(ui);
+            self.show_editor_game_window(render_system, window_system, input_system, ui);
         });
         self.show_editor_menu(ui, &mut self.m_state.m_editor_menu_window_open.borrow_mut());
     }
@@ -133,33 +159,46 @@ impl EditorUI {
         // }
     }
 
-    fn show_editor_game_window(&mut self, ui: &imgui::Ui) {
+    fn show_editor_game_window(
+        &mut self, 
+        render_system: &RefCell<RenderSystem>,
+        window_system: &WindowSystem, 
+        input_system: &RefCell<InputSystem>,
+        ui: &imgui::Ui
+    ) {
         if let Some(_) =  ui.begin_menu_bar() {
             if Engine::is_editor_mode() {
                 if ui.button("Editor Mode") {
                     Engine::set_editor_mode(false);
-                    EditorGlobalContext::global().borrow().m_input_manager.borrow_mut().reset_editor_command();
-                    RuntimeGlobalContext::get_window_system().borrow().set_focus_mode(true);
+                    if let Some(im) = self.m_input_manager.as_ref() {
+                        im.borrow_mut().reset_editor_command();
+                    }
+                    window_system.set_focus_mode(true);
                 }
             } else{
                 if ui.button("Game Mode") {
                     Engine::set_editor_mode(true);
-                    RuntimeGlobalContext::get_input_system().borrow_mut().reset_game_command();
+                    input_system.borrow_mut().reset_game_command();
                     let view_matrix = {
-                        let editor_camera = EditorGlobalContext::global().borrow()
-                            .m_scene_manager.borrow()
+                        let sm = self
+                            .m_scene_manager
+                            .as_ref()
+                            .expect("editor scene_manager not wired");
+                        let editor_camera = sm
+                            .borrow()
                             .get_editor_camera()
-                            .upgrade().unwrap();
+                            .upgrade()
+                            .unwrap();
                         editor_camera.borrow().get_view_matrix()
                     };
-                    let render_system = RuntimeGlobalContext::get_render_system().borrow();
+                    let render_system = render_system.borrow_mut();
                     let swap_context = render_system.get_swap_context();
                     swap_context.get_logic_swap_data().borrow_mut().m_camera_swap_data = Some(CameraSwapData{
                         m_fov_x: None,
                         m_camera_type: Some(RenderCameraType::Editor),
                         m_view_matrix: Some(view_matrix)
                     });
-                    RuntimeGlobalContext::get_window_system().borrow().set_focus_mode(false);
+                    window_system.set_focus_mode(false);
                 }
             }
         } 

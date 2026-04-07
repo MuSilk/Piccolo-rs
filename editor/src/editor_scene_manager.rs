@@ -1,8 +1,6 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use runtime::{core::math::vector2::Vector2, function::render::{render_camera::RenderCamera}};
-
-use crate::editor_global_context::EditorGlobalContext;
+use runtime::{core::math::vector2::Vector2, engine::Engine, function::render::render_camera::RenderCamera};
 
 
 #[derive(Default)]
@@ -23,9 +21,8 @@ impl EditorSceneManager {
         &self.m_camera
     }
 
-    pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        let global = EditorGlobalContext::global();
-        let render_system = global.borrow().m_render_system.upgrade().unwrap();
-        render_system.borrow().get_guid_of_picked_mesh(picked_uv)
+    pub fn get_guid_of_picked_mesh(&self,engine: &Engine, picked_uv: &Vector2) -> u32 {
+        let render_system = engine.m_runtime_context.render_system().borrow();
+        render_system.get_guid_of_picked_mesh(picked_uv)
     }
 }

@@ -1,4 +1,4 @@
-use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{component::{Component, ComponentTrait}, transform_component::TransformComponent}, resource::component::motor::MotorComponentRes}, global::global_context::RuntimeGlobalContext, input::input_system::GameCommand}};
+use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{component::{Component, ComponentTrait}, transform_component::TransformComponent}, resource::component::motor::MotorComponentRes}, input::input_system::{GameCommand, InputSystem}}};
 
 pub trait Controller{
     fn r#move(&self, current_position: &Vector3, displacement: &Vector3) -> Vector3;
@@ -75,8 +75,12 @@ impl MotorComponent {
         &self.m_target_position
     }
 
-    pub fn tick(&mut self, delta_time: f32, transform: &mut TransformComponent) {
-        let input_system = RuntimeGlobalContext::get_input_system().borrow();
+    pub fn tick(
+        &mut self, 
+        input_system: &InputSystem,
+        delta_time: f32, 
+        transform: &mut TransformComponent
+    ) {
         let command = input_system.get_game_command();
 
         if command.contains(GameCommand::invalid) {
