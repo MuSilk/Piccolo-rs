@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::{input::input_system::InputSystem, render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::RenderResource, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::{input::input_system::InputSystem, render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, fxaa_pass::FXAAPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::RenderResource, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::ui2::UiRuntime}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -92,6 +92,7 @@ impl MainCameraPass {
         render_system: &RefCell<RenderSystem>,
         window_system: &WindowSystem,
         input_system: &RefCell<InputSystem>,
+        ui_runtime: &RefCell<UiRuntime>,
         tone_mapping_pass: &ToneMappingPass,
         color_grading_pass: &ColorGradingPass,
         fxaa_pass: &FXAAPass,
@@ -178,7 +179,7 @@ impl MainCameraPass {
         ];
         rhi.cmd_clear_attachments(command_buffer, &clear_attachments, &clear_rects);
 
-        ui_pass.draw(render_system, window_system, input_system);
+        ui_pass.draw(render_system, window_system, input_system, ui_runtime);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
@@ -194,6 +195,7 @@ impl MainCameraPass {
         render_system: &RefCell<RenderSystem>,
         window_system: &WindowSystem,
         input_system: &RefCell<InputSystem>,
+        ui_runtime: &RefCell<UiRuntime>,
         tone_mapping_pass: &ToneMappingPass,
         color_grading_pass: &ColorGradingPass,
         fxaa_pass: &FXAAPass,
@@ -277,7 +279,7 @@ impl MainCameraPass {
         ];
         rhi.cmd_clear_attachments(command_buffer, &clear_attachments, &clear_rects);
 
-        ui_pass.draw(render_system, window_system, input_system);
+        ui_pass.draw(render_system, window_system, input_system, ui_runtime);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 

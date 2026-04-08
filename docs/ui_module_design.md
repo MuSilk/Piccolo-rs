@@ -178,3 +178,12 @@ pub enum UiDrawCmd {
 - 在游戏入口（`src/bin/greedy_snake/main.rs`）增加开关：`use_ui2 = true/false`，用于 A/B 对比。
 
 这样可以快速验证自研 UI 的工程可行性，同时保留回退路径。
+
+## UI接口设计
+
+控件wight的trait，包含生成UiDrawList的方法，用于UI_Runtime计算UiDrawList集合
+
+外部可以通过不同函数获取控件当前状态，比如可视状态，点击状态等
+
+外部可以在控件创建时通过闭包传递函数，设置控件的点击，UI_Runtime负责管理控件的更新
+

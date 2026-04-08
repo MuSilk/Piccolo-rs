@@ -43,42 +43,135 @@ pub struct UiDrawList {
 #[derive(Default)]
 pub struct UiRuntime {
     frame_counter: u64,
+    prev_input: UiInputSnapshot,
     current_input: UiInputSnapshot,
+    draw_list: UiDrawList,
+    viewport: [f32; 2],
+    active_id: Option<u64>,
+}
+
+pub struct UiButtonResult {
+    pub hovered: bool,
+    pub pressed: bool,
+    pub clicked: bool,
 }
 
 impl UiRuntime {
     pub fn update_input(&mut self, input: UiInputSnapshot) {
+        self.prev_input = self.current_input.clone();
         self.current_input = input;
     }
 
-    pub fn build_frame(&mut self, dt: f32, viewport: [f32; 2]) -> (UiFrame, UiDrawList) {
+    pub fn set_viewport(&mut self, viewport: [f32; 2]) {
+        self.viewport = viewport;
+    }
+
+    pub fn new_frame(&mut self) {
         self.frame_counter += 1;
+        self.draw_list = UiDrawList::default();
+    }
+
+    pub fn get_viewport(&self) -> [f32; 2] {
+        self.viewport
+    }
+
+    pub fn build_frame(&mut self, dt: f32) -> (UiFrame, &UiDrawList) {
         let frame = UiFrame {
             frame_id: self.frame_counter,
             dt,
-            viewport,
+            viewport: self.viewport,
             input: self.current_input.clone(),
         };
-
-        // Phase-1 skeleton: emit one demo panel for end-to-end validation.
-        let mut draw_list = UiDrawList::default();
-        push_colored_rect(
-            &mut draw_list,
-            [viewport[0] * 0.25, viewport[1] * 0.25],
-            [viewport[0] * 0.25, viewport[1] * 0.25],
-            [60, 120, 220, 255],
-            [0.0, 0.0, viewport[0], viewport[1]],
-        );
-        push_text_ascii(
-            &mut draw_list,
-            "UI2 TEXT TEST 0123",
-            [viewport[0] * 0.28, viewport[1] * 0.33],
-            [14.0, 28.0],
-            [255, 255, 255, 255],
-            [0.0, 0.0, viewport[0], viewport[1]],
-        );
-        (frame, draw_list)
+        (frame, &self.draw_list)
     }
+
+    pub fn push_colored_rect(
+        &mut self, pos: [f32; 2], size: [f32; 2], color: [u8; 4], clip_rect: [f32; 4]
+    ) {
+        push_colored_rect(
+            &mut self.draw_list,
+            pos,
+            size,
+            color,
+            clip_rect,
+        );
+    }
+
+    pub fn push_text_ascii(
+        &mut self, text: &str, pos: [f32; 2], glyph_size: [f32; 2], color: [u8; 4], clip_rect: [f32; 4]
+    ) {
+        push_text_ascii(
+            &mut self.draw_list,
+            text,
+            pos,
+            glyph_size,
+            color,
+            clip_rect,
+        )
+    }
+
+    pub fn button(
+        &mut self,
+        id: &str,
+        text: &str,
+        pos: [f32; 2],
+        size: [f32; 2],
+    ) -> UiButtonResult {
+
+        let widget_id = hash_widget_id(id);
+        let mouse = self.current_input.mouse_pos;
+        let hovered = point_in_rect(mouse, pos, size);
+        let was_down = self.prev_input.mouse_down[0];
+        let is_down = self.current_input.mouse_down[0];
+        let just_pressed = !was_down && is_down;
+        let just_released = was_down && !is_down;
+
+        if hovered && just_pressed {
+            self.active_id = Some(widget_id);
+        }
+        let pressed = self.active_id == Some(widget_id) && is_down;
+        let clicked = self.active_id == Some(widget_id) && hovered && just_released;
+        if self.active_id == Some(widget_id) && just_released {
+            self.active_id = None;
+        }
+
+        let bg = if pressed {
+            [70, 130, 240, 255]
+        } else if hovered {
+            [85, 145, 255, 255]
+        } else {
+            [50, 100, 200, 255]
+        };
+        let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
+        push_colored_rect(&mut self.draw_list, pos, size, bg, clip);
+        push_text_ascii(
+            &mut self.draw_list,
+            text,
+            [pos[0] + 12.0, pos[1] + 10.0],
+            [12.0, 24.0],
+            [255, 255, 255, 255],
+            clip,
+        );
+
+        UiButtonResult {
+            hovered,
+            pressed,
+            clicked,
+        }
+    }
+}
+
+fn point_in_rect(p: [f32; 2], pos: [f32; 2], size: [f32; 2]) -> bool {
+    p[0] >= pos[0] && p[0] <= pos[0] + size[0] && p[1] >= pos[1] && p[1] <= pos[1] + size[1]
+}
+
+fn hash_widget_id(id: &str) -> u64 {
+    let mut h = 1469598103934665603_u64;
+    for b in id.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(1099511628211_u64);
+    }
+    h
 }
 
 fn push_colored_rect(

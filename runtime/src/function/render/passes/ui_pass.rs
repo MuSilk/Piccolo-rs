@@ -5,7 +5,7 @@ use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{input::input_system::InputSystem, render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::{ui2::{UiDrawCmd, UiDrawList, UiInputSnapshot, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{input::input_system::InputSystem, render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::{ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -30,9 +30,7 @@ pub struct UIPass {
     ctx: Weak<RefCell<Context>>,
     platform: Weak<RefCell<WinitPlatform>>,
     font_texture: Texture,
-    textures: Textures<Texture>,
     renderer_data: [RefCell<RendererData>; K_MAX_FRAMES_IN_FLIGHT],
-    ui_runtime: RefCell<UiRuntime>,
 }
 
 impl UIPass {
@@ -58,6 +56,7 @@ impl UIPass {
         render_system: &RefCell<RenderSystem>,
         window_system: &WindowSystem, 
         input_system: &RefCell<InputSystem>,
+        ui_runtime: &RefCell<UiRuntime>
     ) {
         let color = [1.0;4];
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
@@ -66,11 +65,8 @@ impl UIPass {
         rhi.push_event(command_buffer, "UI\0", color);
 
         if use_ui2_backend() {
-            let swapchain_info = rhi.get_swapchain_info();
-            let viewport = [swapchain_info.extent.width as f32, swapchain_info.extent.height as f32];
-            let mut ui_runtime = self.ui_runtime.borrow_mut();
-            ui_runtime.update_input(UiInputSnapshot::default());
-            let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0, viewport);
+            let mut ui_runtime = ui_runtime.borrow_mut();
+            let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
             self.render_ui_draw_list(&rhi, &draw_list).unwrap();
         } else {
             let ctx = self.ctx.upgrade().unwrap();

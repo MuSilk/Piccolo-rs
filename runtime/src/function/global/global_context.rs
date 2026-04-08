@@ -2,7 +2,7 @@ use std::{cell::{RefCell}, path::Path, rc::{Rc, Weak}};
 
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
     m_config_manager: Rc<RefCell<ConfigManager>>,
@@ -12,6 +12,7 @@ pub struct RuntimeGlobalContext {
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<Rc<RefCell<RenderSystem>>>,
     m_debugdraw_manager: Option<Rc<RefCell<DebugDrawManager>>>,
+    m_ui_runtime: RefCell<UiRuntime>,
 }
 
 impl RuntimeGlobalContext {
@@ -29,6 +30,7 @@ impl RuntimeGlobalContext {
             m_window_system: Rc::new(RefCell::new(WindowSystem::default())),
             m_render_system: None,
             m_debugdraw_manager: None,
+            m_ui_runtime: RefCell::new(UiRuntime::default()),
         };
         ctx.m_config_manager.borrow_mut().initialize(config_file_path);
         ctx.m_world_manager.borrow_mut().initialize(
@@ -85,6 +87,10 @@ impl RuntimeGlobalContext {
 
     pub fn world_manager(&self) -> &Rc<RefCell<WorldManager>> {
         &self.m_world_manager
+    }
+
+    pub fn ui_runtime(&self) -> &RefCell<UiRuntime> {
+        &self.m_ui_runtime
     }
 
     pub fn shutdown_systems(&self){

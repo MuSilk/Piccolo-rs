@@ -86,6 +86,7 @@ impl Engine {
             &self.m_runtime_context.debugdraw_manager(),
             &self.m_runtime_context.window_system().borrow(),
             &self.m_runtime_context.input_system(),
+            &self.m_runtime_context.ui_runtime(),
             &self.m_runtime_context.asset_manager().borrow(),
             &self.m_runtime_context.config_manager().borrow(),
             delta_time
@@ -94,6 +95,16 @@ impl Engine {
     }
 
     fn logical_tick(&self, delta_time: f32) {
+        let render_system = self.m_runtime_context.render_system().borrow();
+        let rhi = render_system.get_rhi().borrow();
+        let swapchain_info = rhi.get_swapchain_info();
+        let viewport = [swapchain_info.extent.width as f32, swapchain_info.extent.height as f32];
+        {
+            let mut ui_runtime = self.m_runtime_context.ui_runtime().borrow_mut();
+            ui_runtime.set_viewport(viewport);
+            ui_runtime.new_frame();
+        }
+
         self.m_runtime_context.world_manager().borrow_mut().tick(
             &self,
             &self.m_runtime_context.asset_manager().borrow(),
@@ -103,6 +114,7 @@ impl Engine {
         self.m_runtime_context.input_system().borrow_mut().tick(
             &self.m_runtime_context.window_system().borrow(),
             &self.m_runtime_context.render_system().borrow(),
+            &self.m_runtime_context.ui_runtime(),
             delta_time
         );
     }

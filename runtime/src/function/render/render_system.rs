@@ -4,7 +4,7 @@ use anyhow::Result;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
-use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::RenderCamera, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::window_ui::WindowUI}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::global::global_rendering::GlobalRenderingRes}};
+use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::RenderCamera, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::{ui2::UiRuntime, window_ui::WindowUI}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::global::global_rendering::GlobalRenderingRes}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -112,6 +112,7 @@ impl RenderSystem {
         debugdraw_manager: &RefCell<DebugDrawManager>,
         window_system: &WindowSystem,
         input_system: &RefCell<InputSystem>,
+        ui_runtime: &RefCell<UiRuntime>,
         asset_manager: &AssetManager,
         config_manager: &ConfigManager,
         delta_time: f32
@@ -130,11 +131,18 @@ impl RenderSystem {
                     render_system,
                     window_system, 
                     input_system,
-                    debugdraw_manager, 
+                    debugdraw_manager,
+                    ui_runtime,
                     &mut self.m_render_resource.borrow_mut())?;
             },
             RenderPipelineType::DeferredPipeline => {
-                self.m_render_pipeline.deferred_render(render_system, window_system, input_system, debugdraw_manager, &mut self.m_render_resource.borrow_mut())?;
+                self.m_render_pipeline.deferred_render(
+                    render_system, 
+                    window_system, 
+                    input_system, 
+                    debugdraw_manager, 
+                    ui_runtime,
+                    &mut self.m_render_resource.borrow_mut())?;
             },
             _ => {panic!("Unknown render pipeline type")}
         }

@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
 use bitflags::bitflags;
-use winit::{event::{DeviceId, ElementState, KeyEvent}, keyboard::{KeyCode, PhysicalKey}};
+use winit::{dpi::PhysicalPosition, event::{DeviceId, ElementState, KeyEvent, MouseButton}, keyboard::{KeyCode, PhysicalKey}};
 
-use crate::{engine::Engine, function::render::{render_system::RenderSystem, window_system::WindowSystem}};
+use crate::{engine::Engine, function::{render::{render_system::RenderSystem, window_system::WindowSystem}, ui::ui2::{UiInputSnapshot, UiRuntime}}};
 
 
 bitflags! {
@@ -34,6 +34,8 @@ pub struct InputSystem {
     pub m_cursor_delta_pitch: f32,
 
     m_game_command: GameCommand,
+    m_cursor_pos: [f32; 2],
+    m_mouse_down: [bool; 3],
 }
 
 impl InputSystem {
@@ -162,6 +164,22 @@ impl InputSystem {
         }
     }
 
+    fn on_cursor_pos(&mut self, _device_id: DeviceId, position: PhysicalPosition<f64>) {
+        self.m_cursor_pos = [position.x as f32, position.y as f32];
+    }
+
+    fn on_mouse_button(&mut self, _device_id: DeviceId, state: ElementState, button: MouseButton) {
+        let idx = match button {
+            MouseButton::Left => Some(0),
+            MouseButton::Right => Some(1),
+            MouseButton::Middle => Some(2),
+            _ => None,
+        };
+        if let Some(idx) = idx {
+            self.m_mouse_down[idx] = state == ElementState::Pressed;
+        }
+    }
+
     fn clear(&mut self) {
         self.m_cursor_delta_x = 0;
         self.m_cursor_delta_y = 0;
@@ -193,8 +211,14 @@ impl InputSystem {
         &mut self, 
         window_system: &WindowSystem,
         render_system: &RenderSystem,
+        ui_runtime: &RefCell<UiRuntime>,
         _delta_time: f32
     ) {
+        ui_runtime.borrow_mut().update_input(UiInputSnapshot {
+            mouse_pos: self.m_cursor_pos,
+            mouse_down: self.m_mouse_down,
+            mouse_wheel: 0.0,
+        });
         self.calculate_cursor_delta_angles(window_system, render_system);
         self.clear();        
 
@@ -248,6 +272,18 @@ impl InputSystemExt for Rc<RefCell<InputSystem>> {
                 this.borrow_mut()
                     .on_mouse_motion(&*ws_ref, device_id, position);
             }
+        });
+
+        let this = Rc::downgrade(self);
+        window_system_mut.register_on_cursor_pos_func(move |device_id, position| {
+            let this = this.upgrade().unwrap();
+            this.borrow_mut().on_cursor_pos(device_id, position);
+        });
+
+        let this = Rc::downgrade(self);
+        window_system_mut.register_on_mouse_button_func(move |device_id, state, button| {
+            let this = this.upgrade().unwrap();
+            this.borrow_mut().on_mouse_button(device_id, state, button);
         });
     }
 }

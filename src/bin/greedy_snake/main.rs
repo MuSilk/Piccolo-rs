@@ -115,13 +115,14 @@ impl SnakeState {
 
 struct Scene {
     scene: EngineScene,
+    demo_click_count: u32,
 }
 
 impl Scene {
     fn new() -> Self {
         let mut scene = EngineScene::new();
         scene.set_url("greedy_snake");
-        Self { scene }
+        Self { scene, demo_click_count: 0 }
     }
 }
 
@@ -140,6 +141,7 @@ impl SceneTrait for Scene {
 
         process_input(self, engine);
         update(self, engine, delta_time);
+        render_ui(self, engine);
 
         let input_system = engine.m_runtime_context.input_system();
         let input_system = input_system.borrow();
@@ -228,6 +230,27 @@ fn update(scene: &mut Scene, engine: &Engine, delta_time: f32) {
         state.accumulator -= step;
         steps += 1;
     }
+}
+
+fn render_ui(scene: &mut Scene, engine: &Engine) {
+    let mut ui_runtime = engine.m_runtime_context.ui_runtime().borrow_mut();
+    let viewport = ui_runtime.get_viewport();
+    let resp = ui_runtime.button(
+        "demo_btn", 
+        "CLICK", 
+        [40.0, 40.0], 
+        [180.0, 48.0]
+    );
+    if resp.clicked {
+        scene.demo_click_count = scene.demo_click_count.saturating_add(1);
+    }
+    ui_runtime.push_text_ascii(
+        &format!("COUNT {}", scene.demo_click_count),
+        [40.0, 95.0],
+        [10.0, 20.0],
+        [255, 255, 255, 255],
+        [0.0, 0.0, viewport[0], viewport[1]],
+    );
 }
 
 fn snake_step(scene: &mut Scene, engine: &Engine) {

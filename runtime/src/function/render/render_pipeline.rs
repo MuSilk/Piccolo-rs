@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_pass::{_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource, render_system::RenderSystem, window_system::WindowSystem}}};
+use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_pass::{_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource, render_system::RenderSystem, window_system::WindowSystem}, ui::ui2::UiRuntime}};
 
 
 pub struct RenderPipeline {
@@ -125,6 +125,7 @@ impl RenderPipeline {
         window_system: &WindowSystem,
         input_system: &RefCell<InputSystem>,
         debugdraw_manager: &RefCell<DebugDrawManager>,
+        ui_runtime: &RefCell<UiRuntime>,
         render_resource: &mut RenderResource,
     ) -> Result<()> {
         let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
@@ -150,6 +151,7 @@ impl RenderPipeline {
                 render_system,
                 window_system,
                 input_system,
+                ui_runtime,
                 &self.m_base.borrow().m_tone_mapping_pass,
                 &self.m_base.borrow().m_color_grading_pass,
                 &self.m_base.borrow().m_fxaa_pass,
@@ -174,6 +176,7 @@ impl RenderPipeline {
         window_system: &WindowSystem,
         input_system: &RefCell<InputSystem>,
         debugdraw_manager: &RefCell<DebugDrawManager>,
+        ui_runtime: &RefCell<UiRuntime>,
         render_resource: &mut RenderResource
     ) -> Result<()> {
         let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
@@ -199,6 +202,7 @@ impl RenderPipeline {
                 render_system,
                 window_system,
                 input_system,
+                ui_runtime,
                 &self.m_base.borrow().m_tone_mapping_pass,
                 &self.m_base.borrow().m_color_grading_pass,
                 &self.m_base.borrow().m_fxaa_pass,
