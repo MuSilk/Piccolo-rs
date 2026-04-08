@@ -1,7 +1,6 @@
 use std::{cell::RefCell, rc::Rc, time::{Duration}};
 
 use anyhow::Result;
-use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::event::{Event};
 
 use crate::{core::math::vector2::Vector2, function::{input::input_system::InputSystem, render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::RenderCamera, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::{ui2::UiRuntime, window_ui::WindowUI}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::global::global_rendering::GlobalRenderingRes}};
@@ -14,8 +13,6 @@ pub struct RenderSystemCreateInfo<'a>{
 
 pub struct RenderSystem{
     pub m_rhi: Rc<RefCell<VulkanRHI>>,
-    m_imgui_context: Rc<RefCell<imgui::Context>>,
-    pub m_imgui_platform: Rc<RefCell<WinitPlatform>>,
     m_swap_context: RenderSwapContext,
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
@@ -31,12 +28,6 @@ impl RenderSystem {
         };
         let vulkan_rhi = VulkanRHI::create(&rhi_create_info);
         let vulkan_rhi = Rc::new(RefCell::new(vulkan_rhi));
-
-        let mut imgui_context = imgui::Context::create();
-        let mut platform = WinitPlatform::new(&mut imgui_context);
-        platform.attach_window(imgui_context.io_mut(), create_info.window_system.get_window(), HiDpiMode::Rounded);
-        let imgui_context = Rc::new(RefCell::new(imgui_context));
-        let imgui_platform = Rc::new(RefCell::new(platform));
 
         let asset_manager = create_info.asset_manager;
         let config_manager = create_info.config_manager;
@@ -81,8 +72,6 @@ impl RenderSystem {
             rhi : &vulkan_rhi,
             render_resource: &render_resource,
             enable_fxaa: global_rendering_res.enable_fxaa,
-            imgui_context: &imgui_context,
-            imgui_platform: &imgui_platform,
             config_manager: config_manager,
         };
         let render_pipeline = RenderPipeline::create(&create_info).unwrap();
@@ -95,8 +84,6 @@ impl RenderSystem {
 
         Self {
             m_rhi: vulkan_rhi, 
-            m_imgui_context: imgui_context,
-            m_imgui_platform: imgui_platform,
             m_swap_context: swap_context,
             m_render_pipeline_type: RenderPipelineType::ForwardPipeline,
             m_render_camera: Rc::new(RefCell::new(render_camera)),
@@ -123,8 +110,6 @@ impl RenderSystem {
         self.m_render_scene.borrow_mut().update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
         self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&mut debugdraw_manager.borrow_mut(), &self.m_render_resource.borrow());
         debugdraw_manager.borrow_mut().tick(delta_time);
-        self.m_imgui_context.borrow_mut().io_mut().update_delta_time(Duration::from_secs_f32(delta_time));
-        self.m_imgui_platform.borrow_mut().prepare_frame(self.m_imgui_context.borrow_mut().io_mut(), window_system.get_window()).unwrap();
         match self.m_render_pipeline_type {
             RenderPipelineType::ForwardPipeline => {
                 self.m_render_pipeline.forward_render(
@@ -191,14 +176,6 @@ impl RenderSystem {
 
     pub fn initialize_ui_render_backend(&self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
         self.m_render_pipeline.m_base.borrow_mut().initialize_ui_render_backend(window_ui);
-    }
-
-    pub fn handle_event<T>(&self,window_system: &WindowSystem, event: &Event<T>) {
-        self.m_imgui_platform.borrow_mut().handle_event(
-            self.m_imgui_context.borrow_mut().io_mut(), 
-            window_system.get_window(), 
-            event
-        );
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {

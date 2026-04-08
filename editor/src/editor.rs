@@ -24,14 +24,12 @@ impl Default for Editor {
 
 impl app::System for Editor {
     fn initialize(&mut self, engine_runtime: &Rc<RefCell<Engine>>){
-        engine_runtime.borrow_mut().set_editor_mode(true);
+        engine_runtime.borrow().set_editor_mode(true);
         self.m_engine_runtime = Rc::downgrade(engine_runtime);
 
         let t_engine_runtime = engine_runtime.borrow();
         let render_system = 
             t_engine_runtime.m_runtime_context.render_system();
-        let window_system = 
-            t_engine_runtime.m_runtime_context.window_system();
 
         let info = EditorGlobalContextCreateInfo {
             engine_runtime: engine_runtime,
@@ -49,8 +47,7 @@ impl app::System for Editor {
         );
 
         self.m_editor_ui.borrow_mut().initialize(WindowUIInitInfo{
-            window_system: &window_system,
-            render_system: &render_system,
+            engine: engine_runtime,
         });
 
         let window_ui: Rc<RefCell<dyn WindowUI>> = self.m_editor_ui.clone();

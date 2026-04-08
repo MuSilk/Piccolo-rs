@@ -1,18 +1,24 @@
-use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, time::Instant};
+use std::{cell::RefCell, path::Path, rc::{Weak}, time::Instant};
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use crate::{function::global::global_context::RuntimeGlobalContext};
 
+const S_FPS_ALPHA: f32 = 1.0 / 100.0;
+
 pub struct Engine {
     pub m_runtime_context: RuntimeGlobalContext,
     m_is_quit: bool,
+    m_state: RefCell<EngineState>,
+}
+
+struct EngineState {
     m_last_tick_time_point: Instant,
-    m_average_duration: f32,
     m_frame_count: u32,
-    m_is_editor_mode: bool,
+    m_average_duration: f32,
     m_fps: u32,
+    m_is_editor_mode: bool,
 }
 
 impl Engine {
@@ -21,11 +27,13 @@ impl Engine {
         Engine {
             m_runtime_context: RuntimeGlobalContext::new(config_file_path),
             m_is_quit: false,
-            m_last_tick_time_point: Instant::now(),
-            m_average_duration: 0.0,
-            m_frame_count: 0,
-            m_is_editor_mode: false,
-            m_fps: 0,
+            m_state: RefCell::new(EngineState {
+                m_last_tick_time_point: Instant::now(),
+                m_frame_count: 0,
+                m_average_duration: 0.0,
+                m_fps: 0,
+                m_is_editor_mode: false,
+            }),
         }
     }
 
@@ -33,21 +41,21 @@ impl Engine {
         self.m_runtime_context.resumed_instance(event_loop, engine);
     }
     pub fn initialize(&mut self){
-        self.m_last_tick_time_point = Instant::now();
+        self.m_state.borrow_mut().m_last_tick_time_point = Instant::now();
     }
 
     pub fn shutdown_engine(&self){
         self.m_runtime_context.shutdown_systems();
     }
 
-    pub fn calculate_delta_time(&mut self) -> f32 {
+    pub fn calculate_delta_time(&self) -> f32 {
         let now = Instant::now();
-        let delta_time = now.duration_since(self.m_last_tick_time_point).as_secs_f32();
-        self.m_last_tick_time_point = now;
+        let delta_time = now.duration_since(self.m_state.borrow().m_last_tick_time_point).as_secs_f32();
+        self.m_state.borrow_mut().m_last_tick_time_point = now;
         delta_time
     }
 
-    pub fn tick_one_frame(&mut self, delta_time: f32) -> Result<bool> {
+    pub fn tick_one_frame(&self, delta_time: f32) -> Result<bool> {
         self.m_runtime_context
             .render_system()
             .borrow_mut()
@@ -58,7 +66,7 @@ impl Engine {
         self.m_runtime_context
             .window_system()
             .borrow()
-            .set_title(&format!("Editor - FPS: {}", self.m_fps));
+            .set_title(&format!("Editor - FPS: {}", self.m_state.borrow().m_fps));
         Ok(!self
             .m_runtime_context
             .window_system()
@@ -67,11 +75,11 @@ impl Engine {
     }
 
     pub fn is_editor_mode(&self) -> bool {
-        self.m_is_editor_mode
+        self.m_state.borrow().m_is_editor_mode
     }
 
-    pub fn set_editor_mode(&mut self, value: bool) {
-        self.m_is_editor_mode = value;
+    pub fn set_editor_mode(&self, value: bool) {
+        self.m_state.borrow_mut().m_is_editor_mode = value;
     }
 }
 
@@ -118,15 +126,19 @@ impl Engine {
             delta_time
         );
     }
+    fn calculate_fps(&self, delta_time: f32) {
+        self.m_state.borrow_mut().calculate_fps(delta_time);
+    }
+}
 
-    const S_FPS_ALPHA: f32 = 1.0 / 100.0;
+impl EngineState {
     fn calculate_fps(&mut self, delta_time: f32) {
         self.m_frame_count += 1;
 
         if self.m_frame_count == 1 {
             self.m_average_duration = delta_time;
         } else{
-            self.m_average_duration = self.m_average_duration * (1.0 - Self::S_FPS_ALPHA) + delta_time * Self::S_FPS_ALPHA;
+            self.m_average_duration = self.m_average_duration * (1.0 - S_FPS_ALPHA) + delta_time * S_FPS_ALPHA;
         }
         self.m_fps = (1.0 / self.m_average_duration) as u32;
     }

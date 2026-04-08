@@ -1,10 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::function::{input::input_system::InputSystem, render::{render_system::RenderSystem, window_system::WindowSystem}};
+use crate::{engine::Engine, function::{input::input_system::InputSystem, render::{render_system::RenderSystem, window_system::WindowSystem}}};
 
 pub struct WindowUIInitInfo<'a> {
-    pub window_system: &'a Rc<RefCell<WindowSystem>>,
-    pub render_system: &'a Rc<RefCell<RenderSystem>>,
+    pub engine: &'a Rc<RefCell<Engine>>,
 }
 
 pub trait WindowUI {
@@ -13,7 +12,6 @@ pub trait WindowUI {
         render_system: &RefCell<RenderSystem>,
         window_system: &WindowSystem, 
         input_system: &RefCell<InputSystem>, 
-        ui: &mut imgui::Ui
     );
 }
 

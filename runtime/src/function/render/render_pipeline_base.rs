@@ -1,15 +1,11 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use imgui_winit_support::WinitPlatform;
-
 use crate::{function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, pick_pass::PickPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI}, resource::config_manager::ConfigManager};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
     pub render_resource : &'a Rc<RefCell<RenderResource>>,
     pub enable_fxaa : bool,
-    pub imgui_context : &'a Rc<RefCell<imgui::Context>>,
-    pub imgui_platform : &'a Rc<RefCell<WinitPlatform>>,
     pub config_manager : &'a ConfigManager,
 }
 

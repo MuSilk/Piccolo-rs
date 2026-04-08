@@ -1,17 +1,13 @@
 use std::{cell::RefCell, mem::offset_of, rc::{Rc, Weak}};
 use anyhow::Result;
-use imgui::{internal::RawWrapper, sys::{ImDrawIdx}, BackendFlags, Context, DrawCmd, DrawCmdParams, DrawData, Textures};
-use imgui_winit_support::WinitPlatform;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{input::input_system::InputSystem, render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::{ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{input::input_system::InputSystem, render::{self, font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::{ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
-    pub ctx: &'a Rc<RefCell<Context>>,
-    pub platform: &'a Rc<RefCell<WinitPlatform>>,
     pub config_manager: &'a ConfigManager
 }
 
@@ -27,8 +23,6 @@ pub struct UIPass {
     pub m_render_pass: RenderPass,
     m_window_ui: Option<Weak<RefCell<dyn WindowUI>>>,
 
-    ctx: Weak<RefCell<Context>>,
-    platform: Weak<RefCell<WinitPlatform>>,
     font_texture: Texture,
     renderer_data: [RefCell<RendererData>; K_MAX_FRAMES_IN_FLIGHT],
 }
@@ -37,11 +31,7 @@ impl UIPass {
     pub fn initialize(&mut self, info: &UIPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize();
 
-        self.ctx = Rc::downgrade(info.ctx);
-        self.platform = Rc::downgrade(info.platform);
         self.font_texture = upload_font_texture(&info.rhi.borrow(), info.config_manager)?;
-        info.ctx.borrow_mut().set_renderer_name(Some("imgui_vulkanalia_renderer".to_string()));
-        info.ctx.borrow_mut().io_mut().backend_flags.insert(BackendFlags::RENDERER_HAS_VTX_OFFSET);
 
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(&info.rhi.borrow())?;
@@ -58,36 +48,23 @@ impl UIPass {
         input_system: &RefCell<InputSystem>,
         ui_runtime: &RefCell<UiRuntime>
     ) {
+        if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
+            window_ui.borrow_mut().pre_render(
+                render_system, 
+                window_system, 
+                input_system
+            );
+        }
+
         let color = [1.0;4];
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "UI\0", color);
 
-        if use_ui2_backend() {
-            let mut ui_runtime = ui_runtime.borrow_mut();
-            let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
-            self.render_ui_draw_list(&rhi, &draw_list).unwrap();
-        } else {
-            let ctx = self.ctx.upgrade().unwrap();
-            let mut ctx = ctx.borrow_mut();
-
-            let mut ui = ctx.new_frame();
-
-            if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
-                window_ui.borrow_mut().pre_render(
-                    render_system, 
-                    window_system, 
-                    input_system, 
-                    &mut ui
-                );
-            }
-
-            let platform = self.platform.upgrade().unwrap();
-            platform.borrow_mut().prepare_render(&ui, window_system.get_window());
-            let draw_data = ctx.render();
-            self.imgui_render(&rhi, &draw_data).unwrap();
-        }
+        let mut ui_runtime = ui_runtime.borrow_mut();
+        let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
+        self.render_ui_draw_list(&rhi, &draw_list).unwrap();
 
         rhi.pop_event(command_buffer);
     }
@@ -102,7 +79,6 @@ impl UIPass {
 
     pub fn reload_font_texture(
         &mut self, 
-        _ctx: &mut imgui::Context,
         config_manager: &ConfigManager
     ) -> Result<()> {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
@@ -138,164 +114,6 @@ impl UIPass {
         Ok(())
     }
 
-    fn imgui_render(&self, rhi: &VulkanRHI, draw_data: &DrawData) -> Result<()> {
-        if draw_data.total_vtx_count <= 0 {
-            return Ok(());
-        }
-        let fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
-        let fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
-        if fb_width <= 0.0 || fb_height <= 0.0 {
-            return Ok(());
-        }
-        let data = &mut self.renderer_data[rhi.get_current_frame_index()].borrow_mut();
-        let vertex_size = draw_data.total_vtx_count as usize * std::mem::size_of::<ImguiDrawVertex>();
-        let index_size = draw_data.total_idx_count as usize * std::mem::size_of::<ImDrawIdx>();
-        data.update_vertex_buffer(rhi, vertex_size)?;
-        data.update_index_buffer(rhi, index_size)?;
-
-        let mut vertex_ptr = rhi.map_memory(data.vertex_buffer_memory, 0, vertex_size as u64, vk::MemoryMapFlags::empty())?;
-        let mut index_ptr = rhi.map_memory(data.index_buffer_memory, 0, index_size as u64, vk::MemoryMapFlags::empty())?;
-
-        for draw_list in draw_data.draw_lists() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    draw_list.transmute_vtx_buffer::<ImguiDrawVertex>().as_ptr(),
-                    vertex_ptr as *mut ImguiDrawVertex,
-                    draw_list.vtx_buffer().len(),
-                );
-                std::ptr::copy_nonoverlapping(
-                    draw_list.idx_buffer().as_ptr(),
-                    index_ptr as *mut ImDrawIdx,
-                    draw_list.idx_buffer().len(),
-                );  
-                vertex_ptr = vertex_ptr.add(draw_list.vtx_buffer().len() * std::mem::size_of::<ImguiDrawVertex>());
-                index_ptr = index_ptr.add(draw_list.idx_buffer().len() * std::mem::size_of::<ImDrawIdx>());
-            }
-        }
-
-        rhi.unmap_memory(data.vertex_buffer_memory);
-        rhi.unmap_memory(data.index_buffer_memory);
-
-        let command_buffer = rhi.get_current_command_buffer();
-
-        // Bind pipeline and descriptor sets:
-        {
-            rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
-            rhi.cmd_bind_descriptor_sets(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS, 
-                self.m_render_pass.m_render_pipeline[0].layout,
-                0,
-                &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
-                &[],
-            );
-        }
-        // Bind Vertex And Index Buffer:
-        {
-            rhi.cmd_bind_vertex_buffers(command_buffer, 0, &[data.vertex_buffer], &[0]);
-            rhi.cmd_bind_index_buffer(command_buffer, data.index_buffer, 0, vk::IndexType::UINT16);
-        }
-        // Setup viewport:
-        {
-            let viewport = vk::Viewport {
-                x: 0.0,
-                y: 0.0,
-                width: fb_width,
-                height: fb_height,
-                min_depth: 0.0,
-                max_depth: 1.0,
-            };
-            rhi.cmd_set_viewport(command_buffer, 0, &[viewport]);
-        }
-        // Setup scale and translation:
-        {
-            let scale = [
-                2.0 / draw_data.display_size[0],
-                2.0 / draw_data.display_size[1]
-            ];
-            let translate = [
-                -1.0 - draw_data.display_pos[0] * scale[0],
-                -1.0 - draw_data.display_pos[1] * scale[1]
-            ];
-            rhi.cmd_push_constants(
-                command_buffer, 
-                self.m_render_pass.m_render_pipeline[0].layout,
-                vk::ShaderStageFlags::VERTEX, 
-                (std::mem::size_of::<f32>() * 0) as u32, 
-                unsafe {
-                    std::slice::from_raw_parts(scale.as_ptr() as *const u8, scale.len() * std::mem::size_of::<f32>())
-                }
-            );
-            rhi.cmd_push_constants(
-                command_buffer, 
-                self.m_render_pass.m_render_pipeline[0].layout,
-                vk::ShaderStageFlags::VERTEX, 
-                (std::mem::size_of::<f32>() * 2) as u32, 
-                unsafe {
-                    std::slice::from_raw_parts(translate.as_ptr() as *const u8, translate.len() * std::mem::size_of::<f32>())
-                }
-            );
-        }
-
-        let clip_off = draw_data.display_pos;
-        let clip_scale = draw_data.framebuffer_scale;
-
-        let mut global_vtx_offset = 0;
-        let mut global_idx_offset = 0;
-
-        for draw_list in draw_data.draw_lists() {
-            for (_index, cmd) in draw_list.commands().enumerate() {
-                match cmd {
-                    DrawCmd::Elements {
-                        count,
-                        cmd_params:
-                            DrawCmdParams {
-                                clip_rect,
-                                texture_id: _id,
-                                vtx_offset,
-                                idx_offset,
-                            },
-                    } => {
-
-                        let clip_rect = [
-                            (clip_rect[0] - clip_off[0]) * clip_scale[0],
-                            (clip_rect[1] - clip_off[1]) * clip_scale[1],
-                            (clip_rect[2] - clip_off[0]) * clip_scale[0],
-                            (clip_rect[3] - clip_off[1]) * clip_scale[1],
-                        ];
-
-                        let scissor = vk::Rect2D {
-                            offset: vk::Offset2D {
-                                x: clip_rect[0] as i32,
-                                y: clip_rect[1] as i32,
-                            },
-                            extent: vk::Extent2D {
-                                width: (clip_rect[2] - clip_rect[0]) as u32,
-                                height: (clip_rect[3] - clip_rect[1]) as u32,
-                            },
-                        };
-
-                        rhi.cmd_set_scissor(command_buffer, 0, &[scissor]);
-                        rhi.cmd_draw_indexed(
-                            command_buffer, 
-                            count as u32, 
-                            1, 
-                            (idx_offset + global_idx_offset) as u32, 
-                            (vtx_offset + global_vtx_offset) as i32, 
-                            0
-                        );
-                    },
-                    DrawCmd::ResetRenderState => (), // TODO
-                    DrawCmd::RawCallback { callback, raw_cmd } => unsafe {
-                        callback(draw_list.raw(), raw_cmd)
-                    },
-                }
-            }
-            global_vtx_offset += draw_list.vtx_buffer().len();
-            global_idx_offset += draw_list.idx_buffer().len();
-        }
-        Ok(())
-    }
 
     fn render_ui_draw_list(&self, rhi: &VulkanRHI, draw_list: &UiDrawList) -> Result<()> {
         if draw_list.vertices.is_empty() || draw_list.indices.is_empty() || draw_list.commands.is_empty() {

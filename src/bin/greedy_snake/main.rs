@@ -251,6 +251,25 @@ fn render_ui(scene: &mut Scene, engine: &Engine) {
         [255, 255, 255, 255],
         [0.0, 0.0, viewport[0], viewport[1]],
     );
+
+    let resp = ui_runtime.button(
+        "down_btn", 
+        "down_btn", 
+        [40.0, 150.0], 
+        [180.0, 48.0]
+    );
+    if resp.clicked {
+        println!("down_btn clicked");
+    }
+    let resp = ui_runtime.button(
+        "up_btn", 
+        "up_btn", 
+        [60.0, 150.0], 
+        [180.0, 48.0]
+    );
+    if resp.clicked {
+        println!("up_btn clicked");
+    }
 }
 
 fn snake_step(scene: &mut Scene, engine: &Engine) {

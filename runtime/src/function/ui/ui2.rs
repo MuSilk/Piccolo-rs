@@ -48,6 +48,15 @@ pub struct UiRuntime {
     draw_list: UiDrawList,
     viewport: [f32; 2],
     active_id: Option<u64>,
+    hover_id: Option<u64>,
+    prev_hover_id: Option<u64>,
+    menu_bar_active: bool,
+    menu_cursor_x: f32,
+    menu_popup_open: Option<String>,
+    current_menu_label: Option<String>,
+    current_menu_popup_pos: [f32; 2],
+    current_menu_popup_size: [f32; 2],
+    current_menu_item_cursor_y: f32,
 }
 
 pub struct UiButtonResult {
@@ -69,6 +78,8 @@ impl UiRuntime {
     pub fn new_frame(&mut self) {
         self.frame_counter += 1;
         self.draw_list = UiDrawList::default();
+        self.prev_hover_id = self.hover_id;
+        self.hover_id = None;
     }
 
     pub fn get_viewport(&self) -> [f32; 2] {
@@ -121,6 +132,10 @@ impl UiRuntime {
         let widget_id = hash_widget_id(id);
         let mouse = self.current_input.mouse_pos;
         let hovered = point_in_rect(mouse, pos, size);
+        if hovered {
+            // Last hit in frame wins, matching top-most draw order.
+            self.hover_id = Some(widget_id);
+        }
         let was_down = self.prev_input.mouse_down[0];
         let is_down = self.current_input.mouse_down[0];
         let just_pressed = !was_down && is_down;
@@ -135,20 +150,26 @@ impl UiRuntime {
             self.active_id = None;
         }
 
+        // Use previous frame hover id for stable overlap highlight.
+        let hover_for_render = hovered && self.prev_hover_id == Some(widget_id);
         let bg = if pressed {
             [70, 130, 240, 255]
-        } else if hovered {
+        } else if hover_for_render {
             [85, 145, 255, 255]
         } else {
             [50, 100, 200, 255]
         };
         let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
         push_colored_rect(&mut self.draw_list, pos, size, bg, clip);
+        // Keep button label inside bounds and vertically centered.
+        let glyph = [8.0, 14.0];
+        let text_x = pos[0] + 8.0;
+        let text_y = pos[1] + ((size[1] - glyph[1]) * 0.5).max(0.0);
         push_text_ascii(
             &mut self.draw_list,
             text,
-            [pos[0] + 12.0, pos[1] + 10.0],
-            [12.0, 24.0],
+            [text_x, text_y],
+            glyph,
             [255, 255, 255, 255],
             clip,
         );
@@ -158,6 +179,122 @@ impl UiRuntime {
             pressed,
             clicked,
         }
+    }
+
+    pub fn begin_main_menu_bar(&mut self) -> bool {
+        let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
+        push_colored_rect(
+            &mut self.draw_list,
+            [0.0, 0.0],
+            [self.viewport[0], 30.0],
+            [28, 32, 42, 240],
+            clip,
+        );
+        self.menu_bar_active = true;
+        self.menu_cursor_x = 8.0;
+        self.current_menu_label = None;
+        true
+    }
+
+    pub fn begin_menu(&mut self, label: &str) -> bool {
+        if !self.menu_bar_active {
+            return false;
+        }
+        let label_width = 10.0 * label.len() as f32;
+        let width = 16.0 + label_width;
+        let header_pos = [self.menu_cursor_x, 3.0];
+        let resp = self.button(
+            &format!("MenuHeader::{label}"),
+            label,
+            header_pos,
+            [width, 24.0],
+        );
+        if resp.clicked {
+            match self.menu_popup_open.as_ref() {
+                Some(open) if open == label => self.menu_popup_open = None,
+                _ => self.menu_popup_open = Some(label.to_string()),
+            }
+        }
+
+        let is_open = self
+            .menu_popup_open
+            .as_ref()
+            .map(|x| x == label)
+            .unwrap_or(false);
+        if is_open {
+            let popup_pos = [header_pos[0], 30.0];
+            let popup_size = [220.0, 220.0];
+            let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
+            push_colored_rect(
+                &mut self.draw_list,
+                popup_pos,
+                popup_size,
+                [36, 40, 52, 248],
+                clip,
+            );
+            self.current_menu_label = Some(label.to_string());
+            self.current_menu_popup_pos = popup_pos;
+            self.current_menu_popup_size = popup_size;
+            self.current_menu_item_cursor_y = popup_pos[1] + 6.0;
+        }
+        self.menu_cursor_x += width + 8.0;
+        is_open
+    }
+
+    pub fn menu_item(&mut self, label: &str) -> bool {
+        if !self.menu_bar_active || self.current_menu_label.is_none() {
+            return false;
+        }
+        let width = self.current_menu_popup_size[0] - 12.0;
+        let pos = [self.current_menu_popup_pos[0] + 6.0, self.current_menu_item_cursor_y];
+        let clicked = self
+            .button(
+                &format!(
+                    "MenuItem::{}::{label}",
+                    self.current_menu_label.as_ref().unwrap()
+                ),
+                label,
+                pos,
+                [width, 24.0],
+            )
+            .clicked;
+        self.current_menu_item_cursor_y += 26.0;
+        if clicked {
+            self.menu_popup_open = None;
+        }
+        clicked
+    }
+
+    pub fn menu_item_config<'a>(&'a mut self, label: &str) -> UiMenuItemConfig<'a> {
+        UiMenuItemConfig {
+            ui: self,
+            label: label.to_string(),
+        }
+    }
+
+    pub fn end_main_menu_bar(&mut self) {
+        self.menu_bar_active = false;
+        self.current_menu_label = None;
+    }
+}
+
+pub struct UiMenuItemConfig<'a> {
+    ui: &'a mut UiRuntime,
+    label: String,
+}
+
+impl<'a> UiMenuItemConfig<'a> {
+    pub fn build_with_ref(self, value: &mut bool) -> bool {
+        let text = if *value {
+            format!("{}:On", self.label)
+        } else {
+            format!("{}:Off", self.label)
+        };
+        let clicked = self.ui.menu_item(&text);
+        if clicked {
+            *value = !*value;
+        }
+        clicked
     }
 }
 

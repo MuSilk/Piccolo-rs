@@ -67,20 +67,6 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
-        {
-            let engine = self.engine.borrow();
-            let render_system = engine
-                .m_runtime_context
-                .render_system()
-                .borrow();
-            render_system.handle_event(
-                &engine.m_runtime_context.window_system().borrow(), 
-                &Event::<()>::WindowEvent{
-                    window_id,
-                    event: event.clone(),
-            });
-        }
-
         match event {
             WindowEvent::RedrawRequested => {
                 let minimized = {
@@ -92,9 +78,9 @@ impl ApplicationHandler for App {
                     window_system.is_minimized()
                 };
                 if !event_loop.exiting() &&!minimized {
-                    let delta_time = self.engine.borrow_mut().calculate_delta_time();
+                    let delta_time = self.engine.borrow().calculate_delta_time();
                     self.systems.iter_mut().for_each(|s|s.tick(delta_time));
-                    if !self.engine.borrow_mut().tick_one_frame(delta_time).unwrap() {
+                    if !self.engine.borrow().tick_one_frame(delta_time).unwrap() {
                         event_loop.exit();
                     }  
                 }

@@ -86,8 +86,6 @@ impl RenderPipeline {
         m_ui_pass.initialize(&UIPassInitInfo {
             rhi: create_info.rhi,
             render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            ctx: create_info.imgui_context,
-            platform: create_info.imgui_platform,
             config_manager: create_info.config_manager,
         })?;
 
