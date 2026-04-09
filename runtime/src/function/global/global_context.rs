@@ -112,7 +112,7 @@ impl RuntimeGlobalContext {
             let eng_ref = eng.upgrade().unwrap();
             let eng_ref = eng_ref.borrow();
             eng_ref.input_system().borrow_mut()
-                .on_key(&*eng_ref, device_id, event, is_synthetic);
+                .on_key(&eng_ref, device_id, event, is_synthetic);
         });
 
         let eng = engine.clone();

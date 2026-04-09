@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{input::input_system::InputSystem, render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_system::RenderSystem, render_type::RHISamplerType, window_system::WindowSystem}, ui::{ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, ui::{ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}, window_ui::WindowUI}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -43,17 +43,10 @@ impl UIPass {
     
     pub fn draw(
         &self, 
-        render_system: &RefCell<RenderSystem>,
-        window_system: &WindowSystem, 
-        input_system: &RefCell<InputSystem>,
         ui_runtime: &RefCell<UiRuntime>
     ) {
         if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
-            window_ui.borrow_mut().pre_render(
-                render_system, 
-                window_system, 
-                input_system
-            );
+            window_ui.borrow_mut().pre_render();
         }
 
         let color = [1.0;4];
