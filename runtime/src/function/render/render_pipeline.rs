@@ -219,7 +219,6 @@ impl RenderPipeline {
         debugdraw_manager: &RefCell<DebugDrawManager>,
         rhi: &VulkanRHI
     ) {
-        let mut debugdraw_manager = debugdraw_manager.borrow_mut();
         self.m_base.borrow_mut().m_main_camera_pass.recreate_after_swapchain(rhi).unwrap();
         let image_views = self.m_base.borrow().m_main_camera_pass.m_render_pass.get_framebuffer_image_views();
         self.m_base.borrow_mut().m_tone_mapping_pass.update_after_framebuffer_recreate(
@@ -239,6 +238,6 @@ impl RenderPipeline {
             image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
             image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
         ).unwrap();
-        debugdraw_manager.update_after_recreate_swap_chain(rhi);
+        debugdraw_manager.borrow_mut().update_after_recreate_swap_chain(rhi);
     }
 }
