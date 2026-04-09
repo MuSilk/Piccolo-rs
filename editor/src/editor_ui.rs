@@ -6,7 +6,7 @@ use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
 
 pub struct EditorUI {
-    m_state: State,
+    m_state: RefCell<State>,
     m_input_manager: Option<Rc<RefCell<EditorInputManager>>>,
     m_scene_manager: Option<Rc<RefCell<EditorSceneManager>>>,
     m_engine: Weak<RefCell<Engine>>,
@@ -15,7 +15,7 @@ pub struct EditorUI {
 impl Default for EditorUI {
     fn default() -> Self {
         Self {
-            m_state: State::default(),
+            m_state: RefCell::new(State::default()),
             m_input_manager: None,
             m_scene_manager: None,
             m_engine: Weak::new(),
@@ -25,19 +25,27 @@ impl Default for EditorUI {
 
 #[derive(Default)]
 pub struct State {
-    m_editor_menu_window_open: RefCell<bool>,
-    m_asset_window_open: RefCell<bool>,
-    m_game_engine_window_open: RefCell<bool>,
-    m_file_content_window_open:RefCell<bool>,
-    m_detail_window_open:RefCell<bool>,
-    m_scene_lights_window_open:RefCell<bool>,
-    m_scene_lights_data_window_open:RefCell<bool>,
+    m_editor_menu_window_open: bool,
+    m_asset_window_open: bool,
+    m_game_engine_window_open: bool,
+    m_file_content_window_open:bool,
+    m_detail_window_open:bool,
+    m_scene_lights_window_open:bool,
+    m_scene_lights_data_window_open:bool,
 }
 
 impl WindowUI for EditorUI  {
     fn initialize(&mut self, init_info: WindowUIInitInfo) {
         self.m_engine = Rc::downgrade(init_info.engine);
-        self.m_state.m_editor_menu_window_open.replace(true);
+        self.m_state.replace(State{
+            m_editor_menu_window_open: true,
+            m_asset_window_open: true,
+            m_game_engine_window_open: true,
+            m_file_content_window_open: true,
+            m_detail_window_open: true,
+            m_scene_lights_window_open: true,
+            m_scene_lights_data_window_open: true,
+        });
     }
 
     fn pre_render(
@@ -77,7 +85,7 @@ impl EditorUI {
     ) {
         let engine = self.m_engine.upgrade().unwrap();
         let is_editor_mode = engine.borrow().is_editor_mode();
-        let mut menu_open = *self.m_state.m_editor_menu_window_open.borrow();
+        let mut menu_open = self.m_state.borrow().m_editor_menu_window_open;
 
         let mut switch_to_game = false;
         let mut switch_to_editor = false;
@@ -89,7 +97,7 @@ impl EditorUI {
             let mut context_offset = [0.0, 30.0];
             let mut context_size = [viewport[0], (viewport[1] - 30.0).max(0.0)];
 
-            let detail_open = *self.m_state.m_detail_window_open.borrow();
+            let detail_open = self.m_state.borrow().m_detail_window_open;
             if detail_open {
                 let detail_w = context_size[0] * 0.25;
                 let detail_panel = ui_runtime.panel(
@@ -103,7 +111,7 @@ impl EditorUI {
                 context_size[0] -= detail_w;
             }
 
-            let file_open = *self.m_state.m_file_content_window_open.borrow();
+            let file_open = self.m_state.borrow().m_file_content_window_open;
             if file_open {
                 let file_h = context_size[1] * 0.3;
                 let file_panel = ui_runtime.panel(
@@ -117,7 +125,7 @@ impl EditorUI {
                 context_size[1] -= file_h;
             }
 
-            let world_open = *self.m_state.m_asset_window_open.borrow();
+            let world_open = self.m_state.borrow().m_asset_window_open;
             if world_open {
                 let world_w = context_size[0] * 0.3;
                 let world_panel = ui_runtime.panel(
@@ -132,7 +140,7 @@ impl EditorUI {
                 context_size[0] -= world_w;
             }
 
-            let game_open = *self.m_state.m_game_engine_window_open.borrow();
+            let game_open = self.m_state.borrow().m_game_engine_window_open;
             if game_open {
                 let game_panel = ui_runtime.panel(
                     "game_panel",
@@ -154,7 +162,7 @@ impl EditorUI {
             self.show_editor_menu(&mut ui_runtime, &mut menu_open);
         }
 
-        *self.m_state.m_editor_menu_window_open.borrow_mut() = menu_open;
+        self.m_state.borrow_mut().m_editor_menu_window_open = menu_open;
 
         if switch_to_game {
             engine.borrow().set_editor_mode(true);
@@ -213,16 +221,16 @@ impl EditorUI {
             if ui_runtime.begin_menu("Window") {
                 ui_runtime
                     .menu_item_config("World Objects")
-                    .build_with_ref(&mut self.m_state.m_asset_window_open.borrow_mut());
+                    .build_with_ref(&mut self.m_state.borrow_mut().m_asset_window_open);
                 ui_runtime
                     .menu_item_config("Game")
-                    .build_with_ref(&mut self.m_state.m_game_engine_window_open.borrow_mut());
+                    .build_with_ref(&mut self.m_state.borrow_mut().m_game_engine_window_open);
                 ui_runtime
                     .menu_item_config("File Content")
-                    .build_with_ref(&mut self.m_state.m_file_content_window_open.borrow_mut());
+                    .build_with_ref(&mut self.m_state.borrow_mut().m_file_content_window_open);
                 ui_runtime
                     .menu_item_config("Detail")
-                    .build_with_ref(&mut self.m_state.m_detail_window_open.borrow_mut());
+                    .build_with_ref(&mut self.m_state.borrow_mut().m_detail_window_open);
             }
 
             ui_runtime.end_main_menu_bar();
