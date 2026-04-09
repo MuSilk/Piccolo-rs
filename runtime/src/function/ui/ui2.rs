@@ -1,4 +1,5 @@
 use crate::function::render::font_atlas::get_ascii_character_texture_rect;
+use bitflags::bitflags;
 
 #[derive(Clone, Debug, Default)]
 pub struct UiInputSnapshot {
@@ -71,6 +72,22 @@ pub struct UiPanel {
     pub body_pos: [f32; 2],
     pub body_size: [f32; 2],
     pub clip_rect: [f32; 4],
+}
+
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    pub struct UiPanelFlags: u32 {
+        const BODY_BG = 1 << 0;
+        const HEADER_BG = 1 << 1;
+        const BORDER = 1 << 2;
+    }
+}
+
+impl Default for UiPanelFlags {
+    fn default() -> Self {
+        Self::BODY_BG | Self::HEADER_BG | Self::BORDER
+    }
 }
 
 impl UiRuntime {
@@ -157,27 +174,7 @@ impl UiRuntime {
         title: &str,
         pos: [f32; 2],
         size: [f32; 2],
-    ) -> UiPanel {
-        self.panel_with_style(id, title, pos, size, true)
-    }
-
-    pub fn panel_no_bg(
-        &mut self,
-        id: &str,
-        title: &str,
-        pos: [f32; 2],
-        size: [f32; 2],
-    ) -> UiPanel {
-        self.panel_with_style(id, title, pos, size, false)
-    }
-
-    fn panel_with_style(
-        &mut self,
-        id: &str,
-        title: &str,
-        pos: [f32; 2],
-        size: [f32; 2],
-        draw_body_bg: bool,
+        flags: UiPanelFlags,
     ) -> UiPanel {
         let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
         let header_h = 24.0;
@@ -185,17 +182,21 @@ impl UiRuntime {
         let header_bg = [54, 60, 78, 245];
         let border = [110, 120, 150, 200];
 
-        if draw_body_bg {
+        if flags.contains(UiPanelFlags::BODY_BG) {
             push_colored_rect(&mut self.draw_list, pos, size, bg, clip);
         }
-        push_colored_rect(
-            &mut self.draw_list,
-            [pos[0], pos[1]],
-            [size[0], header_h],
-            header_bg,
-            clip,
-        );
-        push_rect_border(&mut self.draw_list, pos, size, 1.0, border, clip);
+        if flags.contains(UiPanelFlags::HEADER_BG) {
+            push_colored_rect(
+                &mut self.draw_list,
+                [pos[0], pos[1]],
+                [size[0], header_h],
+                header_bg,
+                clip,
+            );
+        }
+        if flags.contains(UiPanelFlags::BORDER) {
+            push_rect_border(&mut self.draw_list, pos, size, 1.0, border, clip);
+        }
         push_text_ascii(
             &mut self.draw_list,
             title,

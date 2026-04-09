@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem, window_system::WindowSystem}, ui::{ui2::{UiPanel, UiRuntime}, window_ui::{WindowUI, WindowUIInitInfo}}}};
+use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem, window_system::WindowSystem}, ui::{ui2::{UiPanel, UiPanelFlags, UiRuntime}, window_ui::{WindowUI, WindowUIInitInfo}}}};
 
 use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
@@ -97,6 +97,7 @@ impl EditorUI {
                     "Components Details",
                     [context_offset[0] + context_size[0] - detail_w, context_offset[1]],
                     [detail_w, context_size[1]],
+                    UiPanelFlags::default(),
                 );
                 self.show_editor_detail_window(&mut ui_runtime, &detail_panel);
                 context_size[0] -= detail_w;
@@ -110,6 +111,7 @@ impl EditorUI {
                     "File Content",
                     [context_offset[0], context_offset[1] + context_size[1] - file_h],
                     [context_size[0], file_h],
+                    UiPanelFlags::default(),
                 );
                 self.show_editor_file_context_window(&mut ui_runtime, &file_panel);
                 context_size[1] -= file_h;
@@ -123,6 +125,7 @@ impl EditorUI {
                     "World Object",
                     [context_offset[0], context_offset[1]],
                     [world_w, context_size[1]],
+                    UiPanelFlags::default(),
                 );
                 self.show_editor_world_objects_window(&mut ui_runtime, &world_panel);
                 context_offset[0] += world_w;
@@ -131,11 +134,12 @@ impl EditorUI {
 
             let game_open = *self.m_state.m_game_engine_window_open.borrow();
             if game_open {
-                let game_panel = ui_runtime.panel_no_bg(
+                let game_panel = ui_runtime.panel(
                     "game_panel",
                     "Game Engine",
                     [context_offset[0], context_offset[1]],
                     [context_size[0], context_size[1]],
+                    UiPanelFlags::HEADER_BG | UiPanelFlags::BORDER,
                 );
                 let (to_game, to_editor) = self.show_editor_game_window(
                     &mut ui_runtime,
