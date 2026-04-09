@@ -144,7 +144,7 @@ impl Engine {
     pub fn ui_runtime(&self) -> &RefCell<UiRuntime> {
         &self.m_runtime_context.ui_runtime()
     }
-    pub fn input_system(&self) -> &Rc<RefCell<InputSystem>> {
+    pub fn input_system(&self) -> &RefCell<InputSystem> {
         &self.m_runtime_context.input_system()
     }
     pub fn asset_manager(&self) -> &AssetManager {

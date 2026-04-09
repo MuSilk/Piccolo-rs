@@ -2,12 +2,12 @@ use std::{cell::{RefCell}, path::Path, rc::{Rc, Weak}};
 
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
     m_config_manager: ConfigManager,
     m_asset_manager: AssetManager,
-    m_input_system: Rc<RefCell<InputSystem>>,
+    m_input_system: RefCell<InputSystem>,
     m_world_manager: RefCell<WorldManager>,
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<RefCell<RenderSystem>>,
@@ -25,7 +25,7 @@ impl RuntimeGlobalContext {
         let mut ctx= RuntimeGlobalContext {
             m_config_manager: config_manager,
             m_asset_manager: asset_manager,
-            m_input_system: Rc::new(RefCell::new(InputSystem::default())),
+            m_input_system: RefCell::new(InputSystem::default()),
             m_world_manager: RefCell::new(WorldManager::default()),
             m_window_system: Rc::new(RefCell::new(WindowSystem::default())),
             m_render_system: None,
@@ -44,8 +44,8 @@ impl RuntimeGlobalContext {
             .borrow_mut()
             .initialize(event_loop, WindowCreateInfo::default())
             .unwrap();
-        self.m_input_system
-            .initialize(engine, &self.m_window_system);
+
+        self.register_input_system(engine);
 
         let render_system = RenderSystem::create(&RenderSystemCreateInfo {
             window_system: &self.m_window_system.borrow(),
@@ -61,7 +61,8 @@ impl RuntimeGlobalContext {
         self.m_debugdraw_manager = Some(RefCell::new(debugdraw_manager));
     }
 
-    pub fn input_system(&self) -> &Rc<RefCell<InputSystem>> {
+
+    pub fn input_system(&self) -> &RefCell<InputSystem> {
         &self.m_input_system
     }
 
@@ -99,5 +100,50 @@ impl RuntimeGlobalContext {
             .as_ref().unwrap().borrow_mut()
             .destroy(&self.m_render_system.as_ref().unwrap().borrow());
         self.m_render_system.as_ref().unwrap().borrow().destroy().unwrap();
+    }
+}
+
+impl RuntimeGlobalContext {
+    fn register_input_system(&mut self, engine: Weak<RefCell<Engine>>) {
+        let window_system_rc = self.window_system().clone();
+        let window_system_weak = Rc::downgrade(&window_system_rc);
+
+        let mut window_system_mut = window_system_rc.borrow_mut();
+
+        let eng = engine.clone();
+        window_system_mut.register_on_key_func(move |device_id, event, is_synthetic| {
+            let eng_ref = eng.upgrade().unwrap();
+            let eng_ref = eng_ref.borrow();
+            eng_ref.input_system().borrow_mut()
+                .on_key(&*eng_ref, device_id, event, is_synthetic);
+        });
+
+        let eng = engine.clone();
+        let ws_for_mouse = window_system_weak.clone();
+        window_system_mut.register_on_mouse_motion(move |device_id, position| {
+            let eng_ref = eng.upgrade().unwrap();
+            let eng_ref = eng_ref.borrow();
+            if let Some(ws) = ws_for_mouse.upgrade() {
+                let ws_ref = ws.borrow();
+                eng_ref.input_system().borrow_mut()
+                    .on_mouse_motion(&*ws_ref, device_id, position);
+            }
+        });
+
+        let eng = engine.clone();
+        window_system_mut.register_on_cursor_pos_func(move |device_id, position| {
+            let eng_ref = eng.upgrade().unwrap();
+            let eng_ref = eng_ref.borrow();
+            eng_ref.input_system().borrow_mut()
+                .on_cursor_pos(device_id, position);
+        });
+
+        let eng = engine.clone();
+        window_system_mut.register_on_mouse_button_func(move |device_id, state, button| {
+            let eng_ref = eng.upgrade().unwrap();
+            let eng_ref = eng_ref.borrow();
+            eng_ref.input_system().borrow_mut()
+                .on_mouse_button(device_id, state, button);
+        });
     }
 }
