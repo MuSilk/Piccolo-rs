@@ -132,13 +132,13 @@ impl Engine {
 }
 
 impl Engine {
-    pub fn world_manager(&self) -> &Rc<RefCell<WorldManager>> {
+    pub fn world_manager(&self) -> &RefCell<WorldManager> {
         &self.m_runtime_context.world_manager()
     }
     pub fn window_system(&self) -> &Rc<RefCell<WindowSystem>> {
         &self.m_runtime_context.window_system()
     }
-    pub fn render_system(&self) -> &Rc<RefCell<RenderSystem>> {
+    pub fn render_system(&self) -> &RefCell<RenderSystem> {
         &self.m_runtime_context.render_system()
     }
     pub fn ui_runtime(&self) -> &RefCell<UiRuntime> {
@@ -147,10 +147,10 @@ impl Engine {
     pub fn input_system(&self) -> &Rc<RefCell<InputSystem>> {
         &self.m_runtime_context.input_system()
     }
-    pub fn asset_manager(&self) -> &Rc<RefCell<AssetManager>> {
+    pub fn asset_manager(&self) -> &RefCell<AssetManager> {
         &self.m_runtime_context.asset_manager()
     }
-    pub fn config_manager(&self) -> &Rc<RefCell<ConfigManager>> {
+    pub fn config_manager(&self) -> &RefCell<ConfigManager> {
         &self.m_runtime_context.config_manager()
     }
 }
