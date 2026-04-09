@@ -104,14 +104,11 @@ impl RuntimeGlobalContext {
 }
 
 impl RuntimeGlobalContext {
-    fn register_input_system(&mut self, engine: Weak<RefCell<Engine>>) {
-        let window_system_rc = self.window_system().clone();
-        let window_system_weak = Rc::downgrade(&window_system_rc);
-
-        let mut window_system_mut = window_system_rc.borrow_mut();
+    fn register_input_system(&self, engine: Weak<RefCell<Engine>>) {
+        let mut window_system = self.window_system().borrow_mut();
 
         let eng = engine.clone();
-        window_system_mut.register_on_key_func(move |device_id, event, is_synthetic| {
+        window_system.register_on_key_func(move |device_id, event, is_synthetic| {
             let eng_ref = eng.upgrade().unwrap();
             let eng_ref = eng_ref.borrow();
             eng_ref.input_system().borrow_mut()
@@ -119,19 +116,15 @@ impl RuntimeGlobalContext {
         });
 
         let eng = engine.clone();
-        let ws_for_mouse = window_system_weak.clone();
-        window_system_mut.register_on_mouse_motion(move |device_id, position| {
+        window_system.register_on_mouse_motion(move |device_id, position| {
             let eng_ref = eng.upgrade().unwrap();
             let eng_ref = eng_ref.borrow();
-            if let Some(ws) = ws_for_mouse.upgrade() {
-                let ws_ref = ws.borrow();
-                eng_ref.input_system().borrow_mut()
-                    .on_mouse_motion(&*ws_ref, device_id, position);
-            }
+            eng_ref.input_system().borrow_mut()
+                .on_mouse_motion(&eng_ref.window_system().borrow(), device_id, position);
         });
 
         let eng = engine.clone();
-        window_system_mut.register_on_cursor_pos_func(move |device_id, position| {
+        window_system.register_on_cursor_pos_func(move |device_id, position| {
             let eng_ref = eng.upgrade().unwrap();
             let eng_ref = eng_ref.borrow();
             eng_ref.input_system().borrow_mut()
@@ -139,7 +132,7 @@ impl RuntimeGlobalContext {
         });
 
         let eng = engine.clone();
-        window_system_mut.register_on_mouse_button_func(move |device_id, state, button| {
+        window_system.register_on_mouse_button_func(move |device_id, state, button| {
             let eng_ref = eng.upgrade().unwrap();
             let eng_ref = eng_ref.borrow();
             eng_ref.input_system().borrow_mut()
