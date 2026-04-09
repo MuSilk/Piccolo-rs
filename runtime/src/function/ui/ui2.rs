@@ -65,6 +65,14 @@ pub struct UiButtonResult {
     pub clicked: bool,
 }
 
+pub struct UiPanel {
+    pub pos: [f32; 2],
+    pub size: [f32; 2],
+    pub body_pos: [f32; 2],
+    pub body_size: [f32; 2],
+    pub clip_rect: [f32; 4],
+}
+
 impl UiRuntime {
     pub fn update_input(&mut self, input: UiInputSnapshot) {
         self.prev_input = self.current_input.clone();
@@ -128,7 +136,93 @@ impl UiRuntime {
         pos: [f32; 2],
         size: [f32; 2],
     ) -> UiButtonResult {
+        let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
+        self.button_with_clip(id, text, pos, size, clip)
+    }
 
+    pub fn button_in_clip(
+        &mut self,
+        id: &str,
+        text: &str,
+        pos: [f32; 2],
+        size: [f32; 2],
+        clip_rect: [f32; 4],
+    ) -> UiButtonResult {
+        self.button_with_clip(id, text, pos, size, clip_rect)
+    }
+
+    pub fn panel(
+        &mut self,
+        id: &str,
+        title: &str,
+        pos: [f32; 2],
+        size: [f32; 2],
+    ) -> UiPanel {
+        self.panel_with_style(id, title, pos, size, true)
+    }
+
+    pub fn panel_no_bg(
+        &mut self,
+        id: &str,
+        title: &str,
+        pos: [f32; 2],
+        size: [f32; 2],
+    ) -> UiPanel {
+        self.panel_with_style(id, title, pos, size, false)
+    }
+
+    fn panel_with_style(
+        &mut self,
+        id: &str,
+        title: &str,
+        pos: [f32; 2],
+        size: [f32; 2],
+        draw_body_bg: bool,
+    ) -> UiPanel {
+        let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
+        let header_h = 24.0;
+        let bg = [36, 40, 52, 235];
+        let header_bg = [54, 60, 78, 245];
+        let border = [110, 120, 150, 200];
+
+        if draw_body_bg {
+            push_colored_rect(&mut self.draw_list, pos, size, bg, clip);
+        }
+        push_colored_rect(
+            &mut self.draw_list,
+            [pos[0], pos[1]],
+            [size[0], header_h],
+            header_bg,
+            clip,
+        );
+        push_rect_border(&mut self.draw_list, pos, size, 1.0, border, clip);
+        push_text_ascii(
+            &mut self.draw_list,
+            title,
+            [pos[0] + 8.0, pos[1] + 5.0],
+            [8.0, 14.0],
+            [235, 240, 250, 255],
+            clip,
+        );
+
+        let _ = id;
+        UiPanel {
+            pos,
+            size,
+            body_pos: [pos[0] + 4.0, pos[1] + header_h + 4.0],
+            body_size: [size[0] - 8.0, (size[1] - header_h - 8.0).max(0.0)],
+            clip_rect: [pos[0], pos[1] + header_h, pos[0] + size[0], pos[1] + size[1]],
+        }
+    }
+
+    fn button_with_clip(
+        &mut self,
+        id: &str,
+        text: &str,
+        pos: [f32; 2],
+        size: [f32; 2],
+        clip: [f32; 4],
+    ) -> UiButtonResult {
         let widget_id = hash_widget_id(id);
         let mouse = self.current_input.mouse_pos;
         let hovered = point_in_rect(mouse, pos, size);
@@ -159,7 +253,6 @@ impl UiRuntime {
         } else {
             [50, 100, 200, 255]
         };
-        let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
         push_colored_rect(&mut self.draw_list, pos, size, bg, clip);
         // Keep button label inside bounds and vertically centered.
         let glyph = [8.0, 14.0];
@@ -342,6 +435,39 @@ fn push_colored_rect(
         clip_rect,
         texture_id: 0,
     });
+}
+
+fn push_rect_border(
+    draw_list: &mut UiDrawList,
+    pos: [f32; 2],
+    size: [f32; 2],
+    thickness: f32,
+    color: [u8; 4],
+    clip_rect: [f32; 4],
+) {
+    if thickness <= 0.0 || size[0] <= 0.0 || size[1] <= 0.0 {
+        return;
+    }
+    // top
+    push_colored_rect(draw_list, [pos[0], pos[1]], [size[0], thickness], color, clip_rect);
+    // bottom
+    push_colored_rect(
+        draw_list,
+        [pos[0], pos[1] + size[1] - thickness],
+        [size[0], thickness],
+        color,
+        clip_rect,
+    );
+    // left
+    push_colored_rect(draw_list, [pos[0], pos[1]], [thickness, size[1]], color, clip_rect);
+    // right
+    push_colored_rect(
+        draw_list,
+        [pos[0] + size[0] - thickness, pos[1]],
+        [thickness, size[1]],
+        color,
+        clip_rect,
+    );
 }
 
 fn push_text_ascii(

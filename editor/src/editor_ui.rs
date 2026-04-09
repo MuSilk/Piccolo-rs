@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem, window_system::WindowSystem}, ui::window_ui::{WindowUI, WindowUIInitInfo}}};
+use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem, window_system::WindowSystem}, ui::{ui2::{UiPanel, UiRuntime}, window_ui::{WindowUI, WindowUIInitInfo}}}};
 
 use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
@@ -75,66 +75,121 @@ impl EditorUI {
         window_system: &WindowSystem,
         input_system: &RefCell<InputSystem>,
     ) {
-        
-        // let size = ui.io().display_size;
-        // let main_window = ui
-        //     .window("Main Docking")
-        //     .position([0.0, 0.0], Condition::Always)
-        //     .size([size[0], size[1]], Condition::Always)
-        //     .flags( WindowFlags::MENU_BAR | WindowFlags::NO_TITLE_BAR |
-        //             WindowFlags::NO_COLLAPSE| WindowFlags::NO_RESIZE | 
-        //             WindowFlags::NO_MOVE | WindowFlags::NO_BACKGROUND |
-        //             WindowFlags::NO_MOUSE_INPUTS | WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS
-        //     );
-        // let mut context_offset = [0.0, 18.0];
-        // let mut context_size = [size[0], size[1]-18.0];
-
-        // let components_details_window = ui
-        //     .window("Components Details")
-        //     .position([context_offset[0] + 0.75 * context_size[0] , context_offset[1]], Condition::Always)
-        //     .size([0.25 * context_size[0], context_size[1]], Condition::Always)
-        //     .flags(WindowFlags::NO_COLLAPSE);
-        // context_size[0] -= 0.25 * context_size[0];
-
-        // let file_content_window = ui
-        //     .window("File Content")
-        //     .position([context_offset[0]  , context_offset[1] + 0.7 * context_size[1]], Condition::Always)
-        //     .size([context_size[0], 0.3 * context_size[1]], Condition::Always)
-        //     .flags(WindowFlags::NO_COLLAPSE);
-        // context_size[1] -= 0.3 * context_size[1];
-
-        // let world_object_window = ui
-        //     .window("World Object")
-        //     .position([context_offset[0]  , context_offset[1]], Condition::Always)
-        //     .size([0.3 * context_size[0],  context_size[1]], Condition::Always)
-        //     .flags(WindowFlags::NO_COLLAPSE);
-        // context_offset[0] += 0.3 * context_size[0];
-        // context_size[0] -= 0.3 * context_size[0];
-
-        // let editor_game_window  = ui
-        //     .window("Game Engine")
-        //     .position([context_offset[0]  , context_offset[1]], Condition::Always)
-        //     .size([context_size[0],  context_size[1]], Condition::Always)
-        //     .flags(WindowFlags::NO_COLLAPSE | WindowFlags::NO_BACKGROUND | WindowFlags::MENU_BAR
-        // );
-
-        // main_window.build(||{});
-        //     self.show_editor_detail_window(ui);
-        //     self.show_editor_file_context_window(ui);
-        //     self.show_editor_world_objects_window(ui);
-        self.show_editor_game_window(render_system, window_system, input_system);
+        let engine = self.m_engine.upgrade().unwrap();
+        let is_editor_mode = engine.borrow().is_editor_mode();
         let mut menu_open = *self.m_state.m_editor_menu_window_open.borrow();
-        self.show_editor_menu(&mut menu_open);
+
+        let mut switch_to_game = false;
+        let mut switch_to_editor = false;
+
+        {
+            let t_engine = engine.borrow();
+            let mut ui_runtime = t_engine.m_runtime_context.ui_runtime().borrow_mut();
+            let viewport = ui_runtime.get_viewport();
+            let mut context_offset = [0.0, 30.0];
+            let mut context_size = [viewport[0], (viewport[1] - 30.0).max(0.0)];
+
+            let detail_open = *self.m_state.m_detail_window_open.borrow();
+            if detail_open {
+                let detail_w = context_size[0] * 0.25;
+                let detail_panel = ui_runtime.panel(
+                    "detail_panel",
+                    "Components Details",
+                    [context_offset[0] + context_size[0] - detail_w, context_offset[1]],
+                    [detail_w, context_size[1]],
+                );
+                self.show_editor_detail_window(&mut ui_runtime, &detail_panel);
+                context_size[0] -= detail_w;
+            }
+
+            let file_open = *self.m_state.m_file_content_window_open.borrow();
+            if file_open {
+                let file_h = context_size[1] * 0.3;
+                let file_panel = ui_runtime.panel(
+                    "file_panel",
+                    "File Content",
+                    [context_offset[0], context_offset[1] + context_size[1] - file_h],
+                    [context_size[0], file_h],
+                );
+                self.show_editor_file_context_window(&mut ui_runtime, &file_panel);
+                context_size[1] -= file_h;
+            }
+
+            let world_open = *self.m_state.m_asset_window_open.borrow();
+            if world_open {
+                let world_w = context_size[0] * 0.3;
+                let world_panel = ui_runtime.panel(
+                    "world_panel",
+                    "World Object",
+                    [context_offset[0], context_offset[1]],
+                    [world_w, context_size[1]],
+                );
+                self.show_editor_world_objects_window(&mut ui_runtime, &world_panel);
+                context_offset[0] += world_w;
+                context_size[0] -= world_w;
+            }
+
+            let game_open = *self.m_state.m_game_engine_window_open.borrow();
+            if game_open {
+                let game_panel = ui_runtime.panel_no_bg(
+                    "game_panel",
+                    "Game Engine",
+                    [context_offset[0], context_offset[1]],
+                    [context_size[0], context_size[1]],
+                );
+                let (to_game, to_editor) = self.show_editor_game_window(
+                    &mut ui_runtime,
+                    is_editor_mode,
+                    &game_panel,
+                );
+                switch_to_game = to_game;
+                switch_to_editor = to_editor;
+            }
+
+            // Draw menu last so popup stays on top of dock windows.
+            self.show_editor_menu(&mut ui_runtime, &mut menu_open);
+        }
+
         *self.m_state.m_editor_menu_window_open.borrow_mut() = menu_open;
+
+        if switch_to_game {
+            engine.borrow().set_editor_mode(true);
+            input_system.borrow_mut().reset_game_command();
+            let view_matrix = {
+                let sm = self
+                    .m_scene_manager
+                    .as_ref()
+                    .expect("editor scene_manager not wired");
+                let editor_camera = sm
+                    .borrow()
+                    .get_editor_camera()
+                    .upgrade()
+                    .unwrap();
+                editor_camera.borrow().get_view_matrix()
+            };
+            let render_system = render_system.borrow_mut();
+            let swap_context = render_system.get_swap_context();
+            swap_context.get_logic_swap_data().borrow_mut().m_camera_swap_data = Some(CameraSwapData {
+                m_fov_x: None,
+                m_camera_type: Some(RenderCameraType::Editor),
+                m_view_matrix: Some(view_matrix),
+            });
+            window_system.set_focus_mode(false);
+        }
+
+        if switch_to_editor {
+            engine.borrow().set_editor_mode(false);
+            if let Some(im) = self.m_input_manager.as_ref() {
+                im.borrow_mut().reset_editor_command();
+            }
+            window_system.set_focus_mode(true);
+        }
     }
 
-    fn show_editor_menu(&mut self, p_open: &mut bool) {
+    fn show_editor_menu(&mut self, ui_runtime: &mut UiRuntime, p_open: &mut bool) {
         if !*p_open {
             return;
         }
-        let engine = self.m_engine.upgrade().unwrap();
-        let t_engine = engine.borrow();
-        let mut ui_runtime = t_engine.m_runtime_context.ui_runtime().borrow_mut();
         if ui_runtime.begin_main_menu_bar() {
             if ui_runtime.begin_menu("Menu") {
                 if ui_runtime.menu_item("Open") {
@@ -170,84 +225,62 @@ impl EditorUI {
         }
     }
 
-    fn show_editor_world_objects_window(&mut self) {
-        // if CollapsingHeader::new("World Objects").build(ui) {
-
-        // }
+    fn show_editor_world_objects_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+        ui_runtime.push_text_ascii(
+            "World objects list (todo)",
+            [panel.body_pos[0] + 6.0, panel.body_pos[1] + 6.0],
+            [8.0, 14.0],
+            [220, 225, 235, 255],
+            panel.clip_rect,
+        );
     }
 
     fn show_editor_game_window(
         &mut self, 
-        render_system: &RefCell<RenderSystem>,
-        window_system: &WindowSystem, 
-        input_system: &RefCell<InputSystem>,
-    ) {
-        let engine = self.m_engine.upgrade().unwrap();
-        let is_editor_mode = engine.borrow().is_editor_mode();
-
+        ui_runtime: &mut UiRuntime,
+        is_editor_mode: bool,
+        panel: &UiPanel,
+    ) -> (bool, bool) {
+        let btn_pos = [panel.body_pos[0] + 8.0, panel.body_pos[1] + 8.0];
+        let btn_size = [180.0, 38.0];
         if is_editor_mode {
-            let clicked = {
-                let t_engine = engine.borrow();
-                let mut ui_runtime = t_engine.m_runtime_context.ui_runtime().borrow_mut();
-                let resp = ui_runtime.button(
-                    "EditorModeBtn", 
-                    "Editor Mode", 
-                    [40.0, 40.0], 
-                    [180.0, 48.0]
-                );
-                resp.clicked
-            };
-            if clicked {
-                engine.borrow().set_editor_mode(false);
-                if let Some(im) = self.m_input_manager.as_ref() {
-                    im.borrow_mut().reset_editor_command();
-                }
-                window_system.set_focus_mode(true);
-            }
+            let resp = ui_runtime.button_in_clip(
+                "EditorModeBtn",
+                "Editor Mode",
+                btn_pos,
+                btn_size,
+                panel.clip_rect,
+            );
+            (false, resp.clicked)
         } else {
-            let clicked = {
-                let t_engine = engine.borrow();
-                let mut ui_runtime = t_engine.m_runtime_context.ui_runtime().borrow_mut();
-                let resp = ui_runtime.button(
-                    "GameModeBtn", 
-                    "Game Mode", 
-                    [40.0, 40.0], 
-                    [180.0, 48.0]
-                );
-                resp.clicked
-            };
-            if clicked {
-                engine.borrow().set_editor_mode(true);
-                input_system.borrow_mut().reset_game_command();
-                let view_matrix = {
-                    let sm = self
-                        .m_scene_manager
-                        .as_ref()
-                        .expect("editor scene_manager not wired");
-                    let editor_camera = sm
-                        .borrow()
-                        .get_editor_camera()
-                        .upgrade()
-                        .unwrap();
-                    editor_camera.borrow().get_view_matrix()
-                };
-                let render_system = render_system.borrow_mut();
-                let swap_context = render_system.get_swap_context();
-                swap_context.get_logic_swap_data().borrow_mut().m_camera_swap_data = Some(CameraSwapData{
-                    m_fov_x: None,
-                    m_camera_type: Some(RenderCameraType::Editor),
-                    m_view_matrix: Some(view_matrix)
-                });
-                window_system.set_focus_mode(false);
-            }
+            let resp = ui_runtime.button_in_clip(
+                "GameModeBtn",
+                "Game Mode",
+                btn_pos,
+                btn_size,
+                panel.clip_rect,
+            );
+            (resp.clicked, false)
         }
     }
 
-    fn show_editor_file_context_window(&mut self) {
-
+    fn show_editor_file_context_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+        ui_runtime.push_text_ascii(
+            "File content window (todo)",
+            [panel.body_pos[0] + 6.0, panel.body_pos[1] + 6.0],
+            [8.0, 14.0],
+            [220, 225, 235, 255],
+            panel.clip_rect,
+        );
     }
 
-    fn show_editor_detail_window(&mut self) {
-        
+    fn show_editor_detail_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+        ui_runtime.push_text_ascii(
+            "Component details (todo)",
+            [panel.body_pos[0] + 6.0, panel.body_pos[1] + 6.0],
+            [8.0, 14.0],
+            [220, 225, 235, 255],
+            panel.clip_rect,
+        );
     }
 }
