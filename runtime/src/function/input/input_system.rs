@@ -56,7 +56,7 @@ impl InputSystem {
         is_synthetic: bool
     ) {
         if !engine.is_editor_mode() {
-            let window_system = engine.m_runtime_context.window_system().borrow();
+            let window_system = engine.window_system().borrow();
             self.on_key_in_game_mode(&window_system, device_id, event, is_synthetic);
         }
     }

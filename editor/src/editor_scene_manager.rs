@@ -22,7 +22,7 @@ impl EditorSceneManager {
     }
 
     pub fn get_guid_of_picked_mesh(&self,engine: &Engine, picked_uv: &Vector2) -> u32 {
-        let render_system = engine.m_runtime_context.render_system().borrow();
+        let render_system = engine.render_system().borrow();
         render_system.get_guid_of_picked_mesh(picked_uv)
     }
 }

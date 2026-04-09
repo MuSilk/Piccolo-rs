@@ -75,7 +75,7 @@ impl EditorInputManager {
         }
         let angular_velocity = 180.0 / (self.m_engine_window_size.x).max(self.m_engine_window_size.y);
         if self.m_mouse_x >= 0.0 && self.m_mouse_y >=0.0 {
-            let window_system = engine.m_runtime_context.window_system().borrow();
+            let window_system = engine.window_system().borrow();
             if window_system.is_mouse_button_down(MouseButton::Right) {
                 let camera = scene_manager.get_editor_camera();
                 let camera = camera.upgrade().unwrap();
@@ -108,7 +108,7 @@ impl EditorInputManager {
         if !self.is_cursor_in_rect(&self.m_engine_window_pos, &self.m_engine_window_size){
             return;
         }
-        let window_system = engine.m_runtime_context.window_system().borrow();
+        let window_system = engine.window_system().borrow();
         if window_system.is_mouse_button_down(MouseButton::Right) {
             match delta {
                 MouseScrollDelta::LineDelta(_x, y) => {
@@ -346,7 +346,6 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
         let scene_weak = Rc::downgrade(scene_manager);
         let t_engine = engine.borrow();
         let mut window_system = t_engine
-            .m_runtime_context
             .window_system()
             .borrow_mut();
         let this = Rc::downgrade(&self);

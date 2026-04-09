@@ -143,9 +143,9 @@ impl SceneTrait for Scene {
         update(self, engine, delta_time);
         render_ui(self, engine);
 
-        let input_system = engine.m_runtime_context.input_system();
+        let input_system = engine.input_system();
         let input_system = input_system.borrow();
-        let render_system = engine.m_runtime_context.render_system();
+        let render_system = engine.render_system();
         let render_system = render_system.borrow();
 
         self.scene.query_mut::<CameraComponent>().for_each(|mut camera| {
@@ -183,7 +183,7 @@ fn setup(scene: &mut Scene, engine: &Engine) {
 
 fn process_input(scene: &mut Scene, engine: &Engine) {
     let input_system = 
-        engine.m_runtime_context.input_system().borrow();
+        engine.input_system().borrow();
     let command = input_system.get_game_command();
 
     let wanted = if command.contains(GameCommand::forward) {
@@ -233,7 +233,7 @@ fn update(scene: &mut Scene, engine: &Engine, delta_time: f32) {
 }
 
 fn render_ui(scene: &mut Scene, engine: &Engine) {
-    let mut ui_runtime = engine.m_runtime_context.ui_runtime().borrow_mut();
+    let mut ui_runtime = engine.ui_runtime().borrow_mut();
     let viewport = ui_runtime.get_viewport();
     let resp = ui_runtime.button(
         "demo_btn", 
@@ -393,8 +393,8 @@ fn spawn_camera(scene: &mut EngineScene) {
 fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
     let object = scene.spawn();
     let mut ground = Box::new(MeshComponent::default());
-    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
-    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let asset_manager = engine.asset_manager().borrow();
+    let config_manager = engine.config_manager().borrow();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,
@@ -423,8 +423,8 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let object = scene.spawn();
     let head = Box::new(SnakeHead::default());
     let mut mesh = Box::new(MeshComponent::default());
-    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
-    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let asset_manager = engine.asset_manager().borrow();
+    let config_manager = engine.config_manager().borrow();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,
@@ -458,8 +458,8 @@ fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: us
         pool_index,
     });
     let mut mesh = Box::new(MeshComponent::default());
-    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
-    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let asset_manager = engine.asset_manager().borrow();
+    let config_manager = engine.config_manager().borrow();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,
@@ -490,8 +490,8 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let object = scene.spawn();
     let food = Box::new(Food::default());
     let mut mesh = Box::new(MeshComponent::default());
-    let asset_manager = engine.m_runtime_context.asset_manager().borrow();
-    let config_manager = engine.m_runtime_context.config_manager().borrow();
+    let asset_manager = engine.asset_manager().borrow();
+    let config_manager = engine.config_manager().borrow();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,

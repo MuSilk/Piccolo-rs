@@ -29,7 +29,7 @@ impl app::System for Editor {
 
         let t_engine_runtime = engine_runtime.borrow();
         let render_system = 
-            t_engine_runtime.m_runtime_context.render_system();
+            t_engine_runtime.render_system();
 
         let info = EditorGlobalContextCreateInfo {
             engine_runtime: engine_runtime,

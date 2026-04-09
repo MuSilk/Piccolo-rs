@@ -1,7 +1,7 @@
 use std::{cell::RefCell, env, rc::Rc};
 
 use anyhow::anyhow;
-use winit::{application::ApplicationHandler, event::{DeviceEvent, DeviceId, Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
+use winit::{application::ApplicationHandler, event::{DeviceEvent, DeviceId, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
 
 use crate::{engine::Engine, function::framework::{scene::scene::SceneTrait}};
 
@@ -42,7 +42,6 @@ impl App {
     pub fn add_scene<T: SceneTrait + 'static>(&mut self, scene: T) {
         let engine = self.engine.borrow();
         let mut world_manager = engine
-            .m_runtime_context
             .world_manager()
             .borrow_mut();
         world_manager.add_scene(scene);
@@ -51,7 +50,6 @@ impl App {
     pub fn set_default_scene(&mut self, scene_url: &str) {
         let engine = self.engine.borrow();
         let mut world_manager = engine
-            .m_runtime_context
             .world_manager()
             .borrow_mut();
         world_manager.set_default_scene(scene_url);
@@ -66,13 +64,12 @@ impl ApplicationHandler for App {
         self.systems.iter_mut().for_each(|s| s.initialize(&self.engine));
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::RedrawRequested => {
                 let minimized = {
                     let engine = self.engine.borrow();
                     let window_system = engine
-                        .m_runtime_context
                         .window_system()
                         .borrow();
                     window_system.is_minimized()
@@ -88,7 +85,6 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => {
                 let engine = self.engine.borrow();
                 let mut window_system = engine
-                    .m_runtime_context
                     .window_system()
                     .borrow_mut();
                 window_system.on_window_size(size);
@@ -100,7 +96,6 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
                 let engine = self.engine.borrow();
                 let window_system = engine
-                    .m_runtime_context
                     .window_system()
                     .borrow();
                 window_system.on_key(device_id, &event, is_synthetic);
@@ -108,7 +103,6 @@ impl ApplicationHandler for App {
             WindowEvent::MouseInput { device_id, state, button } => {
                 let engine = self.engine.borrow();
                 let mut window_system = engine
-                    .m_runtime_context
                     .window_system()
                     .borrow_mut();
                 window_system.on_mouse_button(device_id, state, button);
@@ -116,7 +110,6 @@ impl ApplicationHandler for App {
             WindowEvent::CursorMoved { device_id, position } => {
                 let engine = self.engine.borrow();
                 let window_system = engine
-                    .m_runtime_context
                     .window_system()
                     .borrow();
                 window_system.on_cursor_pos(device_id, position);
@@ -124,7 +117,6 @@ impl ApplicationHandler for App {
             WindowEvent::MouseWheel { device_id, delta, phase } => {
                 let engine = self.engine.borrow();
                 let window_system = engine
-                    .m_runtime_context
                     .window_system()
                     .borrow();
                 window_system.on_mouse_wheel(device_id, delta, phase);
@@ -138,7 +130,6 @@ impl ApplicationHandler for App {
             DeviceEvent::MouseMotion  { delta } => {
                 let engine = self.engine.borrow();
                 let window_system = engine
-                    .m_runtime_context
                     .window_system()
                     .borrow();
                 window_system.on_mouse_motion(device_id, delta);
@@ -150,7 +141,6 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let engine = self.engine.borrow();
         let window_system = engine
-            .m_runtime_context
             .window_system()
             .borrow();
         window_system.request_redraw();

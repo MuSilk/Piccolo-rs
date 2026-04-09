@@ -24,8 +24,8 @@ impl World {
             }),
         };
         
-        let asset_manager = engine.m_runtime_context.asset_manager().borrow();
-        let config_manager = engine.m_runtime_context.config_manager().borrow();
+        let asset_manager = engine.asset_manager().borrow();
+        let config_manager = engine.config_manager().borrow();
         let block: BlockRes = asset_manager.load_asset(&config_manager, "asset/minecraft/block.json").unwrap();
         let dirt_block = Rc::new(BLOCK_DIRT);
         let grass_block = Rc::new(BLOCK_GRASS);
@@ -98,8 +98,8 @@ impl World {
                     }
                 }
 
-                let asset_manager = engine.m_runtime_context.asset_manager().borrow();
-                let config_manager = engine.m_runtime_context.config_manager().borrow();
+                let asset_manager = engine.asset_manager().borrow();
+                let config_manager = engine.config_manager().borrow();
                 
                 let mut mesh_component = Box::new(MeshComponent::default());
                 mesh_component.post_load_resource(&asset_manager, &config_manager, &block.m_mesh_res);

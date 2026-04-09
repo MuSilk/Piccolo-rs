@@ -84,7 +84,7 @@ impl EditorUI {
 
         {
             let t_engine = engine.borrow();
-            let mut ui_runtime = t_engine.m_runtime_context.ui_runtime().borrow_mut();
+            let mut ui_runtime = t_engine.ui_runtime().borrow_mut();
             let viewport = ui_runtime.get_viewport();
             let mut context_offset = [0.0, 30.0];
             let mut context_size = [viewport[0], (viewport[1] - 30.0).max(0.0)];
@@ -171,7 +171,7 @@ impl EditorUI {
                     .unwrap();
                 editor_camera.borrow().get_view_matrix()
             };
-            let render_system = render_system.borrow_mut();
+            let render_system = render_system.borrow();
             let swap_context = render_system.get_swap_context();
             swap_context.get_logic_swap_data().borrow_mut().m_camera_swap_data = Some(CameraSwapData {
                 m_fov_x: None,

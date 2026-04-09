@@ -1,14 +1,14 @@
-use std::{cell::RefCell, path::Path, rc::{Weak}, time::Instant};
+use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, time::Instant};
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{function::global::global_context::RuntimeGlobalContext};
+use crate::{function::{framework::world::world_manager::WorldManager, global::global_context::RuntimeGlobalContext, input::input_system::InputSystem, render::{render_system::RenderSystem, window_system::WindowSystem}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 const S_FPS_ALPHA: f32 = 1.0 / 100.0;
 
 pub struct Engine {
-    pub m_runtime_context: RuntimeGlobalContext,
+    m_runtime_context: RuntimeGlobalContext,
     m_is_quit: bool,
     m_state: RefCell<EngineState>,
 }
@@ -128,6 +128,30 @@ impl Engine {
     }
     fn calculate_fps(&self, delta_time: f32) {
         self.m_state.borrow_mut().calculate_fps(delta_time);
+    }
+}
+
+impl Engine {
+    pub fn world_manager(&self) -> &Rc<RefCell<WorldManager>> {
+        &self.m_runtime_context.world_manager()
+    }
+    pub fn window_system(&self) -> &Rc<RefCell<WindowSystem>> {
+        &self.m_runtime_context.window_system()
+    }
+    pub fn render_system(&self) -> &Rc<RefCell<RenderSystem>> {
+        &self.m_runtime_context.render_system()
+    }
+    pub fn ui_runtime(&self) -> &RefCell<UiRuntime> {
+        &self.m_runtime_context.ui_runtime()
+    }
+    pub fn input_system(&self) -> &Rc<RefCell<InputSystem>> {
+        &self.m_runtime_context.input_system()
+    }
+    pub fn asset_manager(&self) -> &Rc<RefCell<AssetManager>> {
+        &self.m_runtime_context.asset_manager()
+    }
+    pub fn config_manager(&self) -> &Rc<RefCell<ConfigManager>> {
+        &self.m_runtime_context.config_manager()
     }
 }
 
