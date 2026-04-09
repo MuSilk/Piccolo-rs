@@ -393,8 +393,8 @@ fn spawn_camera(scene: &mut EngineScene) {
 fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
     let object = scene.spawn();
     let mut ground = Box::new(MeshComponent::default());
-    let asset_manager = engine.asset_manager().borrow();
-    let config_manager = engine.config_manager().borrow();
+    let asset_manager = engine.asset_manager();
+    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,
@@ -423,8 +423,8 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let object = scene.spawn();
     let head = Box::new(SnakeHead::default());
     let mut mesh = Box::new(MeshComponent::default());
-    let asset_manager = engine.asset_manager().borrow();
-    let config_manager = engine.config_manager().borrow();
+    let asset_manager = engine.asset_manager();
+    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,
@@ -458,8 +458,8 @@ fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: us
         pool_index,
     });
     let mut mesh = Box::new(MeshComponent::default());
-    let asset_manager = engine.asset_manager().borrow();
-    let config_manager = engine.config_manager().borrow();
+    let asset_manager = engine.asset_manager();
+    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,
@@ -490,8 +490,8 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let object = scene.spawn();
     let food = Box::new(Food::default());
     let mut mesh = Box::new(MeshComponent::default());
-    let asset_manager = engine.asset_manager().borrow();
-    let config_manager = engine.config_manager().borrow();
+    let asset_manager = engine.asset_manager();
+    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
             &config_manager,

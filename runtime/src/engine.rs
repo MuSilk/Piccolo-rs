@@ -95,8 +95,8 @@ impl Engine {
             &self.m_runtime_context.window_system().borrow(),
             &self.m_runtime_context.input_system(),
             &self.m_runtime_context.ui_runtime(),
-            &self.m_runtime_context.asset_manager().borrow(),
-            &self.m_runtime_context.config_manager().borrow(),
+            &self.m_runtime_context.asset_manager(),
+            &self.m_runtime_context.config_manager(),
             delta_time
         )?;
         Ok(())
@@ -115,8 +115,8 @@ impl Engine {
 
         self.m_runtime_context.world_manager().borrow_mut().tick(
             &self,
-            &self.m_runtime_context.asset_manager().borrow(),
-            &self.m_runtime_context.config_manager().borrow(),
+            &self.m_runtime_context.asset_manager(),
+            &self.m_runtime_context.config_manager(),
             delta_time
         );
         self.m_runtime_context.input_system().borrow_mut().tick(
@@ -147,10 +147,10 @@ impl Engine {
     pub fn input_system(&self) -> &Rc<RefCell<InputSystem>> {
         &self.m_runtime_context.input_system()
     }
-    pub fn asset_manager(&self) -> &RefCell<AssetManager> {
+    pub fn asset_manager(&self) -> &AssetManager {
         &self.m_runtime_context.asset_manager()
     }
-    pub fn config_manager(&self) -> &RefCell<ConfigManager> {
+    pub fn config_manager(&self) -> &ConfigManager {
         &self.m_runtime_context.config_manager()
     }
 }

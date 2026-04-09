@@ -32,8 +32,8 @@ impl SceneTrait for Scene {
         transform.post_load_resource(trans);
         let controller = Box::new(CharacterController::new(world));
         let mut motor = Box::new(MotorComponent::new(controller));
-        let asset_manager = engine.asset_manager().borrow();
-        let config_manager = engine.config_manager().borrow();
+        let asset_manager = engine.asset_manager();
+        let config_manager = engine.config_manager();
         let motor_res: MotorComponentRes = asset_manager
             .load_asset(
                 &config_manager,

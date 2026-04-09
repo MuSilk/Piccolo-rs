@@ -5,8 +5,8 @@ use winit::event_loop::ActiveEventLoop;
 use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem, InputSystemExt}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
-    m_config_manager: RefCell<ConfigManager>,
-    m_asset_manager: RefCell<AssetManager>,
+    m_config_manager: ConfigManager,
+    m_asset_manager: AssetManager,
     m_input_system: Rc<RefCell<InputSystem>>,
     m_world_manager: RefCell<WorldManager>,
     m_window_system: Rc<RefCell<WindowSystem>>,
@@ -18,11 +18,11 @@ pub struct RuntimeGlobalContext {
 impl RuntimeGlobalContext {
     pub fn new(config_file_path: &Path) -> Self {
         let config_manager = 
-            RefCell::new(ConfigManager::default());
+            ConfigManager::default();
         let asset_manager = 
-            RefCell::new(AssetManager::new());
+            AssetManager::new();
 
-        let ctx= RuntimeGlobalContext {
+        let mut ctx= RuntimeGlobalContext {
             m_config_manager: config_manager,
             m_asset_manager: asset_manager,
             m_input_system: Rc::new(RefCell::new(InputSystem::default())),
@@ -32,9 +32,9 @@ impl RuntimeGlobalContext {
             m_debugdraw_manager: None,
             m_ui_runtime: RefCell::new(UiRuntime::default()),
         };
-        ctx.m_config_manager.borrow_mut().initialize(config_file_path);
+        ctx.m_config_manager.initialize(config_file_path);
         ctx.m_world_manager.borrow_mut().initialize(
-            &ctx.m_config_manager.borrow()
+            &ctx.m_config_manager
         );
         ctx
     }
@@ -49,12 +49,12 @@ impl RuntimeGlobalContext {
 
         let render_system = RenderSystem::create(&RenderSystemCreateInfo {
             window_system: &self.m_window_system.borrow(),
-            asset_manager: &self.m_asset_manager.borrow(),
-            config_manager: &self.m_config_manager.borrow(),
+            asset_manager: &self.m_asset_manager,
+            config_manager: &self.m_config_manager,
         });
         let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
             rhi: render_system.get_rhi(),
-            font_path: self.m_config_manager.borrow().get_editor_font_path(),
+            font_path: self.m_config_manager.get_editor_font_path(),
         })
         .unwrap();
         self.m_render_system = Some(RefCell::new(render_system));
@@ -77,11 +77,11 @@ impl RuntimeGlobalContext {
         self.m_debugdraw_manager.as_ref().unwrap()
     }
 
-    pub fn config_manager(&self) -> &RefCell<ConfigManager> {
+    pub fn config_manager(&self) -> &ConfigManager {
         &self.m_config_manager
     }
 
-    pub fn asset_manager(&self) -> &RefCell<AssetManager> {
+    pub fn asset_manager(&self) -> &AssetManager {
         &self.m_asset_manager
     }
 
