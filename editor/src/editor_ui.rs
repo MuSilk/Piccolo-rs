@@ -52,7 +52,7 @@ impl WindowUI for EditorUI  {
     }
 
     fn pre_render(
-        &mut self,
+        &self,
     ) {
         let engine = self.m_engine.upgrade().unwrap();
         let engine = engine.borrow();
@@ -82,7 +82,7 @@ impl EditorUI {
     }
 
     fn show_editor_ui(
-        &mut self, 
+        &self, 
         window_system: &WindowSystem,
         input_system: &mut InputSystem,
     ) {
@@ -202,7 +202,7 @@ impl EditorUI {
         }
     }
 
-    fn show_editor_menu(&mut self, ui_runtime: &mut UiRuntime, p_open: &mut bool) {
+    fn show_editor_menu(&self, ui_runtime: &mut UiRuntime, p_open: &mut bool) {
         if !*p_open {
             return;
         }
@@ -241,7 +241,7 @@ impl EditorUI {
         }
     }
 
-    fn show_editor_world_objects_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+    fn show_editor_world_objects_window(&self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
         ui_runtime.push_text_ascii(
             "World objects list (todo)",
             [panel.body_pos[0] + 6.0, panel.body_pos[1] + 6.0],
@@ -252,7 +252,7 @@ impl EditorUI {
     }
 
     fn show_editor_game_window(
-        &mut self, 
+        &self, 
         ui_runtime: &mut UiRuntime,
         is_editor_mode: bool,
         panel: &UiPanel,
@@ -280,11 +280,11 @@ impl EditorUI {
         }
     }
 
-    fn show_render_graph_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+    fn show_render_graph_window(&self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
         self.m_render_graph_ui.borrow_mut().draw(ui_runtime, panel);
     }
 
-    fn show_editor_detail_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+    fn show_editor_detail_window(&self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
         ui_runtime.push_text_ascii(
             "Component details (todo)",
             [panel.body_pos[0] + 6.0, panel.body_pos[1] + 6.0],

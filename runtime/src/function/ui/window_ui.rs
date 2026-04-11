@@ -8,6 +8,6 @@ pub struct WindowUIInitInfo<'a> {
 
 pub trait WindowUI {
     fn initialize(&mut self, init_info: WindowUIInitInfo);
-    fn pre_render(&mut self);
+    fn pre_render(&self);
 }
 

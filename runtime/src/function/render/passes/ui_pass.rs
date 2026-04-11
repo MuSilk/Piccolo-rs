@@ -46,7 +46,7 @@ impl UIPass {
         ui_runtime: &RefCell<UiRuntime>
     ) {
         if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
-            window_ui.borrow_mut().pre_render();
+            window_ui.borrow().pre_render();
         }
 
         let color = [1.0;4];
@@ -66,8 +66,8 @@ impl UIPass {
         Ok(())
     }
 
-    pub fn initialize_ui_render_backend(&mut self, _window_ui: &Rc<RefCell<dyn WindowUI>>) {
-        self.m_window_ui = Some(Rc::downgrade(_window_ui));
+    pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
+        self.m_window_ui = Some(Rc::downgrade(window_ui));
     }
 
     pub fn reload_font_texture(
@@ -215,10 +215,6 @@ impl UIPass {
 
         Ok(())
     }
-}
-
-fn use_ui2_backend() -> bool {
-    true
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
