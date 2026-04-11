@@ -6,7 +6,7 @@ use crate::{core::math::vector2::Vector2, function::{render::{interface::vulkan:
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
-    pub render_resource : &'a Rc<RefCell<RenderResource>>,
+    pub render_resource : &'a RenderResource,
     pub enable_fxaa : bool,
     pub config_manager : &'a ConfigManager,
 }
@@ -25,7 +25,7 @@ impl RenderPipeline {
         let mut m_main_camera_pass = MainCameraPass::default();
         let mut m_pick_pass = PickPass::default();
 
-        let global_render_resource = &create_info.render_resource.borrow().m_global_render_resource;
+        let global_render_resource = &create_info.render_resource.m_global_render_resource;
 
         m_directional_light_pass.initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,

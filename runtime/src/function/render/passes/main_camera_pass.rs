@@ -36,17 +36,17 @@ enum RenderPipelineType {
 
 #[derive(Default)]
 pub struct MainCameraPass{
-    pub m_directional_light_shadow_color_image_view: vk::ImageView, //todo: change to rc/weak
+    pub m_directional_light_shadow_color_image_view: vk::ImageView, 
     pub m_point_light_shadow_color_image_view: vk::ImageView,
     pub m_render_pass: RenderPass,
     m_enable_fxaa: bool,
-    pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
+    m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
     m_swapchain_framebuffers: Vec<vk::Framebuffer>,
 
     m_tone_mapping_pass: ToneMappingPass,
     m_color_grading_pass: ColorGradingPass,
     m_fxaa_pass: FXAAPass,
-    pub m_ui_pass: UIPass,
+    m_ui_pass: UIPass,
     m_combine_ui_pass: CombineUIPass,
 }
 

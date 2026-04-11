@@ -16,7 +16,7 @@ pub struct RenderSystem{
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RefCell<RenderScene>,
-    m_render_resource: Rc<RefCell<RenderResource>>,
+    m_render_resource: RefCell<RenderResource>,
     m_render_pipeline: RefCell<RenderPipeline>,
 
     m_debugdraw_manager: RefCell<DebugDrawManager>,
@@ -67,15 +67,14 @@ impl RenderSystem {
 
         let mut render_resource = RenderResource::default();
         render_resource.upload_global_render_resource(asset_manager, config_manager, &vulkan_rhi.borrow(), &level_resource_desc);
-        let render_resource = Rc::new(RefCell::new(render_resource));
+        let render_resource = RefCell::new(render_resource);
 
-        let create_info = RenderPipelineCreateInfo {
+        let render_pipeline = RenderPipeline::create(&RenderPipelineCreateInfo {
             rhi : &vulkan_rhi,
-            render_resource: &render_resource,
+            render_resource: &render_resource.borrow(),
             enable_fxaa: global_rendering_res.enable_fxaa,
             config_manager: config_manager,
-        };
-        let render_pipeline = RenderPipeline::create(&create_info).unwrap();
+        }).unwrap();
 
         render_resource.borrow_mut().m_mesh_descriptor_set_layout = 
             render_pipeline.get_descriptor_set_layouts(LayoutType::PerMesh);

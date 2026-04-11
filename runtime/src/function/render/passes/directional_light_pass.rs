@@ -16,7 +16,8 @@ pub struct DirectionalLightShadowPassInitInfo<'a> {
 pub struct DirectionalLightShadowPass{
     pub m_render_pass: RenderPass,
     m_per_mesh_layout: vk::DescriptorSetLayout,
-    m_mesh_directional_light_shadow_perframe_storage_buffer_object: MeshDirectionalLightShadowPerframeStorageBufferObject,
+    m_mesh_directional_light_shadow_perframe_storage_buffer_object 
+        :MeshDirectionalLightShadowPerframeStorageBufferObject,
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC)]
