@@ -1214,7 +1214,6 @@ pub enum ImageType{
 pub enum RenderPipelineType{
     ForwardPipeline,
     DeferredPipeline,
-    PipelineTypeCount,
 }
 
 #[derive(Default)]

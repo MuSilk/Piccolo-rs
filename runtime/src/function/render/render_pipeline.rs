@@ -72,11 +72,12 @@ impl RenderPipeline {
         })
     }
 
-    pub fn forward_render(
+    pub fn render(
         &self, 
         debugdraw_manager: &RefCell<DebugDrawManager>,
         ui_runtime: &RefCell<UiRuntime>,
         render_resource: &mut RenderResource,
+        forward_draw: bool
     ) -> Result<()> {
         let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
         render_resource.reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
@@ -97,9 +98,10 @@ impl RenderPipeline {
             self.m_base.borrow().m_directional_light_pass.draw();
             self.m_base.borrow().m_point_light_pass.draw();
 
-            self.m_base.borrow().m_main_camera_pass.draw_forward(
+            self.m_base.borrow().m_main_camera_pass.draw(
                 ui_runtime,
-                rhi.get_current_swapchain_image_index()
+                rhi.get_current_swapchain_image_index(),
+                forward_draw
             )?;
 
             debugdraw_manager.borrow_mut().draw(rhi.get_current_swapchain_image_index())?;
@@ -108,46 +110,6 @@ impl RenderPipeline {
             let mut rhi = rhi.borrow_mut();
             rhi.submit_rendering(&|rhi: &VulkanRHI|
                 self.pass_update_after_recreate_swapchain(&debugdraw_manager, &rhi))?;
-        }
-        Ok(())
-    }
-
-    pub fn deferred_render(
-        &self, 
-        debugdraw_manager: &RefCell<DebugDrawManager>,
-        ui_runtime: &RefCell<UiRuntime>,
-        render_resource: &mut RenderResource
-    ) -> Result<()> {
-        let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
-        render_resource.reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
-        {
-            let mut rhi = rhi.borrow_mut();
-            rhi.wait_for_fence()?;
-            rhi.reset_command_pool()?;
-            if rhi.prepare_before_pass(
-                &|rhi: &VulkanRHI|
-                    self.pass_update_after_recreate_swapchain(debugdraw_manager, &rhi)
-            )? {
-                return Ok(());
-            }
-        }
-        {
-            let rhi = rhi.borrow();
-
-            self.m_base.borrow().m_directional_light_pass.draw();
-            self.m_base.borrow().m_point_light_pass.draw();
-
-            self.m_base.borrow().m_main_camera_pass.draw(
-                ui_runtime,
-                rhi.get_current_swapchain_image_index()
-            )?;
-
-            debugdraw_manager.borrow_mut().draw(rhi.get_current_swapchain_image_index())?;
-        }
-        {
-            let mut rhi = rhi.borrow_mut();
-            rhi.submit_rendering(&|rhi: &VulkanRHI|
-                self.pass_update_after_recreate_swapchain(debugdraw_manager, &rhi))?;
         }
         Ok(())
     }

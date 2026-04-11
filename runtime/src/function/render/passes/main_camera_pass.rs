@@ -157,7 +157,8 @@ impl MainCameraPass {
     pub fn draw(
         &self, 
         ui_runtime: &RefCell<UiRuntime>,
-        current_swapchain_image_index: usize
+        current_swapchain_image_index: usize,
+        forward_draw: bool
     ) -> Result<()> {
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
@@ -187,109 +188,28 @@ impl MainCameraPass {
 
         rhi.cmd_begin_render_pass(command_buffer, &info, vk::SubpassContents::INLINE);
 
-        rhi.push_event(command_buffer, "BasePass\0", [1.0;4]);
-        self.draw_mesh_gbuffer()?;
-        rhi.pop_event(command_buffer);
+        if forward_draw {
+            rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        rhi.push_event(command_buffer, "DeferredLighting\0", [1.0;4]);
-        self.draw_deferred_lighting()?;
-        rhi.pop_event(command_buffer);
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        self.m_tone_mapping_pass.draw();
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        self.m_color_grading_pass.draw();
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        if self.m_enable_fxaa {
-            self.m_fxaa_pass.draw();
+            rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+    
+            rhi.push_event(command_buffer, "Forward Lighting\0", [1.0;4]);
+            self.draw_mesh_lighting()?;
+            self.draw_skybox()?;
+            rhi.pop_event(command_buffer);
+        } else {
+            rhi.push_event(command_buffer, "BasePass\0", [1.0;4]);
+            self.draw_mesh_gbuffer()?;
+            rhi.pop_event(command_buffer);
+    
+            rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
+    
+            rhi.push_event(command_buffer, "DeferredLighting\0", [1.0;4]);
+            self.draw_deferred_lighting()?;
+            rhi.pop_event(command_buffer);
+    
+            rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
         }
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        let mut clear_value = vk::ClearValue::default();
-        clear_value.color.float32 = [0.0, 0.0, 0.0, 0.0];
-        let clear_attachments = [
-            vk::ClearAttachment::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .color_attachment(0)
-                .clear_value(clear_value)
-                .build()
-        ];
-        let mut clear_rect = vk::Rect2D::default();
-        clear_rect.offset.x = 0;
-        clear_rect.offset.y = 0;
-        clear_rect.extent.width = swapchain_info.extent.width;
-        clear_rect.extent.height = swapchain_info.extent.height;
-        let clear_rects = [
-            vk::ClearRect::builder()
-                .base_array_layer(0)
-                .layer_count(1)
-                .rect(clear_rect)
-                .build()
-        ];
-        rhi.cmd_clear_attachments(command_buffer, &clear_attachments, &clear_rects);
-
-        self.m_ui_pass.draw(ui_runtime);
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        self.m_combine_ui_pass.draw();
-
-        rhi.cmd_end_render_pass(command_buffer);
-
-        Ok(())
-    }
-
-    pub fn draw_forward(
-        &self, 
-        ui_runtime: &RefCell<UiRuntime>,
-        current_swapchain_image_index: usize
-    ) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
-        let command_buffer = rhi.get_current_command_buffer();
-
-        let swapchain_info = rhi.get_swapchain_info();
-        let render_area = vk::Rect2D::builder()
-            .offset(vk::Offset2D::default())
-            .extent(swapchain_info.extent);
-
-        let mut clear_values = [vk::ClearValue::default(); _MAIN_CAMERA_PASS_ATTACHMENT_COUNT];
-        clear_values[_MAIN_CAMERA_PASS_GBUFFER_A].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_GBUFFER_B].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_GBUFFER_C].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].color.float32 = [0.0, 0.0, 0.0, 1.0];
-        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].color.float32 = [0.0, 0.0, 0.0, 1.0];
-        clear_values[_MAIN_CAMERA_PASS_DEPTH].depth_stencil = vk::ClearDepthStencilValue{depth: 1.0, stencil: 0};
-        clear_values[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE].color.float32 = [0.0, 0.0, 0.0, 1.0];
-        
-        let info = vk::RenderPassBeginInfo::builder()
-            .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .framebuffer(self.m_swapchain_framebuffers[current_swapchain_image_index])
-            .render_area(render_area)
-            .clear_values(&clear_values);
-
-        rhi.cmd_begin_render_pass(command_buffer, &info, vk::SubpassContents::INLINE);
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-
-        rhi.push_event(command_buffer, "Forward Lighting\0", [1.0;4]);
-        self.draw_mesh_lighting()?;
-        self.draw_skybox()?;
-        rhi.pop_event(command_buffer);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 

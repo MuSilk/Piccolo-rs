@@ -84,7 +84,7 @@ impl RenderSystem {
         Self {
             m_rhi: vulkan_rhi, 
             m_swap_context: swap_context,
-            m_render_pipeline_type: RenderPipelineType::ForwardPipeline,
+            m_render_pipeline_type: RenderPipelineType::DeferredPipeline,
             m_render_camera: Rc::new(RefCell::new(render_camera)),
             m_render_scene: RefCell::new(render_scene),
             m_render_resource: render_resource,
@@ -106,21 +106,15 @@ impl RenderSystem {
         self.m_render_scene.borrow_mut().update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
         self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&mut debugdraw_manager.borrow_mut(), &self.m_render_resource.borrow());
         debugdraw_manager.borrow_mut().tick(delta_time);
-        match self.m_render_pipeline_type {
-            RenderPipelineType::ForwardPipeline => {
-                self.m_render_pipeline.forward_render(
-                    debugdraw_manager,
-                    ui_runtime,
-                    &mut self.m_render_resource.borrow_mut())?;
-            },
-            RenderPipelineType::DeferredPipeline => {
-                self.m_render_pipeline.deferred_render(
-                    debugdraw_manager, 
-                    ui_runtime,
-                    &mut self.m_render_resource.borrow_mut())?;
-            },
-            _ => {panic!("Unknown render pipeline type")}
-        }
+        self.m_render_pipeline.render(
+            debugdraw_manager,
+            ui_runtime,
+            &mut self.m_render_resource.borrow_mut(),
+            match self.m_render_pipeline_type {
+                RenderPipelineType::ForwardPipeline => true,
+                RenderPipelineType::DeferredPipeline => false,
+            }
+        )?;
         Ok(())
     }
     
