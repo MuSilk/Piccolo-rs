@@ -90,7 +90,6 @@ impl Engine {
             0.0, 0.0, window_size.0 as f32,  window_size.1 as f32
         );
         self.m_runtime_context.render_system().borrow().tick(
-            &self.m_runtime_context.debugdraw_manager(),
             &self.m_runtime_context.ui_runtime(),
             &self.m_runtime_context.asset_manager(),
             &self.m_runtime_context.config_manager(),

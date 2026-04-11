@@ -2,7 +2,7 @@ use std::{cell::{RefCell}, path::Path, rc::{Rc, Weak}};
 
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem}, render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem}, render::{render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
     m_config_manager: ConfigManager,
@@ -11,7 +11,6 @@ pub struct RuntimeGlobalContext {
     m_world_manager: RefCell<WorldManager>,
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<RefCell<RenderSystem>>,
-    m_debugdraw_manager: Option<RefCell<DebugDrawManager>>,
     m_ui_runtime: RefCell<UiRuntime>,
 }
 
@@ -29,7 +28,6 @@ impl RuntimeGlobalContext {
             m_world_manager: RefCell::new(WorldManager::default()),
             m_window_system: Rc::new(RefCell::new(WindowSystem::default())),
             m_render_system: None,
-            m_debugdraw_manager: None,
             m_ui_runtime: RefCell::new(UiRuntime::default()),
         };
         ctx.m_config_manager.initialize(config_file_path);
@@ -52,13 +50,7 @@ impl RuntimeGlobalContext {
             asset_manager: &self.m_asset_manager,
             config_manager: &self.m_config_manager,
         });
-        let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
-            rhi: render_system.get_rhi(),
-            font_path: self.m_config_manager.get_editor_font_path(),
-        })
-        .unwrap();
         self.m_render_system = Some(RefCell::new(render_system));
-        self.m_debugdraw_manager = Some(RefCell::new(debugdraw_manager));
     }
 
 
@@ -72,10 +64,6 @@ impl RuntimeGlobalContext {
 
     pub fn render_system(&self) -> &RefCell<RenderSystem> {
         self.m_render_system.as_ref().unwrap()
-    }
-
-    pub fn debugdraw_manager(&self) -> &RefCell<DebugDrawManager> {
-        self.m_debugdraw_manager.as_ref().unwrap()
     }
 
     pub fn config_manager(&self) -> &ConfigManager {
@@ -96,9 +84,6 @@ impl RuntimeGlobalContext {
 
     pub fn shutdown_systems(&self){
         self.m_render_system.as_ref().unwrap().borrow().get_rhi().borrow().wait_idle().unwrap();
-        self.m_debugdraw_manager
-            .as_ref().unwrap().borrow_mut()
-            .destroy(&self.m_render_system.as_ref().unwrap().borrow());
         self.m_render_system.as_ref().unwrap().borrow().destroy().unwrap();
     }
 }

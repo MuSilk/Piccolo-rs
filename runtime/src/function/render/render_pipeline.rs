@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::{core::math::vector2::Vector2, function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}, ui::ui2::UiRuntime}};
+use crate::{core::math::vector2::Vector2, function::{render::{passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}}}};
 
 
 pub struct RenderPipeline {
@@ -72,62 +72,9 @@ impl RenderPipeline {
         })
     }
 
-    pub fn render(
-        &self, 
-        debugdraw_manager: &RefCell<DebugDrawManager>,
-        ui_runtime: &RefCell<UiRuntime>,
-        render_resource: &mut RenderResource,
-        forward_draw: bool
-    ) -> Result<()> {
-        let rhi = self.m_base.borrow().m_rhi.upgrade().unwrap();
-        render_resource.reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
-        {
-            let mut rhi = rhi.borrow_mut();
-            rhi.wait_for_fence()?;
-            rhi.reset_command_pool()?;
-            if rhi.prepare_before_pass(
-                &|rhi: &VulkanRHI|
-                self.pass_update_after_recreate_swapchain(&debugdraw_manager, &rhi)
-            )? {
-                return Ok(());
-            }
-        }
-        {
-            let rhi = rhi.borrow();
-
-            self.m_base.borrow().m_directional_light_pass.draw();
-            self.m_base.borrow().m_point_light_pass.draw();
-
-            self.m_base.borrow().m_main_camera_pass.draw(
-                ui_runtime,
-                rhi.get_current_swapchain_image_index(),
-                forward_draw
-            )?;
-
-            debugdraw_manager.borrow_mut().draw(rhi.get_current_swapchain_image_index())?;
-        }
-        {
-            let mut rhi = rhi.borrow_mut();
-            rhi.submit_rendering(&|rhi: &VulkanRHI|
-                self.pass_update_after_recreate_swapchain(&debugdraw_manager, &rhi))?;
-        }
-        Ok(())
-    }
-
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
         // let pick_pass = &self.m_base.borrow().m_pick_pass;
         // pick_pass.pick(picked_uv) 
         0  
-    }
-}
-
-impl RenderPipeline {
-    fn pass_update_after_recreate_swapchain(
-        &self, 
-        debugdraw_manager: &RefCell<DebugDrawManager>,
-        rhi: &VulkanRHI
-    ) {
-        self.m_base.borrow_mut().m_main_camera_pass.recreate_after_swapchain(rhi).unwrap();
-        debugdraw_manager.borrow_mut().update_after_recreate_swap_chain(rhi);
     }
 }
