@@ -1,6 +1,6 @@
 use std::{cell::RefCell, os::raw::c_void, rc::Rc};
 
-use crate::{core::math::vector2::Vector2, function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC}, render_common::{MeshInefficientPickPerdrawcallStorageBufferObject, MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::RenderResource}, shader::generated::shader::{MESH_INEFFICIENT_PICK_FRAG, MESH_INEFFICIENT_PICK_VERT}};
+use crate::{core::math::vector2::Vector2, function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MeshInefficientPickPerdrawcallStorageBufferObject, MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}}, shader::generated::shader::{MESH_INEFFICIENT_PICK_FRAG, MESH_INEFFICIENT_PICK_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -9,6 +9,7 @@ use vulkanalia::{prelude::v1_0::*};
 pub struct PickPassInitInfo<'a> {
     pub per_mesh_layout: vk::DescriptorSetLayout,
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 
@@ -24,7 +25,7 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 
 impl PickPass {
     pub fn initialize(&mut self, info: &PickPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
         let rhi = info.rhi.borrow();
         self.m_per_mesh_layout = info.per_mesh_layout;
 
@@ -38,9 +39,7 @@ impl PickPass {
         Ok(())
     }
 
-    pub fn prepare_pass_data(&mut self, render_resource: &RenderResource) {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    pub fn prepare_pass_data(&mut self,rhi: &VulkanRHI, render_resource: &RenderResource) {
         let swapchain_info = rhi.get_swapchain_info();
         self.m_mesh_inefficient_pick_perframe_storage_buffer_object.rt_width = swapchain_info.extent.width;
         self.m_mesh_inefficient_pick_perframe_storage_buffer_object.rt_height = swapchain_info.extent.height;
@@ -61,9 +60,7 @@ impl PickPass {
         Ok(())
     }
 
-    pub fn pick(&self, picked_uv: &Vector2) -> u32 {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-
+    pub fn pick(&self, rhi: &Rc<RefCell<VulkanRHI>>, picked_uv: &Vector2) -> u32 {
         let picked_pixel_index = {
             let rhi = rhi.borrow();
             let swapchain_info = rhi.get_swapchain_info();

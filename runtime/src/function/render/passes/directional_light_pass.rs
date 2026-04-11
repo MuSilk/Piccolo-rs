@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc};
 
-use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshDirectionalLightShadowPerdrawcallStorageBufferObject, MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshDirectionalLightShadowPerframeStorageBufferObject, S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::RenderResource}, shader::generated::shader::{MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshDirectionalLightShadowPerdrawcallStorageBufferObject, MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshDirectionalLightShadowPerframeStorageBufferObject, S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}}, shader::generated::shader::{MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -8,6 +8,7 @@ use vulkanalia::{prelude::v1_0::*};
 
 pub struct DirectionalLightShadowPassInitInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 
@@ -23,7 +24,7 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 
 impl DirectionalLightShadowPass {
     pub fn initialize(&mut self, info: &DirectionalLightShadowPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
         let rhi = info.rhi.borrow();
 
         self.setup_attachments(&rhi)?;
@@ -46,8 +47,8 @@ impl DirectionalLightShadowPass {
             render_resource.m_mesh_directional_light_shadow_perframe_storage_buffer_object.clone();
     }
 
-    pub fn draw(&self) {
-        self.draw_model();
+    pub fn draw(&self, rhi: &VulkanRHI) {
+        self.draw_model(rhi);
     }
 
     pub fn set_per_mesh_layout(&mut self, layout: vk::DescriptorSetLayout) {
@@ -391,9 +392,7 @@ impl DirectionalLightShadowPass {
         Ok(())
     }
 
-    fn draw_model(&self) {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_model(&self, rhi: &VulkanRHI) {
         let command_buffer = rhi.get_current_command_buffer();
 
         let mut clear_values: [vk::ClearValue; 2] = [Default::default(); 2];

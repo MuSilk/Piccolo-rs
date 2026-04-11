@@ -2,7 +2,7 @@ use std::{cell::{LazyCell, RefCell}, rc::{Rc, Weak}};
 
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::function::render::{ render_common::RenderMeshNode, render_pass_base::{RenderPassBase, RenderPassCommonInfo, RenderPassCreateInfo}, render_resource::GlobalRenderResource};
+use crate::function::render::{ interface::vulkan::vulkan_rhi::VulkanRHI, render_common::RenderMeshNode, render_resource::{GlobalRenderResource, RenderResource}};
 
 pub const _MAIN_CAMERA_PASS_GBUFFER_A: usize = 0;
 pub const _MAIN_CAMERA_PASS_GBUFFER_B: usize = 1;
@@ -68,10 +68,13 @@ pub struct RenderPipelineBase{
 
 pub static mut M_VISIABLE_NODES: LazyCell<RefCell<VisiableNodes>> = LazyCell::new(||RefCell::new(VisiableNodes::default()));
 
+pub struct RenderPassCommonInfo<'a>{
+    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub render_resource: &'a Rc<RefCell<RenderResource>>,
+}
 
 #[derive(Default)]
 pub struct RenderPass{
-    pub m_base : RenderPassBase,
 
     pub m_global_render_resource: Weak<RefCell<GlobalRenderResource>>,
 
@@ -82,17 +85,12 @@ pub struct RenderPass{
 
 impl RenderPass{
 
-    pub fn initialize(&mut self) {
+    pub fn initialize(&mut self, global_render_resource: &Rc<RefCell<GlobalRenderResource>>) {
          self.m_global_render_resource = 
-            Rc::downgrade(&self.m_base.m_render_resource.upgrade().unwrap().borrow().m_global_render_resource);
+            Rc::downgrade(global_render_resource);
     }
 
-    pub fn set_common_info(&mut self, common_info: &RenderPassCommonInfo){
-        self.m_base.m_rhi = Rc::downgrade(common_info.rhi);
-        self.m_base.m_render_resource = Rc::downgrade(common_info.render_resource);
-    }
-
-    pub fn create(_info: &RenderPassCreateInfo) -> Self{
+    pub fn create() -> Self{
         Self {
             ..Default::default()
         }

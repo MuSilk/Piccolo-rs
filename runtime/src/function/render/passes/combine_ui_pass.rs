@@ -1,10 +1,13 @@
+use std::{cell::RefCell, rc::Rc};
+
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
 
 pub struct CombineUIPassInitInfo<'a>{
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
     pub scene_input_attachment: vk::ImageView,
@@ -18,7 +21,7 @@ pub struct CombineUIPass {
 
 impl CombineUIPass {
     pub fn initialize(&mut self, info: &CombineUIPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi)?;
         self.setup_pipelines(info.rhi)?;
@@ -26,10 +29,8 @@ impl CombineUIPass {
         self.update_after_framebuffer_recreate(info.rhi, info.scene_input_attachment, info.ui_input_attachment)?;
         Ok(())
     }
-    pub fn draw(&self) {
+    pub fn draw(&self, rhi: &VulkanRHI) {
         let color = [1.0;4];
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "Combine UI\0", color);
         let info = rhi.get_swapchain_info();

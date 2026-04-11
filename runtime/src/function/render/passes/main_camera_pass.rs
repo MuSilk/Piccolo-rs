@@ -1,6 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, os::raw::c_void, slice};
+use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::{render::{graph_compiler::{build_subpass, load_main_camera_pass_graph}, interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_pass_base::RenderPassCommonInfo, render_resource::RenderResource, render_type::RHISamplerType}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::{render::{graph_compiler::{build_subpass, load_main_camera_pass_graph}, interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, MainCameraSubPass, RenderPass, RenderPassCommonInfo, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}, render_type::RHISamplerType}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -10,6 +10,7 @@ pub struct MainCameraPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub config_manager: &'a ConfigManager,
     pub enable_fxaa: bool,
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 pub enum LayoutType {
@@ -50,17 +51,9 @@ pub struct MainCameraPass{
 }
 
 impl MainCameraPass {
-    pub fn set_common_info(&mut self, common_info: &RenderPassCommonInfo) {
-        self.m_render_pass.set_common_info(common_info);
-        self.m_tone_mapping_pass.m_render_pass.set_common_info(&common_info);
-        self.m_color_grading_pass.m_render_pass.set_common_info(&common_info);
-        self.m_fxaa_pass.m_render_pass.set_common_info(&common_info);
-        self.m_ui_pass.m_render_pass.set_common_info(&common_info);
-        self.m_combine_ui_pass.m_render_pass.set_common_info(&common_info);
-    }
 
     pub fn initialize(&mut self, info: &MainCameraPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
         self.m_enable_fxaa = info.enable_fxaa;
         let rhi = info.rhi;
         self.setup_attachments(rhi)?;
@@ -75,29 +68,34 @@ impl MainCameraPass {
         self.m_tone_mapping_pass.initialize(&ToneMappingInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
             rhi: rhi,
+            global_render_resource: info.global_render_resource,
             input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
         })?;
 
         self.m_color_grading_pass.initialize(&ColorGradingPassInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
             rhi: rhi,
+            global_render_resource: info.global_render_resource,
             input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
         })?;
 
         self.m_fxaa_pass.initialize(&FXAAPassInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
             rhi: rhi,
+            global_render_resource: info.global_render_resource,
             input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD],
         })?;
 
         self.m_ui_pass.initialize(&UIPassInitInfo {
             rhi: rhi,
+            global_render_resource: info.global_render_resource,
             render_pass: *self.m_render_pass.get_render_pass(),
             config_manager: info.config_manager,
         })?;
 
         self.m_combine_ui_pass.initialize(&CombineUIPassInitInfo {
             rhi: rhi,
+            global_render_resource: info.global_render_resource,
             render_pass: *self.m_render_pass.get_render_pass(),
             scene_input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
             ui_input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
@@ -144,9 +142,7 @@ impl MainCameraPass {
         Ok(())
     }
 
-    pub fn destroy(&self) {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    pub fn destroy(&self, rhi: &VulkanRHI) {
         self.m_swapchain_framebuffers.iter().for_each(|f| rhi.destroy_framebuffer(*f));
         rhi.destroy_pipeline(self.m_render_pass.m_render_pipeline[0].pipeline);
         rhi.destroy_pipeline_layout(self.m_render_pass.m_render_pipeline[0].layout);
@@ -156,12 +152,11 @@ impl MainCameraPass {
 
     pub fn draw(
         &self, 
+        rhi: &VulkanRHI,
         ui_runtime: &RefCell<UiRuntime>,
         current_swapchain_image_index: usize,
         forward_draw: bool
     ) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
 
         let swapchain_info = rhi.get_swapchain_info();
@@ -194,18 +189,18 @@ impl MainCameraPass {
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
     
             rhi.push_event(command_buffer, "Forward Lighting\0", [1.0;4]);
-            self.draw_mesh_lighting()?;
-            self.draw_skybox()?;
+            self.draw_mesh_lighting(rhi)?;
+            self.draw_skybox(rhi)?;
             rhi.pop_event(command_buffer);
         } else {
             rhi.push_event(command_buffer, "BasePass\0", [1.0;4]);
-            self.draw_mesh_gbuffer()?;
+            self.draw_mesh_gbuffer(rhi)?;
             rhi.pop_event(command_buffer);
     
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
     
             rhi.push_event(command_buffer, "DeferredLighting\0", [1.0;4]);
-            self.draw_deferred_lighting()?;
+            self.draw_deferred_lighting(rhi)?;
             rhi.pop_event(command_buffer);
     
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
@@ -213,16 +208,16 @@ impl MainCameraPass {
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
-        self.m_tone_mapping_pass.draw();
+        self.m_tone_mapping_pass.draw(rhi);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
-        self.m_color_grading_pass.draw();
+        self.m_color_grading_pass.draw(rhi);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
         if self.m_enable_fxaa {
-            self.m_fxaa_pass.draw();
+            self.m_fxaa_pass.draw(rhi);
         }
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
@@ -250,11 +245,11 @@ impl MainCameraPass {
         ];
         rhi.cmd_clear_attachments(command_buffer, &clear_attachments, &clear_rects);
 
-        self.m_ui_pass.draw(ui_runtime);
+        self.m_ui_pass.draw(rhi, ui_runtime);
 
         rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
-        self.m_combine_ui_pass.draw();
+        self.m_combine_ui_pass.draw(rhi);
 
         rhi.cmd_end_render_pass(command_buffer);
 
@@ -1215,9 +1210,7 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_mesh_gbuffer(&self) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_mesh_gbuffer(&self, rhi: &VulkanRHI) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let info = rhi.get_swapchain_info();
@@ -1343,9 +1336,7 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_deferred_lighting(&self) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_deferred_lighting(&self, rhi: &VulkanRHI) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let info = rhi.get_swapchain_info();
@@ -1393,9 +1384,7 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_mesh_lighting(&self) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_mesh_lighting(&self, rhi: &VulkanRHI) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let info = rhi.get_swapchain_info();
@@ -1521,9 +1510,7 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_skybox(&self) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_skybox(&self, rhi: &VulkanRHI) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();

@@ -111,7 +111,7 @@ impl RenderSystem {
         self.m_rhi.borrow_mut().prepare_context();
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene.borrow(), &self.m_render_camera.borrow());
         self.m_render_scene.borrow_mut().update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
-        self.m_render_pipeline.borrow_mut().prepare_pass_data( &self.m_render_resource.borrow());
+        self.m_render_pipeline.borrow_mut().prepare_pass_data(&self.m_rhi.borrow(), &self.m_render_resource.borrow());
         self.m_debugdraw_manager.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
         self.m_debugdraw_manager.borrow_mut().tick(delta_time);
         self.render(
@@ -127,7 +127,7 @@ impl RenderSystem {
     pub fn destroy(&self) -> Result<()> {
         self.m_debugdraw_manager.borrow_mut()
             .destroy(&self);
-        self.m_render_pipeline.borrow_mut().destroy();
+        self.m_render_pipeline.borrow_mut().destroy(&self.m_rhi.borrow());
         self.m_rhi.borrow_mut().destroy();
         Ok(())
     }

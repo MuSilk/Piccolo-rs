@@ -1,14 +1,15 @@
-use std::{cell::RefCell, mem::offset_of};
+use std::{cell::RefCell, mem::offset_of, rc::Rc};
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, ui::{ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
-    pub config_manager: &'a ConfigManager
+    pub config_manager: &'a ConfigManager,
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 #[derive(Default)]
@@ -28,7 +29,7 @@ pub struct UIPass {
 
 impl UIPass {
     pub fn initialize(&mut self, info: &UIPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
 
         self.font_texture = upload_font_texture(info.rhi, info.config_manager)?;
 
@@ -42,11 +43,10 @@ impl UIPass {
     
     pub fn draw(
         &self, 
+        rhi: &VulkanRHI,
         ui_runtime: &RefCell<UiRuntime>
     ) {
         let color = [1.0;4];
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "UI\0", color);
 
@@ -63,10 +63,9 @@ impl UIPass {
 
     pub fn reload_font_texture(
         &mut self, 
+        rhi: &VulkanRHI,
         config_manager: &ConfigManager
     ) -> Result<()> {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         if self.font_texture.image != vk::Image::null() {
             rhi.destroy_image_view(self.font_texture.view);
             rhi.destroy_image(self.font_texture.image);

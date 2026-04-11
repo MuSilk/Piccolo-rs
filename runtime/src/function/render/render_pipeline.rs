@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc}};
 
 use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
-use crate::{core::math::vector2::Vector2, function::{render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_resource::RenderResource}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager};
+use crate::{core::math::vector2::Vector2, function::{render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass::RenderPassCommonInfo, render_resource::RenderResource}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -25,21 +25,16 @@ impl RenderPipeline {
         let mut m_main_camera_pass = MainCameraPass::default();
         let mut m_pick_pass = PickPass::default();
 
-        let common_info = RenderPassCommonInfo {
-            rhi: create_info.rhi,
-            render_resource: create_info.render_resource,
-        };
-        m_directional_light_pass.m_render_pass.set_common_info(&common_info);
-        m_point_light_pass.m_render_pass.set_common_info(&common_info);
-        m_main_camera_pass.set_common_info(&common_info);
-        m_pick_pass.m_render_pass.set_common_info(&common_info);
+        let global_render_resource = &create_info.render_resource.borrow().m_global_render_resource;
 
         m_directional_light_pass.initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,
+            global_render_resource: &global_render_resource,
         })?;
 
         m_point_light_pass.initialize(&PointLightShadowPassInitInfo {
             rhi: create_info.rhi,
+            global_render_resource: &global_render_resource,
         })?;
 
         m_main_camera_pass.m_directional_light_shadow_color_image_view = 
@@ -52,6 +47,7 @@ impl RenderPipeline {
             rhi: &create_info.rhi.borrow(),
             config_manager: create_info.config_manager,
             enable_fxaa: create_info.enable_fxaa,
+            global_render_resource: &global_render_resource,
         })?;
 
         let descriptor_layouts = m_main_camera_pass.m_render_pass.get_descriptor_set_layouts();
@@ -60,14 +56,17 @@ impl RenderPipeline {
 
         m_directional_light_pass.post_initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,
+            global_render_resource: &global_render_resource,
         })?;
         m_point_light_pass.post_initialize(&PointLightShadowPassInitInfo {
             rhi: create_info.rhi,
+            global_render_resource: &global_render_resource,
         })?;
 
         m_pick_pass.initialize(&PickPassInitInfo {
             rhi: create_info.rhi,
             per_mesh_layout: descriptor_layouts[LayoutType::PerMesh as usize],
+            global_render_resource: &global_render_resource,
         })?;
 
         Ok(RenderPipeline {
@@ -86,16 +85,17 @@ impl RenderPipeline {
 
     pub fn prepare_pass_data(
         &mut self, 
+        rhi: &VulkanRHI,
         render_resource : &RenderResource,
     ){
         self.m_directional_light_pass.prepare_pass_data(render_resource);
         self.m_point_light_pass.prepare_pass_data(render_resource);
         self.m_main_camera_pass.prepare_pass_data(render_resource);
-        self.m_pick_pass.prepare_pass_data(render_resource);
+        self.m_pick_pass.prepare_pass_data(rhi, render_resource);
     }   
 
-    pub fn destroy(&self) {
-        self.m_main_camera_pass.destroy();
+    pub fn destroy(&self, rhi: &VulkanRHI) {
+        self.m_main_camera_pass.destroy(rhi);
     }
 
     pub fn draw(
@@ -104,10 +104,11 @@ impl RenderPipeline {
         ui_runtime: &RefCell<UiRuntime>,
         forward_draw: bool,
     ) {
-        self.m_directional_light_pass.draw();
-        self.m_point_light_pass.draw();
+        self.m_directional_light_pass.draw(rhi);
+        self.m_point_light_pass.draw(rhi);
 
         self.m_main_camera_pass.draw(
+            rhi,
             ui_runtime,
             rhi.get_current_swapchain_image_index(),
             forward_draw

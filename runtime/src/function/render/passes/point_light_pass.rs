@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VulkanRHI, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC}, render_common::{MeshPointLightShadowPerdrawcallStorageBufferObject, MeshPointLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, S_MAX_POINT_LIGHT_COUNT, S_POINT_LIGHT_SHADOW_MAP_DIMENSION}, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::RenderResource}, shader::generated::shader::{MESH_POINT_LIGHT_SHADOW_FRAG, MESH_POINT_LIGHT_SHADOW_GEOM, MESH_POINT_LIGHT_SHADOW_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MeshPointLightShadowPerdrawcallStorageBufferObject, MeshPointLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, S_MAX_POINT_LIGHT_COUNT, S_POINT_LIGHT_SHADOW_MAP_DIMENSION}, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}}, shader::generated::shader::{MESH_POINT_LIGHT_SHADOW_FRAG, MESH_POINT_LIGHT_SHADOW_GEOM, MESH_POINT_LIGHT_SHADOW_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -8,6 +8,7 @@ use vulkanalia::{prelude::v1_0::*};
 
 pub struct PointLightShadowPassInitInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 
@@ -23,7 +24,7 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 
 impl PointLightShadowPass {
     pub fn initialize(&mut self, info: &PointLightShadowPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
         let rhi = info.rhi.borrow();
 
         self.setup_attachments(&rhi)?;
@@ -46,8 +47,8 @@ impl PointLightShadowPass {
             render_resource.m_mesh_point_light_shadow_perframe_storage_buffer_object.clone();
     }
 
-    pub fn draw(&self) {
-        self.draw_model();
+    pub fn draw(&self, rhi: &VulkanRHI) {
+        self.draw_model(rhi);
     }
 
     pub fn set_per_mesh_layout(&mut self, layout: vk::DescriptorSetLayout) {
@@ -399,9 +400,7 @@ impl PointLightShadowPass {
         Ok(())
     }
 
-    fn draw_model(&self) {
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_model(&self, rhi: &VulkanRHI) {
         let command_buffer = rhi.get_current_command_buffer();
 
         let mut clear_values: [vk::ClearValue; 2] = [Default::default(); 2];

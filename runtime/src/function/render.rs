@@ -12,7 +12,6 @@ pub mod render_mesh;
 pub mod render_object;
 pub mod render_graph;
 pub mod graph_compiler;
-pub mod render_pass_base;
 pub mod render_pass;
 pub mod render_pipeline;
 pub mod render_resource_base;

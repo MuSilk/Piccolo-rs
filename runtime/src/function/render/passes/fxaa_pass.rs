@@ -1,13 +1,16 @@
+use std::{cell::RefCell, rc::Rc};
+
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_type::RHISamplerType}, shader::generated::shader::{FXAA_FRAG, FXAA_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{FXAA_FRAG, FXAA_VERT}};
 
 pub struct FXAAPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
+    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 #[derive(Default)]
@@ -17,7 +20,7 @@ pub struct FXAAPass {
 
 impl FXAAPass {
     pub fn initialize(&mut self, info: &FXAAPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize();
+        self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi)?;
         self.setup_pipelines(info.rhi)?;
@@ -25,10 +28,8 @@ impl FXAAPass {
         self.update_after_framebuffer_recreate(info.rhi, info.input_attachment)?;
         Ok(())
     }
-    pub fn draw(&self) {
+    pub fn draw(&self, rhi: &VulkanRHI) {
         let color = [1.0;4];
-        let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "FXAA\0", color);
         let info = rhi.get_swapchain_info();
