@@ -1,12 +1,21 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::{Rc}};
 
 use anyhow::Result;
+use vulkanalia::prelude::v1_0::*;
+use crate::{core::math::vector2::Vector2, function::{render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_resource::RenderResource}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager};
 
-use crate::{core::math::vector2::Vector2, function::{render::{ passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}, ui::ui2::UiRuntime}};
-
+pub struct RenderPipelineCreateInfo<'a>{
+    pub rhi : &'a Rc<RefCell<VulkanRHI>>,
+    pub render_resource : &'a Rc<RefCell<RenderResource>>,
+    pub enable_fxaa : bool,
+    pub config_manager : &'a ConfigManager,
+}
 
 pub struct RenderPipeline {
-    pub m_base : RefCell<RenderPipelineBase>
+    m_directional_light_pass: DirectionalLightShadowPass,
+    m_point_light_pass: PointLightShadowPass,
+    m_main_camera_pass: MainCameraPass,
+    m_pick_pass: PickPass,
 }
 
 impl RenderPipeline {
@@ -62,13 +71,10 @@ impl RenderPipeline {
         })?;
 
         Ok(RenderPipeline {
-            m_base: RefCell::new(RenderPipelineBase {
-                m_rhi: Rc::downgrade(create_info.rhi),
-                m_directional_light_pass,
-                m_point_light_pass,
-                m_main_camera_pass,  
-                m_pick_pass,
-            })
+            m_directional_light_pass,
+            m_point_light_pass,
+            m_main_camera_pass,  
+            m_pick_pass,
         })
     }
 
@@ -76,5 +82,43 @@ impl RenderPipeline {
         // let pick_pass = &self.m_base.borrow().m_pick_pass;
         // pick_pass.pick(picked_uv) 
         0  
+    }
+
+    pub fn prepare_pass_data(
+        &mut self, 
+        render_resource : &RenderResource,
+    ){
+        self.m_directional_light_pass.prepare_pass_data(render_resource);
+        self.m_point_light_pass.prepare_pass_data(render_resource);
+        self.m_main_camera_pass.prepare_pass_data(render_resource);
+        self.m_pick_pass.prepare_pass_data(render_resource);
+    }   
+
+    pub fn destroy(&self) {
+        self.m_main_camera_pass.destroy();
+    }
+
+    pub fn draw(
+        &self,
+        rhi: &VulkanRHI,
+        ui_runtime: &RefCell<UiRuntime>,
+        forward_draw: bool,
+    ) {
+        self.m_directional_light_pass.draw();
+        self.m_point_light_pass.draw();
+
+        self.m_main_camera_pass.draw(
+            ui_runtime,
+            rhi.get_current_swapchain_image_index(),
+            forward_draw
+        ).unwrap();
+    }
+
+    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) {
+        self.m_main_camera_pass.recreate_after_swapchain(rhi).unwrap();
+    }
+
+    pub fn get_descriptor_set_layouts(&self, layout_type: LayoutType) -> vk::DescriptorSetLayout {
+        self.m_main_camera_pass.m_render_pass.m_descriptor_infos[layout_type as usize].layout
     }
 }

@@ -15,7 +15,6 @@ pub trait System {
 
 pub struct Engine {
     m_runtime_context: RuntimeGlobalContext,
-    m_is_quit: bool,
     m_state: RefCell<EngineState>,
     pub systems: RefCell<Vec<Box<dyn System>>>,
 }
@@ -33,7 +32,6 @@ impl Engine {
     pub fn new(config_file_path: &Path) -> Self {
         Engine {
             m_runtime_context: RuntimeGlobalContext::new(config_file_path),
-            m_is_quit: false,
             m_state: RefCell::new(EngineState {
                 m_last_tick_time_point: Instant::now(),
                 m_frame_count: 0,

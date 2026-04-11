@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::{core::math::vector2::Vector2, function::{render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::RenderCamera, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::RenderPipeline, render_pipeline_base::RenderPipelineCreateInfo, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::{ui2::UiRuntime, window_ui::WindowUI}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::global::global_rendering::GlobalRenderingRes}};
+use crate::{core::math::vector2::Vector2, function::{render::{debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo}, interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI}, light::{AmbientLight, DirectionalLight}, passes::main_camera_pass::LayoutType, render_camera::RenderCamera, render_entity::RenderEntity, render_object::{GameObjectMeshDesc, GameObjectPartId}, render_pipeline::{RenderPipeline, RenderPipelineCreateInfo}, render_resource::RenderResource, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::{LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc, RenderSwapContext}, render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType}, window_system::WindowSystem}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::global::global_rendering::GlobalRenderingRes}};
 
 pub struct RenderSystemCreateInfo<'a>{
     pub window_system: &'a WindowSystem,
@@ -17,7 +17,7 @@ pub struct RenderSystem{
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RefCell<RenderScene>,
     m_render_resource: Rc<RefCell<RenderResource>>,
-    m_render_pipeline: RenderPipeline,
+    m_render_pipeline: RefCell<RenderPipeline>,
 
     m_debugdraw_manager: RefCell<DebugDrawManager>,
 }
@@ -78,10 +78,10 @@ impl RenderSystem {
         let render_pipeline = RenderPipeline::create(&create_info).unwrap();
 
         render_resource.borrow_mut().m_mesh_descriptor_set_layout = 
-            render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout;
+            render_pipeline.get_descriptor_set_layouts(LayoutType::PerMesh);
 
         render_resource.borrow_mut().m_material_descriptor_set_layout = 
-            render_pipeline.m_base.borrow().m_main_camera_pass.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout;
+            render_pipeline.get_descriptor_set_layouts(LayoutType::MeshPerMaterial);
 
         let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
             rhi: &vulkan_rhi,
@@ -95,7 +95,7 @@ impl RenderSystem {
             m_render_camera: Rc::new(RefCell::new(render_camera)),
             m_render_scene: RefCell::new(render_scene),
             m_render_resource: render_resource,
-            m_render_pipeline: render_pipeline,
+            m_render_pipeline: RefCell::new(render_pipeline),
             m_debugdraw_manager: RefCell::new(debugdraw_manager),
         }
     }
@@ -111,7 +111,8 @@ impl RenderSystem {
         self.m_rhi.borrow_mut().prepare_context();
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene.borrow(), &self.m_render_camera.borrow());
         self.m_render_scene.borrow_mut().update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
-        self.m_render_pipeline.m_base.borrow_mut().prepare_pass_data(&mut self.m_debugdraw_manager.borrow_mut(), &self.m_render_resource.borrow());
+        self.m_render_pipeline.borrow_mut().prepare_pass_data( &self.m_render_resource.borrow());
+        self.m_debugdraw_manager.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
         self.m_debugdraw_manager.borrow_mut().tick(delta_time);
         self.render(
             ui_runtime, 
@@ -126,7 +127,7 @@ impl RenderSystem {
     pub fn destroy(&self) -> Result<()> {
         self.m_debugdraw_manager.borrow_mut()
             .destroy(&self);
-        self.m_render_pipeline.m_base.borrow_mut().destroy();
+        self.m_render_pipeline.borrow_mut().destroy();
         self.m_rhi.borrow_mut().destroy();
         Ok(())
     }
@@ -166,7 +167,7 @@ impl RenderSystem {
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
+        self.m_render_pipeline.borrow().get_guid_of_picked_mesh(picked_uv)
     }
 }
 
@@ -332,16 +333,11 @@ impl RenderSystem {
         {
             let rhi = rhi.borrow();
 
-            let pipeline = self.m_render_pipeline.m_base.borrow();
-
-            pipeline.m_directional_light_pass.draw();
-            pipeline.m_point_light_pass.draw();
-
-            pipeline.m_main_camera_pass.draw(
+            self.m_render_pipeline.borrow().draw(
+                &rhi,
                 ui_runtime,
-                rhi.get_current_swapchain_image_index(),
                 forward_draw
-            )?;
+            );
 
             self.m_debugdraw_manager.borrow_mut().draw(rhi.get_current_swapchain_image_index())?;
         }
@@ -357,7 +353,7 @@ impl RenderSystem {
         &self, 
         rhi: &VulkanRHI,
     ) {
-        self.m_render_pipeline.m_base.borrow_mut().m_main_camera_pass.recreate_after_swapchain(rhi).unwrap();
+        self.m_render_pipeline.borrow_mut().recreate_after_swapchain(rhi);
         self.m_debugdraw_manager.borrow_mut().update_after_recreate_swap_chain(rhi);
     }
 }

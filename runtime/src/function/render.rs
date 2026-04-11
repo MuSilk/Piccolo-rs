@@ -14,7 +14,6 @@ pub mod render_graph;
 pub mod graph_compiler;
 pub mod render_pass_base;
 pub mod render_pass;
-pub mod render_pipeline_base;
 pub mod render_pipeline;
 pub mod render_resource_base;
 pub mod render_resource;
