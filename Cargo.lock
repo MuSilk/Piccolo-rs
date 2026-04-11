@@ -514,6 +514,8 @@ dependencies = [
  "bitflags 2.10.0",
  "log",
  "runtime",
+ "serde",
+ "serde_json",
  "winit",
 ]
 

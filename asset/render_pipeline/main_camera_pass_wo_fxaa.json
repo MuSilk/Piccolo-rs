@@ -1,0 +1,118 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "BasePass",
+      "name": "BasePass",
+      "position": [40.0, 40.0]
+    },
+    {
+      "id": 2,
+      "kind": "DeferredLighting",
+      "name": "DeferredLighting",
+      "position": [320.0, 40.0]
+    },
+    {
+      "id": 3,
+      "kind": "ForwardLighting",
+      "name": "ForwardLighting",
+      "position": [600.0, 40.0]
+    },
+    {
+      "id": 4,
+      "kind": "ToneMapping",
+      "name": "ToneMapping",
+      "position": [880.0, 40.0]
+    },
+    {
+      "id": 5,
+      "kind": "ColorGrading",
+      "name": "ColorGrading",
+      "position": [1160.0, 40.0]
+    },
+    {
+      "id": 6,
+      "kind": "UI",
+      "name": "UI",
+      "position": [1440.0, 240.0]
+    },
+    {
+      "id": 7,
+      "kind": "CombineUI",
+      "name": "CombineUI",
+      "position": [1720.0, 140.0]
+    }
+  ],
+  "edges": [
+    {
+      "from_node": 1,
+      "from_port": "normal",
+      "to_node": 2,
+      "to_port": "normal",
+      "framebuffer": "GBUFFER_A"
+    },
+    {
+      "from_node": 1,
+      "from_port": "material",
+      "to_node": 2,
+      "to_port": "material",
+      "framebuffer": "GBUFFER_B"
+    },
+    {
+      "from_node": 1,
+      "from_port": "base_color",
+      "to_node": 2,
+      "to_port": "base_color",
+      "framebuffer": "GBUFFER_C"
+    },
+    {
+      "from_node": 1,
+      "from_port": "depth",
+      "to_node": 2,
+      "to_port": "depth",
+      "framebuffer": "DEPTH"
+    },
+    {
+      "from_node": 2,
+      "from_port": "deferred_lit",
+      "to_node": 3,
+      "to_port": "deferred_lit",
+      "framebuffer": "BACKUP_BUFFER_ODD"
+    },
+    {
+      "from_node": 1,
+      "from_port": "depth",
+      "to_node": 3,
+      "to_port": "depth",
+      "framebuffer": "DEPTH"
+    },
+    {
+      "from_node": 3,
+      "from_port": "lit_hdr",
+      "to_node": 4,
+      "to_port": "lit_hdr",
+      "framebuffer": "BACKUP_BUFFER_ODD"
+    },
+    {
+      "from_node": 4,
+      "from_port": "tone_mapped",
+      "to_node": 5,
+      "to_port": "tone_mapped",
+      "framebuffer": "BACKUP_BUFFER_EVEN"
+    },
+    {
+      "from_node": 5,
+      "from_port": "graded",
+      "to_node": 7,
+      "to_port": "antialiased",
+      "framebuffer": "BACKUP_BUFFER_ODD"
+    },
+    {
+      "from_node": 6,
+      "from_port": "ui_color",
+      "to_node": 7,
+      "to_port": "ui_color",
+      "framebuffer": "BACKUP_BUFFER_EVEN"
+    }
+  ]
+}

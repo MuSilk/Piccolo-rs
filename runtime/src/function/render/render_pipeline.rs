@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::{core::math::vector2::Vector2, function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_pass::{_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}, ui::ui2::UiRuntime}};
+use crate::{core::math::vector2::Vector2, function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}, ui::ui2::UiRuntime}};
 
 
 pub struct RenderPipeline {
@@ -14,11 +14,6 @@ impl RenderPipeline {
         let mut m_directional_light_pass = DirectionalLightShadowPass::default();
         let mut m_point_light_pass = PointLightShadowPass::default();
         let mut m_main_camera_pass = MainCameraPass::default();
-        let mut m_tone_mapping_pass = ToneMappingPass::default();
-        let mut m_color_grading_pass = ColorGradingPass::default();
-        let mut m_fxaa_pass = FXAAPass::default();
-        let mut m_ui_pass = UIPass::default();
-        let mut m_combine_ui_pass = CombineUIPass::default();
         let mut m_pick_pass = PickPass::default();
 
         let common_info = RenderPassCommonInfo {
@@ -27,12 +22,7 @@ impl RenderPipeline {
         };
         m_directional_light_pass.m_render_pass.set_common_info(&common_info);
         m_point_light_pass.m_render_pass.set_common_info(&common_info);
-        m_main_camera_pass.m_render_pass.set_common_info(&common_info);
-        m_tone_mapping_pass.m_render_pass.set_common_info(&common_info);
-        m_color_grading_pass.m_render_pass.set_common_info(&common_info);
-        m_fxaa_pass.m_render_pass.set_common_info(&common_info);
-        m_ui_pass.m_render_pass.set_common_info(&common_info);
-        m_combine_ui_pass.m_render_pass.set_common_info(&common_info);
+        m_main_camera_pass.set_common_info(&common_info);
         m_pick_pass.m_render_pass.set_common_info(&common_info);
 
         m_directional_light_pass.initialize(&DirectionalLightShadowPassInitInfo {
@@ -50,7 +40,8 @@ impl RenderPipeline {
             m_point_light_pass.m_render_pass.m_framebuffer.attachments[0].view;
 
         m_main_camera_pass.initialize(&MainCameraPassInitInfo {
-            rhi: create_info.rhi,
+            rhi: &create_info.rhi.borrow(),
+            config_manager: create_info.config_manager,
             enable_fxaa: create_info.enable_fxaa,
         })?;
 
@@ -65,37 +56,6 @@ impl RenderPipeline {
             rhi: create_info.rhi,
         })?;
 
-        m_tone_mapping_pass.initialize(&ToneMappingInitInfo {
-            render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            rhi: create_info.rhi,
-            input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
-        })?;
-
-        m_color_grading_pass.initialize(&ColorGradingPassInitInfo {
-            render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            rhi: create_info.rhi,
-            input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
-        })?;
-
-        m_fxaa_pass.initialize(&FXAAPassInitInfo {
-            render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            rhi: create_info.rhi,
-            input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD],
-        })?;
-
-        m_ui_pass.initialize(&UIPassInitInfo {
-            rhi: create_info.rhi,
-            render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            config_manager: create_info.config_manager,
-        })?;
-
-        m_combine_ui_pass.initialize(&CombineUIPassInitInfo {
-            rhi: create_info.rhi,
-            render_pass: *m_main_camera_pass.m_render_pass.get_render_pass(),
-            scene_input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
-            ui_input_attachment: m_main_camera_pass.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
-        })?;
-
         m_pick_pass.initialize(&PickPassInitInfo {
             rhi: create_info.rhi,
             per_mesh_layout: descriptor_layouts[LayoutType::PerMesh as usize],
@@ -107,11 +67,6 @@ impl RenderPipeline {
                 m_directional_light_pass,
                 m_point_light_pass,
                 m_main_camera_pass,  
-                m_tone_mapping_pass,
-                m_color_grading_pass,             
-                m_fxaa_pass, 
-                m_ui_pass,
-                m_combine_ui_pass,
                 m_pick_pass,
             })
         })
@@ -144,11 +99,6 @@ impl RenderPipeline {
 
             self.m_base.borrow().m_main_camera_pass.draw_forward(
                 ui_runtime,
-                &self.m_base.borrow().m_tone_mapping_pass,
-                &self.m_base.borrow().m_color_grading_pass,
-                &self.m_base.borrow().m_fxaa_pass,
-                &self.m_base.borrow().m_ui_pass,
-                &self.m_base.borrow().m_combine_ui_pass,
                 rhi.get_current_swapchain_image_index()
             )?;
 
@@ -189,11 +139,6 @@ impl RenderPipeline {
 
             self.m_base.borrow().m_main_camera_pass.draw(
                 ui_runtime,
-                &self.m_base.borrow().m_tone_mapping_pass,
-                &self.m_base.borrow().m_color_grading_pass,
-                &self.m_base.borrow().m_fxaa_pass,
-                &self.m_base.borrow().m_ui_pass,
-                &self.m_base.borrow().m_combine_ui_pass,
                 rhi.get_current_swapchain_image_index()
             )?;
 
@@ -208,8 +153,9 @@ impl RenderPipeline {
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        let pick_pass = &self.m_base.borrow().m_pick_pass;
-        pick_pass.pick(picked_uv)   
+        // let pick_pass = &self.m_base.borrow().m_pick_pass;
+        // pick_pass.pick(picked_uv) 
+        0  
     }
 }
 
@@ -220,24 +166,6 @@ impl RenderPipeline {
         rhi: &VulkanRHI
     ) {
         self.m_base.borrow_mut().m_main_camera_pass.recreate_after_swapchain(rhi).unwrap();
-        let image_views = self.m_base.borrow().m_main_camera_pass.m_render_pass.get_framebuffer_image_views();
-        self.m_base.borrow_mut().m_tone_mapping_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
-        ).unwrap();
-        self.m_base.borrow_mut().m_color_grading_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
-        ).unwrap();
-        self.m_base.borrow_mut().m_fxaa_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD]
-        ).unwrap();
-        self.m_base.borrow_mut().m_combine_ui_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
-        ).unwrap();
         debugdraw_manager.borrow_mut().update_after_recreate_swap_chain(rhi);
     }
 }

@@ -4,9 +4,11 @@ use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::in
 
 use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
+use crate::render_graph::graph_ui::RenderGraphUI;
 
 pub struct EditorUI {
     m_state: RefCell<State>,
+    m_render_graph_ui: RefCell<RenderGraphUI>,
     m_input_manager: Option<Rc<RefCell<EditorInputManager>>>,
     m_scene_manager: Option<Rc<RefCell<EditorSceneManager>>>,
     m_engine: Weak<RefCell<Engine>>,
@@ -16,6 +18,7 @@ impl Default for EditorUI {
     fn default() -> Self {
         Self {
             m_state: RefCell::new(State::default()),
+            m_render_graph_ui: RefCell::new(RenderGraphUI::default()),
             m_input_manager: None,
             m_scene_manager: None,
             m_engine: Weak::new(),
@@ -28,7 +31,7 @@ pub struct State {
     m_editor_menu_window_open: bool,
     m_asset_window_open: bool,
     m_game_engine_window_open: bool,
-    m_file_content_window_open:bool,
+    m_render_graph_window_open: bool,
     m_detail_window_open:bool,
     m_scene_lights_window_open:bool,
     m_scene_lights_data_window_open:bool,
@@ -41,7 +44,7 @@ impl WindowUI for EditorUI  {
             m_editor_menu_window_open: true,
             m_asset_window_open: true,
             m_game_engine_window_open: true,
-            m_file_content_window_open: true,
+            m_render_graph_window_open: true,
             m_detail_window_open: true,
             m_scene_lights_window_open: true,
             m_scene_lights_data_window_open: true,
@@ -111,18 +114,18 @@ impl EditorUI {
                 context_size[0] -= detail_w;
             }
 
-            let file_open = self.m_state.borrow().m_file_content_window_open;
-            if file_open {
-                let file_h = context_size[1] * 0.3;
-                let file_panel = ui_runtime.panel(
-                    "file_panel",
-                    "File Content",
-                    [context_offset[0], context_offset[1] + context_size[1] - file_h],
-                    [context_size[0], file_h],
+            let render_graph_open = self.m_state.borrow().m_render_graph_window_open;
+            if render_graph_open {
+                let graph_h = context_size[1] * 0.38;
+                let graph_panel = ui_runtime.panel(
+                    "render_graph_panel",
+                    "Render Graph",
+                    [context_offset[0], context_offset[1] + context_size[1] - graph_h],
+                    [context_size[0], graph_h],
                     UiPanelFlags::default(),
                 );
-                self.show_editor_file_context_window(&mut ui_runtime, &file_panel);
-                context_size[1] -= file_h;
+                self.show_render_graph_window(&mut ui_runtime, &graph_panel);
+                context_size[1] -= graph_h;
             }
 
             let world_open = self.m_state.borrow().m_asset_window_open;
@@ -227,8 +230,8 @@ impl EditorUI {
                     .menu_item_config("Game")
                     .build_with_ref(&mut self.m_state.borrow_mut().m_game_engine_window_open);
                 ui_runtime
-                    .menu_item_config("File Content")
-                    .build_with_ref(&mut self.m_state.borrow_mut().m_file_content_window_open);
+                    .menu_item_config("Render Graph")
+                    .build_with_ref(&mut self.m_state.borrow_mut().m_render_graph_window_open);
                 ui_runtime
                     .menu_item_config("Detail")
                     .build_with_ref(&mut self.m_state.borrow_mut().m_detail_window_open);
@@ -277,14 +280,8 @@ impl EditorUI {
         }
     }
 
-    fn show_editor_file_context_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
-        ui_runtime.push_text_ascii(
-            "File content window (todo)",
-            [panel.body_pos[0] + 6.0, panel.body_pos[1] + 6.0],
-            [8.0, 14.0],
-            [220, 225, 235, 255],
-            panel.clip_rect,
-        );
+    fn show_render_graph_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
+        self.m_render_graph_ui.borrow_mut().draw(ui_runtime, panel);
     }
 
     fn show_editor_detail_window(&mut self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {

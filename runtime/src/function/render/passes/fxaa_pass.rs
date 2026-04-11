@@ -1,4 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
@@ -7,7 +6,7 @@ use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRI
 
 pub struct FXAAPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
 }
 
@@ -20,10 +19,10 @@ impl FXAAPass {
     pub fn initialize(&mut self, info: &FXAAPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize();
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
-        self.setup_descriptor_layout(&info.rhi.borrow())?;
-        self.setup_pipelines(&info.rhi.borrow())?;
-        self.setup_descriptor_set(&info.rhi.borrow())?;
-        self.update_after_framebuffer_recreate(&info.rhi.borrow(), info.input_attachment)?;
+        self.setup_descriptor_layout(info.rhi)?;
+        self.setup_pipelines(info.rhi)?;
+        self.setup_descriptor_set(info.rhi)?;
+        self.update_after_framebuffer_recreate(info.rhi, info.input_attachment)?;
         Ok(())
     }
     pub fn draw(&self) {

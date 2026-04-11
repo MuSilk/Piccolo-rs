@@ -7,7 +7,7 @@ use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, inte
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub rhi: &'a VulkanRHI,
     pub config_manager: &'a ConfigManager
 }
 
@@ -31,13 +31,13 @@ impl UIPass {
     pub fn initialize(&mut self, info: &UIPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize();
 
-        self.font_texture = upload_font_texture(&info.rhi.borrow(), info.config_manager)?;
+        self.font_texture = upload_font_texture(info.rhi, info.config_manager)?;
 
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
-        self.setup_descriptor_layout(&info.rhi.borrow())?;
-        self.setup_pipelines(&info.rhi.borrow())?;
-        self.setup_descriptor_set(&info.rhi.borrow())?;
-        self.update_after_framebuffer_recreate(&info.rhi.borrow())?;
+        self.setup_descriptor_layout(info.rhi)?;
+        self.setup_pipelines(info.rhi)?;
+        self.setup_descriptor_set(info.rhi)?;
+        self.update_after_framebuffer_recreate(info.rhi)?;
         Ok(())
     }
     

@@ -137,7 +137,7 @@ pub struct RenderGraphAsset {
 ## 7. 渲染管线接入方案（渐进）
 
 ### 阶段 A：仅做“可视化 + 保存”
-- Editor 可编辑图并写入 `asset/render_graph/default_graph.toml`。
+- Editor 可编辑图并写入 `asset/render_graph/default_graph.json`。
 - Runtime 不消费该图（仅工具链验证）。
 
 ### 阶段 B：图驱动开关与顺序
@@ -154,31 +154,31 @@ pub struct RenderGraphAsset {
 
 ---
 
-## 8. 文件格式建议（先 TOML）
+## 8. 文件格式（当前 JSON，后续可扩展 TOML）
 
-建议新增：
-- `asset/render_graph/default_graph.toml`
-- `asset/render_graph/schema_version.toml`（可选）
+当前已使用：
+- `asset/render_graph/default_graph.json`
 
 示例（简化）：
-```toml
-version = 1
-
-[[nodes]]
-id = 1
-kind = "DirectionalShadow"
-name = "Directional Shadow"
-position = [120.0, 180.0]
-
-[[nodes]]
-id = 2
-kind = "MainCamera"
-name = "Main Camera"
-position = [420.0, 180.0]
-
-[[edges]]
-from_pin = 1001
-to_pin = 2001
+```json
+{
+  "nodes": [
+    {
+      "id": 1,
+      "kind": "DirectionalShadow",
+      "name": "Directional Shadow",
+      "position": [24.0, 28.0]
+    }
+  ],
+  "edges": [
+    {
+      "from_node": 1,
+      "from_port": "shadow_out",
+      "to_node": 2,
+      "to_port": "dir_shadow"
+    }
+  ]
+}
 ```
 
 ---
@@ -207,7 +207,60 @@ to_pin = 2001
 
 ---
 
-## 10. 风险与规避
+## 10. 当前进度快照（已完成）
+
+以下内容已落地到仓库：
+
+### Editor 已完成
+- 已接入 `Render Graph` 面板（`editor/src/editor_ui.rs`）。
+- 已新增模块：`editor/src/render_graph/`。
+- 已实现节点编辑基础交互：
+  - 节点选中高亮
+  - 节点拖拽
+  - 新增节点 / 删除节点
+  - 连线选中 / 删除连线
+- 已实现端口语义连线（不是节点级裸连线）：
+  - 输入口/输出口可点击
+  - 从输出口发起 pending link，点击输入口完成连接
+  - 连线按端口锚点绘制
+- 已实现连线校验：
+  - 禁止自环
+  - 禁止重复边
+  - 禁止形成环
+  - 端口类型必须匹配
+  - 单输入口仅允许一条入边
+- 已支持图文件保存/加载：
+  - `editor/src/render_graph/graph_io.rs`
+  - `asset/render_graph/default_graph.json`
+
+### Runtime 已完成
+- 已新增 `runtime/src/function/render/render_graph.rs` 作为 runtime 图结构入口（当前为基础结构体）。
+- `runtime/src/function/render.rs` 已导出 `render_graph` 模块。
+
+### 现状结论
+- 阶段 A：**完成**（并超出最小目标，已具备端口语义）。
+- 阶段 B：**可启动，但尚未完成**（runtime 尚未按图驱动真实调度）。
+
+---
+
+## 11. 阶段 B 启动条件与计划（下一步）
+
+### B 阶段目标（最小闭环）
+- Runtime 加载 `default_graph.json`。
+- 完成 `graph_compiler`：结构校验 + 环检测 + 拓扑排序。
+- `RenderPipeline` 增加 `use_render_graph` 开关。
+- `use_render_graph=true` 时，按编译顺序驱动现有 pass（先白名单映射，不改 RHI 资源模型）。
+
+### 计划拆分（建议）
+1. 在 `runtime/src/function/render/` 新增 `graph_compiler.rs`。
+2. 将 JSON 图资产转换为 runtime 可执行结构（可先复用 editor 同构字段）。
+3. 在 `render_pipeline.rs` 新增“固定模式 / 图模式”分支。
+4. 图模式先做顺序与开关控制，输出执行日志用于与固定管线比对。
+5. 稳定后再推进阶段 C（资源依赖映射）。
+
+---
+
+## 12. 风险与规避
 
 - 风险：UI 交互复杂度高（拖拽、连线、命中）  
   规避：先做最小交互，不一次性上缩放/框选/多选。
@@ -220,12 +273,27 @@ to_pin = 2001
 
 ---
 
-## 11. 近期可执行任务清单（直接开工）
+## 13. 近期可执行任务清单（更新）
 
-1. 在 `editor/src` 新增 `render_graph` 模块骨架与 `mod.rs` 导出。
-2. 在 `EditorUI` 增加 `Render Graph` 面板入口（先显示静态节点）。
-3. 增加 `graph_io.rs`，先硬编码保存/加载到 `asset/render_graph/default_graph.toml`。
-4. 在 `runtime` 新增 `render_graph/graph_asset.rs`，定义与 editor 对齐的数据结构。
-5. 给 `RenderPipeline` 增加 `use_render_graph` 配置入口（先只打印编译顺序，不改变 draw 行为）。
+已完成：
+1. `editor/src` 的 `render_graph` 模块骨架与核心文件。
+2. `EditorUI` 的 `Render Graph` 面板接入。
+3. `graph_io.rs` 保存/加载（JSON）。
+4. runtime `render_graph` 模块入口。
 
-以上 5 项完成后，你就有了“编辑器可编辑 + runtime 可读取 + 可验证执行计划”的最小闭环。
+待完成（阶段 B）：
+1. `runtime` 的 `graph_compiler`（校验 + 拓扑排序）。
+2. `RenderPipeline` 的 `use_render_graph` 开关与图驱动调度分支。
+3. 图驱动执行日志与固定管线对比验证。
+4. pass 白名单映射与缺失节点报错提示。
+
+完成以上后，即可认为阶段 B 基本达成，进入阶段 C 的资源依赖映射工作。
+
+
+## 依赖层级
+
+### 渲染顺序依赖
+maindraw -> debugdraw
+### framebuffer依赖
+directional_light_pass, point_light_pass ->
+### subpass依赖

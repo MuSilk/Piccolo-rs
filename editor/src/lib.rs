@@ -5,3 +5,4 @@ pub mod editor_input_manager;
 pub mod editor_scene_manager;
 pub mod editor_ui;
 pub mod editor;
+pub mod render_graph;

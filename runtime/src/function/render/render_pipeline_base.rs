@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use crate::{function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{color_grading_pass::ColorGradingPass, combine_ui_pass::CombineUIPass, directional_light_pass::DirectionalLightShadowPass, fxaa_pass::FXAAPass, main_camera_pass::MainCameraPass, pick_pass::PickPass, point_light_pass::PointLightShadowPass, tone_mapping_pass::ToneMappingPass, ui_pass::UIPass}, render_resource::RenderResource}, ui::window_ui::WindowUI}, resource::config_manager::ConfigManager};
+use crate::{function::{render::{debugdraw::debug_draw_manager::DebugDrawManager, interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::DirectionalLightShadowPass, main_camera_pass::MainCameraPass, pick_pass::PickPass, point_light_pass::PointLightShadowPass}, render_resource::RenderResource}, ui::window_ui::WindowUI}, resource::config_manager::ConfigManager};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,
@@ -15,11 +15,6 @@ pub struct RenderPipelineBase{
     pub m_directional_light_pass: DirectionalLightShadowPass,
     pub m_point_light_pass: PointLightShadowPass,
     pub m_main_camera_pass: MainCameraPass,
-    pub m_tone_mapping_pass: ToneMappingPass,
-    pub m_color_grading_pass: ColorGradingPass,
-    pub m_fxaa_pass: FXAAPass,
-    pub m_ui_pass: UIPass,
-    pub m_combine_ui_pass: CombineUIPass,
     pub m_pick_pass: PickPass,
 }
 
@@ -37,7 +32,7 @@ impl RenderPipelineBase{
     }   
 
     pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
-        self.m_ui_pass.initialize_ui_render_backend(window_ui);
+        self.m_main_camera_pass.m_ui_pass.initialize_ui_render_backend(window_ui);
     }
 
     pub fn destroy(&self) {

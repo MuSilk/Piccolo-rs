@@ -10,6 +10,8 @@ pub mod render_guid_allocator;
 pub mod render_helper;
 pub mod render_mesh;
 pub mod render_object;
+pub mod render_graph;
+pub mod graph_compiler;
 pub mod render_pass_base;
 pub mod render_pass;
 pub mod render_pipeline_base;

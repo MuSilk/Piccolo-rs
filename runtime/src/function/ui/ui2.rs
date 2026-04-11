@@ -121,6 +121,50 @@ impl UiRuntime {
         (frame, &self.draw_list)
     }
 
+    pub fn mouse_pos(&self) -> [f32; 2] {
+        self.current_input.mouse_pos
+    }
+
+    pub fn mouse_down(&self, button_index: usize) -> bool {
+        self.current_input
+            .mouse_down
+            .get(button_index)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    pub fn mouse_pressed(&self, button_index: usize) -> bool {
+        let curr = self
+            .current_input
+            .mouse_down
+            .get(button_index)
+            .copied()
+            .unwrap_or(false);
+        let prev = self
+            .prev_input
+            .mouse_down
+            .get(button_index)
+            .copied()
+            .unwrap_or(false);
+        curr && !prev
+    }
+
+    pub fn mouse_released(&self, button_index: usize) -> bool {
+        let curr = self
+            .current_input
+            .mouse_down
+            .get(button_index)
+            .copied()
+            .unwrap_or(false);
+        let prev = self
+            .prev_input
+            .mouse_down
+            .get(button_index)
+            .copied()
+            .unwrap_or(false);
+        !curr && prev
+    }
+
     pub fn push_colored_rect(
         &mut self, pos: [f32; 2], size: [f32; 2], color: [u8; 4], clip_rect: [f32; 4]
     ) {
