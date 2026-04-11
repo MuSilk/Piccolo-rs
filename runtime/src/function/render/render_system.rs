@@ -165,10 +165,6 @@ impl RenderSystem {
         &self.m_rhi
     }
 
-    pub fn initialize_ui_render_backend(&self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
-        self.m_render_pipeline.m_base.borrow_mut().initialize_ui_render_backend(window_ui);
-    }
-
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
         self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
     }

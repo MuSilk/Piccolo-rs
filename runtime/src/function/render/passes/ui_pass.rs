@@ -21,7 +21,6 @@ struct Texture {
 #[derive(Default)]
 pub struct UIPass {
     pub m_render_pass: RenderPass,
-    m_window_ui: Option<Weak<RefCell<dyn WindowUI>>>,
 
     font_texture: Texture,
     renderer_data: [RefCell<RendererData>; K_MAX_FRAMES_IN_FLIGHT],
@@ -45,10 +44,6 @@ impl UIPass {
         &self, 
         ui_runtime: &RefCell<UiRuntime>
     ) {
-        if let Some(window_ui) = self.m_window_ui.as_ref().and_then(|w| w.upgrade()) {
-            window_ui.borrow().pre_render();
-        }
-
         let color = [1.0;4];
         let rhi = self.m_render_pass.m_base.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
@@ -64,10 +59,6 @@ impl UIPass {
     
     pub fn update_after_framebuffer_recreate(&mut self, _rhi: &VulkanRHI) -> Result<()> {
         Ok(())
-    }
-
-    pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
-        self.m_window_ui = Some(Rc::downgrade(window_ui));
     }
 
     pub fn reload_font_texture(

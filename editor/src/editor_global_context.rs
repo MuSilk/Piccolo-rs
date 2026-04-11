@@ -1,4 +1,4 @@
-use std::{cell::{RefCell}, rc::{Rc, Weak}};
+use std::{cell::{RefCell}, rc::{Rc}};
 
 use runtime::{engine::Engine};
 
@@ -11,7 +11,6 @@ pub struct EditorGlobalContextCreateInfo<'a> {
 pub struct EditorGlobalContext {
     pub m_scene_manager: Rc<RefCell<EditorSceneManager>>,
     pub m_input_manager: Rc<RefCell<EditorInputManager>>,
-    m_engine_runtime: Weak<RefCell<Engine>>,
 }
 
 impl EditorGlobalContext {
@@ -20,7 +19,6 @@ impl EditorGlobalContext {
         let ctx = EditorGlobalContext {
             m_scene_manager: Rc::new(RefCell::new(EditorSceneManager::default())),
             m_input_manager: Rc::new(RefCell::new(EditorInputManager::default())),
-            m_engine_runtime: Rc::downgrade(init_info.engine_runtime),
         };
         ctx.m_scene_manager.borrow_mut().initialize();
         ctx.m_input_manager

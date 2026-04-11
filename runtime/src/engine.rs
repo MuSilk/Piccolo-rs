@@ -7,10 +7,17 @@ use crate::{function::{framework::world::world_manager::WorldManager, global::gl
 
 const S_FPS_ALPHA: f32 = 1.0 / 100.0;
 
+pub trait System {
+    fn initialize(&mut self, _engine: &Rc<RefCell<Engine>>) {}
+
+    fn tick(&mut self, _delta_time: f32) {}
+}
+
 pub struct Engine {
     m_runtime_context: RuntimeGlobalContext,
     m_is_quit: bool,
     m_state: RefCell<EngineState>,
+    pub systems: RefCell<Vec<Box<dyn System>>>,
 }
 
 struct EngineState {
@@ -34,14 +41,16 @@ impl Engine {
                 m_fps: 0,
                 m_is_editor_mode: false,
             }),
+            systems: Default::default() 
         }
     }
 
     pub fn resumed(&mut self, event_loop: &ActiveEventLoop, engine: Weak<RefCell<Engine>>) {
         self.m_runtime_context.resumed_instance(event_loop, engine);
     }
-    pub fn initialize(&mut self){
-        self.m_state.borrow_mut().m_last_tick_time_point = Instant::now();
+    pub fn initialize(engine: &Rc<RefCell<Engine>>){
+        engine.borrow().m_state.borrow_mut().m_last_tick_time_point = Instant::now();
+        engine.borrow().systems.borrow_mut().iter_mut().for_each(|s| s.initialize(&engine));
     }
 
     pub fn shutdown_engine(&self){
@@ -108,6 +117,8 @@ impl Engine {
             ui_runtime.set_viewport(viewport);
             ui_runtime.new_frame();
         }
+
+        self.systems.borrow_mut().iter_mut().for_each(|s|s.tick(delta_time));
 
         self.m_runtime_context.world_manager().borrow_mut().tick(
             &self,

@@ -31,10 +31,6 @@ impl RenderPipelineBase{
         debugdraw_manager.prepare_pass_data(render_resource);
     }   
 
-    pub fn initialize_ui_render_backend(&mut self, window_ui: &Rc<RefCell<dyn WindowUI>>) {
-        self.m_main_camera_pass.m_ui_pass.initialize_ui_render_backend(window_ui);
-    }
-
     pub fn destroy(&self) {
         self.m_main_camera_pass.destroy();
     }

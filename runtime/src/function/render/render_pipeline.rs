@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 
-use crate::{core::math::vector2::Vector2, function::{render::{passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}}}};
+use crate::{core::math::vector2::Vector2, function::{render::{ passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass_base::RenderPassCommonInfo, render_pipeline_base::{RenderPipelineBase, RenderPipelineCreateInfo}, render_resource::RenderResource}, ui::ui2::UiRuntime}};
 
 
 pub struct RenderPipeline {

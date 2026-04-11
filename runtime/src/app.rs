@@ -3,17 +3,10 @@ use std::{cell::RefCell, env, rc::Rc};
 use anyhow::anyhow;
 use winit::{application::ApplicationHandler, event::{DeviceEvent, DeviceId, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
 
-use crate::{engine::Engine, function::framework::{scene::scene::SceneTrait}};
+use crate::{engine::{Engine, System}, function::framework::scene::scene::SceneTrait};
 
 pub struct App{
     engine: Rc<RefCell<Engine>>,
-    systems: Vec<Box<dyn System>>,
-}
-
-pub trait System {
-    fn initialize(&mut self, _engine: &Rc<RefCell<Engine>>) {}
-
-    fn tick(&mut self, _delta_time: f32) {}
 }
 
 impl App {
@@ -26,7 +19,6 @@ impl App {
         ).unwrap().join("PiccoloEditor.ini");
         Self { 
             engine: Rc::new(RefCell::new(Engine::new(&config_file_path))), 
-            systems: Default::default() 
         }
     }
     pub fn run(&mut self) {
@@ -36,7 +28,7 @@ impl App {
     }
 
     pub fn add_system<T>(&mut self, system: T) where T: System + 'static {
-        self.systems.push(Box::new(system));
+        self.engine.borrow_mut().systems.borrow_mut().push(Box::new(system));
     }
 
     pub fn add_scene<T: SceneTrait + 'static>(&mut self, scene: T) {
@@ -60,8 +52,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let engine_weak = Rc::downgrade(&self.engine);
         self.engine.borrow_mut().resumed(event_loop, engine_weak);
-        self.engine.borrow_mut().initialize();
-        self.systems.iter_mut().for_each(|s| s.initialize(&self.engine));
+        Engine::initialize(&self.engine);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
@@ -76,7 +67,6 @@ impl ApplicationHandler for App {
                 };
                 if !event_loop.exiting() &&!minimized {
                     let delta_time = self.engine.borrow().calculate_delta_time();
-                    self.systems.iter_mut().for_each(|s|s.tick(delta_time));
                     if !self.engine.borrow().tick_one_frame(delta_time).unwrap() {
                         event_loop.exit();
                     }  

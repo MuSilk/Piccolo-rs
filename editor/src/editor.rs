@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::{Rc, Weak}};
 
-use runtime::{app, engine::{Engine}, function::{ui::window_ui::{WindowUI, WindowUIInitInfo}}};
+use runtime::{engine::{self, Engine}, function::ui::window_ui::{WindowUI, WindowUIInitInfo}};
 
 use crate::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCreateInfo}, editor_ui::EditorUI};
 
@@ -22,7 +22,7 @@ impl Default for Editor {
     }
 }
 
-impl app::System for Editor {
+impl engine::System for Editor {
     fn initialize(&mut self, engine_runtime: &Rc<RefCell<Engine>>){
         engine_runtime.borrow().set_editor_mode(true);
         self.m_engine_runtime = Rc::downgrade(engine_runtime);
@@ -49,14 +49,12 @@ impl app::System for Editor {
         self.m_editor_ui.borrow_mut().initialize(WindowUIInitInfo{
             engine: engine_runtime,
         });
-
-        let window_ui: Rc<RefCell<dyn WindowUI>> = self.m_editor_ui.clone();
-        render_system.borrow_mut().initialize_ui_render_backend(&window_ui);
     }
 
     fn tick(&mut self, _delta_time: f32) {
         self.m_editor_runtime.as_ref().unwrap().m_input_manager.borrow().tick(
             &self.m_editor_runtime.as_ref().unwrap().m_scene_manager.borrow()
         );
+        self.m_editor_ui.borrow().pre_render();
     }
 }
