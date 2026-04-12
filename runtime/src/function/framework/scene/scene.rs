@@ -2,7 +2,7 @@ use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, ha
 
 use itertools::Itertools;
 
-use crate::{engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, input::input_system::InputSystem, render::{render_object::GameObjectDesc, render_system::RenderSystem}}};
+use crate::{engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, input::input_system::InputSystem, render::{render_object::{GameObjectDesc, GameObjectMeshDesc}, render_system::RenderSystem}}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -225,7 +225,14 @@ impl Scene {
         self.query_pair_mut::<MeshComponent, TransformComponent>()
             .for_each(|(mut mesh, mut transform)| 
         {
-            if transform.is_dirty() {
+            // 动态网格仅改顶点/索引时不会动 Transform，但渲染上传依赖本处入队；须同时检查 DynamicMesh::m_is_dirty。
+            let dynamic_mesh_dirty = mesh.m_raw_meshes.iter().any(|part| {
+                matches!(
+                    &part.m_mesh_desc,
+                    GameObjectMeshDesc::DynamicMesh(d) if d.borrow().m_is_dirty
+                )
+            });
+            if transform.is_dirty() || dynamic_mesh_dirty {
                 let mut dirty_mesh_parts = vec![];
                 for mesh_part in &mut mesh.m_raw_meshes {
                     let object_transform_matrix = mesh_part.m_transform_desc.m_transform_matrix;

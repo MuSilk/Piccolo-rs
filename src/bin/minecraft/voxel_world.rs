@@ -1,4 +1,6 @@
-//! 体素世界：固定范围网格 + 解析高度场 + 面剔除网格；与 `minecraft::world` 等实现无关。
+//! 体素世界：程序化高度场 + 以玩家为中心的环形区块网格（单动态网格合并），碰撞对任意世界坐标采样，地形在水平方向可无限延伸。
+//!
+//! 资源使用 `editor/asset/minecraft/block.json`（运行时路径 `asset/minecraft/block.json`）。
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -25,9 +27,12 @@ struct BlockMeshJson {
     m_mesh_res: MeshComponentRes,
 }
 
-pub const WX: i32 = 48;
-pub const WY: i32 = 48;
+/// 竖直方向体素层数（与高度场上限一致）。
 pub const WZ: i32 = 96;
+/// 水平向区块边长（体素），与常见 MC 区块宽度一致便于理解。
+pub const CHUNK_SIZE: i32 = 16;
+/// 以玩家所在区块为中心，Chebyshev 距离 `<=` 该值内的区块参与网格生成（含边界）。
+const VIEW_RADIUS_CHUNKS: i32 = 3;
 
 const ATLAS: f32 = 16.0;
 
@@ -40,29 +45,79 @@ pub enum VoxelKind {
     Stone = 3,
 }
 
-impl VoxelKind {
-    fn from_u8(v: u8) -> Self {
-        match v {
-            1 => Self::Grass,
-            2 => Self::Dirt,
-            3 => Self::Stone,
-            _ => Self::Air,
-        }
-    }
+fn world_chunk_coords(wx: i32, wy: i32) -> (i32, i32) {
+    (wx.div_euclid(CHUNK_SIZE), wy.div_euclid(CHUNK_SIZE))
 }
 
-fn cell_index(x: i32, y: i32, z: i32) -> Option<usize> {
-    if x < 0 || y < 0 || z < 0 || x >= WX || y >= WY || z >= WZ {
-        return None;
-    }
-    Some((x + WX * (y + WY * z)) as usize)
+/// 格点伪随机 \([0,1)\)，无三角函数，地形在大尺度上不再呈简单周期。
+fn lattice_noise01(ix: i32, iy: i32) -> f32 {
+    let mut n = (ix as u32)
+        .wrapping_mul(0x9E37_79B1)
+        ^ (iy as u32).wrapping_mul(0x85EB_CA6B);
+    n = n.wrapping_mul(n | 1);
+    n ^= n >> 16;
+    n = n.wrapping_mul(0x7FEB_352D);
+    n ^= n >> 15;
+    (n as f32) * (1.0 / u32::MAX as f32)
 }
 
+fn smoothstep3(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// 连续 2D 值噪声 \([0,1]\)。
+fn value_noise_2d(x: f32, y: f32) -> f32 {
+    let x0f = x.floor();
+    let y0f = y.floor();
+    let x0 = x0f as i32;
+    let y0 = y0f as i32;
+    let tx = smoothstep3(x - x0f);
+    let ty = smoothstep3(y - y0f);
+    let n00 = lattice_noise01(x0, y0);
+    let n10 = lattice_noise01(x0 + 1, y0);
+    let n01 = lattice_noise01(x0, y0 + 1);
+    let n11 = lattice_noise01(x0 + 1, y0 + 1);
+    let ix0 = n00 + (n10 - n00) * tx;
+    let ix1 = n01 + (n11 - n01) * tx;
+    ix0 + (ix1 - ix0) * ty
+}
+
+/// 多倍频叠加，近似 `-1..1`，再映射到体素层高。
 fn surface_height(wx: i32, wy: i32) -> i32 {
-    let fx = wx as f32 * 0.11;
-    let fy = wy as f32 * 0.13;
-    let h = 18.0 + 16.0 * (fx.sin() + 0.6 * fy.cos()).clamp(-1.2, 1.2);
+    let x = wx as f32;
+    let y = wy as f32;
+    let mut acc = 0.0_f32;
+    let mut wsum = 0.0_f32;
+    let mut freq = 0.034_f32;
+    let mut w = 1.0_f32;
+    for _ in 0..5 {
+        let n = value_noise_2d(x * freq, y * freq * 1.09);
+        acc += (n - 0.5) * 2.0 * w;
+        wsum += w;
+        freq *= 2.08;
+        w *= 0.5;
+    }
+    let n = (acc / wsum).clamp(-1.0, 1.0);
+    let h = 22.0 + 20.0 * n;
     h.clamp(8.0, (WZ - 4) as f32) as i32
+}
+
+fn world_voxel(wx: i32, wy: i32, wz: i32) -> VoxelKind {
+    if wz < 0 || wz >= WZ {
+        return VoxelKind::Air;
+    }
+    let top = surface_height(wx, wy);
+    if wz >= top {
+        return VoxelKind::Air;
+    }
+    if wz == top - 1 {
+        VoxelKind::Grass
+    } else if wz >= top - 3 {
+        VoxelKind::Dirt
+    } else {
+        VoxelKind::Stone
+    }
 }
 
 /// `face` 与下方 `neighbors` 一致：0..3 为竖直面，4=+Z 顶，5=-Z 底。
@@ -102,17 +157,17 @@ fn transform_corner(v: &mut MeshVertexDataDefinition, origin: Vector3, m: &Matri
     v.z = p.z + origin.z;
 }
 
-/// 在体素 (ix,iy,iz) 上为朝 +X 的外露面生成四顶点（局部 0..1 立方体再平移）。
+/// 在世界体素坐标 `(wx,wy,wz)` 上为外露面生成四顶点（局部 0..1 立方体再平移）。
 fn emit_faces_for_cell(
-    ix: i32,
-    iy: i32,
-    iz: i32,
+    wx: i32,
+    wy: i32,
+    wz: i32,
     kind: VoxelKind,
     get: impl Fn(i32, i32, i32) -> VoxelKind,
     verts: &mut Vec<MeshVertexDataDefinition>,
     idx: &mut Vec<u32>,
 ) {
-    let o = Vector3::new(ix as f32, iy as f32, iz as f32);
+    let o = Vector3::new(wx as f32, wy as f32, wz as f32);
     let neighbors = [
         (1i32, 0, 0),
         (-1, 0, 0),
@@ -122,7 +177,7 @@ fn emit_faces_for_cell(
         (0, 0, -1),
     ];
     for (fi, &(dx, dy, dz)) in neighbors.iter().enumerate() {
-        let nk = get(ix + dx, iy + dy, iz + dz);
+        let nk = get(wx + dx, wy + dy, wz + dz);
         if nk != VoxelKind::Air {
             continue;
         }
@@ -483,66 +538,50 @@ fn emit_faces_for_cell(
     }
 }
 
-fn build_mesh(cells: &[u8]) -> GameObjectDynamicMeshDesc {
+fn build_world_mesh(center_cx: i32, center_cy: i32, radius: i32) -> GameObjectDynamicMeshDesc {
     let mut verts = Vec::new();
     let mut indices = Vec::new();
-    let get = |x: i32, y: i32, z: i32| -> VoxelKind {
-        cell_index(x, y, z)
-            .map(|i| VoxelKind::from_u8(cells[i]))
-            .unwrap_or(VoxelKind::Air)
-    };
-    for z in 0..WZ {
-        for y in 0..WY {
-            for x in 0..WX {
-                let k = get(x, y, z);
+    let get = |x: i32, y: i32, z: i32| world_voxel(x, y, z);
+    let span = CHUNK_SIZE * (radius * 2 + 1);
+    let x0 = (center_cx - radius) * CHUNK_SIZE;
+    let y0 = (center_cy - radius) * CHUNK_SIZE;
+    for lz in 0..WZ {
+        for ly in 0..span {
+            for lx in 0..span {
+                let wx = x0 + lx;
+                let wy = y0 + ly;
+                let k = get(wx, wy, lz);
                 if k == VoxelKind::Air {
                     continue;
                 }
-                emit_faces_for_cell(x, y, z, k, &get, &mut verts, &mut indices);
+                emit_faces_for_cell(wx, wy, lz, k, &get, &mut verts, &mut indices);
             }
         }
     }
     let mut mesh = GameObjectDynamicMeshDesc::default();
     mesh.m_is_dirty = true;
-    mesh.m_mesh_file = "minecraft_ai_voxel_world.mesh".to_string();
+    mesh.m_mesh_file = "minecraft_streaming_voxel_world.mesh".to_string();
     mesh.m_vertices = verts;
     mesh.m_indices = indices;
     mesh
 }
 
 pub struct VoxelWorld {
-    cells: Vec<u8>,
     pub mesh: Rc<RefCell<GameObjectDynamicMeshDesc>>,
+    streaming_center_chunk: Option<(i32, i32)>,
 }
 
 impl VoxelWorld {
     pub fn new_box(engine: &Engine, scene: &mut Scene) -> Box<Self> {
-        let n = (WX * WY * WZ) as usize;
-        let mut cells = vec![0u8; n];
-        for y in 0..WY {
-            for x in 0..WX {
-                let top = surface_height(x, y);
-                for z in 0..top {
-                    let t = if z == top - 1 {
-                        VoxelKind::Grass
-                    } else if z >= top - 3 {
-                        VoxelKind::Dirt
-                    } else {
-                        VoxelKind::Stone
-                    };
-                    if let Some(i) = cell_index(x, y, z) {
-                        cells[i] = t as u8;
-                    }
-                }
-            }
-        }
-        let mesh = Rc::new(RefCell::new(build_mesh(&cells)));
+        let spawn_xy = (8i32, 8i32);
+        let (icx, icy) = world_chunk_coords(spawn_xy.0, spawn_xy.1);
+        let mesh = Rc::new(RefCell::new(build_world_mesh(icx, icy, VIEW_RADIUS_CHUNKS)));
         let object_id = scene.spawn();
         let asset_manager = engine.asset_manager();
         let config_manager = engine.config_manager();
         let mesh_res = asset_manager
-            .load_asset::<BlockMeshJson>(config_manager, "asset/minecraft-ai/block.json")
-            .expect("asset/minecraft-ai/block.json")
+            .load_asset::<BlockMeshJson>(config_manager, "asset/minecraft/block.json")
+            .expect("asset/minecraft/block.json")
             .m_mesh_res;
         let mut mesh_component = Box::new(MeshComponent::default());
         mesh_component.post_load_resource(object_id, asset_manager, config_manager, &mesh_res);
@@ -555,14 +594,29 @@ impl VoxelWorld {
             RefCell::new(transform),
         ];
         scene.create_object(object_id, components);
-        Box::new(Self { cells, mesh })
+        Box::new(Self {
+            mesh,
+            streaming_center_chunk: Some((icx, icy)),
+        })
+    }
+
+    /// 当玩家进入新区块时重建可见范围合并网格（程序化地形，水平方向无硬边界）。
+    pub fn update_streaming(&mut self, player_position: &Vector3) {
+        let wx = player_position.x.floor() as i32;
+        let wy = player_position.y.floor() as i32;
+        let (cx, cy) = world_chunk_coords(wx, wy);
+        if self.streaming_center_chunk == Some((cx, cy)) {
+            return;
+        }
+        self.streaming_center_chunk = Some((cx, cy));
+        *self.mesh.borrow_mut() = build_world_mesh(cx, cy, VIEW_RADIUS_CHUNKS);
     }
 
     pub fn suggested_spawn() -> Vector3 {
-        let x = WX as f32 * 0.5;
-        let y = WY as f32 * 0.5;
-        let z = surface_height((x as i32).clamp(0, WX - 1), (y as i32).clamp(0, WY - 1)) as f32 + 4.0;
-        Vector3::new(x, y, z)
+        let sx = 8i32;
+        let sy = 8i32;
+        let z = surface_height(sx, sy) as f32 + 4.0;
+        Vector3::new(sx as f32, sy as f32, z)
     }
 
     pub fn collect_block_hits(&self, area: &AxisAlignedBox) -> Vec<AxisAlignedBox> {
@@ -576,10 +630,7 @@ impl VoxelWorld {
         for ix in x0..=x1 {
             for iy in y0..=y1 {
                 for iz in z0..=z1 {
-                    let Some(i) = cell_index(ix, iy, iz) else {
-                        continue;
-                    };
-                    if self.cells[i] == 0 {
+                    if world_voxel(ix, iy, iz) == VoxelKind::Air {
                         continue;
                     }
                     out.push(AxisAlignedBox::new(

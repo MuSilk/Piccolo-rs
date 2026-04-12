@@ -93,6 +93,17 @@ impl SceneTrait for GameScene {
                     }
                     character.m_position = *motor.get_target_position();
                 });
+            let player_pos = self
+                .inner
+                .query_mut::<CharacterComponent>()
+                .next()
+                .map(|c| c.m_position);
+            if let (Some(world_rc), Some(pos)) = (
+                self.inner.get_mut_resource::<Rc<RefCell<Box<VoxelWorld>>>>(),
+                player_pos,
+            ) {
+                world_rc.borrow_mut().update_streaming(&pos);
+            }
             let input = engine.input_system().borrow();
             let render = engine.render_system().borrow();
             self.inner
