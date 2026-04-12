@@ -34,6 +34,7 @@ pub struct WindowSystem{
     m_width: u32,
     m_height: u32,
     m_is_focus_mode: Cell<bool>,
+    m_should_close: Cell<bool>,
     m_minimized: bool,
 
     m_on_key_func: Vec<Box<OnKeyFunc>>,
@@ -80,8 +81,12 @@ impl WindowSystem {
         self.m_window.as_ref().unwrap().request_redraw();
     }
 
+    pub fn request_close(&self) {
+        self.m_should_close.set(true);
+    }
+
     pub fn should_close(&self) -> bool {
-        false
+        self.m_should_close.get()
     }
 
     pub fn register_on_key_func<F>(&mut self, f: F) 

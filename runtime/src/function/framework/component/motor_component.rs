@@ -129,31 +129,30 @@ impl MotorComponent {
     }
 
     fn calculate_desired_move_direction(&mut self, command: &GameCommand, rotation: &Quaternion) {
-        if !self.m_is_landing { 
-            let forward_dir = rotation * Vector3::NEGATIVE_UNIT_Y;
-            let left_dir = rotation * Vector3::UNIT_X;
+        // 落地时也要根据输入更新水平方向，否则无法行走。
+        let forward_dir = rotation * Vector3::NEGATIVE_UNIT_Y;
+        let left_dir = rotation * Vector3::UNIT_X;
 
-            if !command.is_empty() {
-                self.m_desired_horizontal_move_direction = Vector3::ZERO;
-            }
-
-            if command.contains(GameCommand::forward) {
-                self.m_desired_horizontal_move_direction += forward_dir;
-            }
-
-            if command.contains(GameCommand::backward) {
-                self.m_desired_horizontal_move_direction -= forward_dir;
-            }
-
-            if command.contains(GameCommand::left) {
-                self.m_desired_horizontal_move_direction += left_dir;
-            }
-
-            if command.contains(GameCommand::right) {
-                self.m_desired_horizontal_move_direction -= left_dir;
-            }
-            self.m_desired_horizontal_move_direction = self.m_desired_horizontal_move_direction.normalize();
+        if !command.is_empty() {
+            self.m_desired_horizontal_move_direction = Vector3::ZERO;
         }
+
+        if command.contains(GameCommand::forward) {
+            self.m_desired_horizontal_move_direction += forward_dir;
+        }
+
+        if command.contains(GameCommand::backward) {
+            self.m_desired_horizontal_move_direction -= forward_dir;
+        }
+
+        if command.contains(GameCommand::left) {
+            self.m_desired_horizontal_move_direction += left_dir;
+        }
+
+        if command.contains(GameCommand::right) {
+            self.m_desired_horizontal_move_direction -= left_dir;
+        }
+        self.m_desired_horizontal_move_direction = self.m_desired_horizontal_move_direction.normalize();
     }
 
     fn calculate_desired_displacement(&mut self, delta_time: f32) {

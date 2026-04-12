@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
-use runtime::{core::math::{transform::Transform, vector3::Vector3}, engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, motor_component::MotorComponent, transform_component::TransformComponent}, resource::component::motor::MotorComponentRes, scene::scene::SceneTrait}}};
+use runtime::{core::math::{transform::Transform, vector3::Vector3}, engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, transform_component::TransformComponent}, resource::component::motor::MotorComponentRes, scene::scene::SceneTrait}}};
 
-use crate::{ecs::controller::CharacterController, world::World};
+use crate::{ecs::controller::CharacterController, minecraft_motor_component::MinecraftMotorComponent, world::World};
 
 
 pub struct Scene {
@@ -31,7 +31,7 @@ impl SceneTrait for Scene {
         trans.set_position(Vector3::new(64.0, 64.0, 256.0));
         transform.post_load_resource(trans);
         let controller = Box::new(CharacterController::new(world));
-        let mut motor = Box::new(MotorComponent::new(controller));
+        let mut motor = Box::new(MinecraftMotorComponent::new(controller));
         let asset_manager = engine.asset_manager();
         let config_manager = engine.config_manager();
         let motor_res: MotorComponentRes = asset_manager
@@ -66,7 +66,7 @@ impl SceneTrait for Scene {
 
         if !engine.is_editor_mode() {
 
-            self.scene.query_triple_mut::<CharacterComponent, TransformComponent, MotorComponent>()
+            self.scene.query_triple_mut::<CharacterComponent, TransformComponent, MinecraftMotorComponent>()
             .for_each(|(mut character, mut transform, mut motor)|
             {
                 let input_system = engine.input_system().borrow();

@@ -59,14 +59,13 @@ impl CameraComponent {
         let q_yaw = Quaternion::from_angle_axis(input_system.m_cursor_delta_yaw, &Vector3::UNIT_Z);
         let q_pitch = Quaternion::from_angle_axis(input_system.m_cursor_delta_pitch, &self.m_left);
 
-        let offset = if let CameraParameter::FirstPerson(param) = &self.m_camera_res.m_parameter {
-            param.m_vertical_offset
-        } 
-        else {
+        let (offset, h_eye) = if let CameraParameter::FirstPerson(param) = &self.m_camera_res.m_parameter {
+            (param.m_vertical_offset, param.m_horizontal_eye_offset)
+        } else {
             panic!("Invalid camera parameter");
         };
-        
-        self.m_position = character.get_position() + Vector3::UNIT_Z * offset;
+
+        self.m_position = character.get_position() + h_eye + Vector3::UNIT_Z * offset;
 
         self.m_forward = q_yaw * q_pitch * self.m_forward;
         self.m_left = q_yaw * q_pitch * self.m_left;

@@ -5,6 +5,7 @@ mod block_res;
 mod block;
 mod ecs;
 mod chunk;
+mod minecraft_motor_component;
 mod world;
 mod scene;
 

@@ -1,0 +1,7 @@
+{
+  "base_colour_texture_file": "asset/minecraft-ai/texture/block.png",
+  "metallic_roughness_texture_file": "asset/minecraft-ai/texture/mr.jpg",
+  "normal_texture_file": "asset/minecraft-ai/texture/normal.jpg",
+  "occlusion_texture_file": "",
+  "emissive_texture_file": ""
+}

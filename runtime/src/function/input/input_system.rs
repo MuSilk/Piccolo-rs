@@ -55,6 +55,12 @@ impl InputSystem {
         event: &KeyEvent, 
         is_synthetic: bool
     ) {
+        if event.state == ElementState::Pressed {
+            if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key {
+                engine.window_system().borrow().request_close();
+                return;
+            }
+        }
         if !engine.is_editor_mode() {
             let window_system = engine.window_system().borrow();
             self.on_key_in_game_mode(&window_system, device_id, event, is_synthetic);

@@ -68,6 +68,7 @@ impl ApplicationHandler for App {
                 if !event_loop.exiting() &&!minimized {
                     let delta_time = self.engine.borrow().calculate_delta_time();
                     if !self.engine.borrow().tick_one_frame(delta_time).unwrap() {
+                        self.engine.borrow().shutdown_engine();
                         event_loop.exit();
                     }  
                 }

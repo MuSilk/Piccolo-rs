@@ -11,7 +11,10 @@ pub struct CharacterController{
 
 impl CharacterController {
     pub fn new(world: Rc<RefCell<Box<World>>>) -> Self {
-        Self { world , half_extent: Vector3::new(0.2, 0.2, 0.9) }
+        Self {
+            world,
+            half_extent: Vector3::new(0.34, 0.34, 0.9),
+        }
     }
 }
 
