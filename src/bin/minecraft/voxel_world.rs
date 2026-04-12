@@ -1,8 +1,10 @@
 //! 体素世界：程序化高度场 + 以玩家为中心的环形区块网格（单动态网格合并），碰撞对任意世界坐标采样，地形在水平方向可无限延伸。
 //!
 //! 资源使用 `editor/asset/minecraft/block.json`（运行时路径 `asset/minecraft/block.json`）。
+//!
+//! 区块切换时网格合并 `build_world_mesh` 计算量大；在后台线程构建、主线程每帧取回结果，避免逻辑帧长时间卡住。
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, thread::JoinHandle};
 
 use serde::Deserialize;
 use runtime::{
@@ -568,7 +570,11 @@ fn build_world_mesh(center_cx: i32, center_cy: i32, radius: i32) -> GameObjectDy
 
 pub struct VoxelWorld {
     pub mesh: Rc<RefCell<GameObjectDynamicMeshDesc>>,
+    /// 当前已提交到 `mesh` 的区块中心（与碰撞程序化采样无关，仅用于流式刷新判定）。
     streaming_center_chunk: Option<(i32, i32)>,
+    /// 正在后台构建的网格对应的中心区块（`JoinHandle` 存在时有效）。
+    pending_center_chunk: Option<(i32, i32)>,
+    mesh_build_join: Option<JoinHandle<GameObjectDynamicMeshDesc>>,
 }
 
 impl VoxelWorld {
@@ -597,19 +603,53 @@ impl VoxelWorld {
         Box::new(Self {
             mesh,
             streaming_center_chunk: Some((icx, icy)),
+            pending_center_chunk: None,
+            mesh_build_join: None,
         })
     }
 
     /// 当玩家进入新区块时重建可见范围合并网格（程序化地形，水平方向无硬边界）。
+    ///
+    /// 网格在独立线程中生成，避免单帧内主线程阻塞；若玩家在构建完成前又离开该区块，会丢弃过时结果并在下一帧发起新构建。
     pub fn update_streaming(&mut self, player_position: &Vector3) {
         let wx = player_position.x.floor() as i32;
         let wy = player_position.y.floor() as i32;
         let (cx, cy) = world_chunk_coords(wx, wy);
+
+        let join_finished = match &self.mesh_build_join {
+            Some(h) => h.is_finished(),
+            None => false,
+        };
+        if join_finished {
+            let handle = self.mesh_build_join.take().unwrap();
+            match handle.join() {
+                Ok(new_mesh) => {
+                    // 仅当玩家仍停留在为该次构建请求的区块时提交，否则丢弃（避免快速折返时闪旧网格）。
+                    if self.pending_center_chunk == Some((cx, cy)) {
+                        *self.mesh.borrow_mut() = new_mesh;
+                        self.streaming_center_chunk = Some((cx, cy));
+                    }
+                    self.pending_center_chunk = None;
+                }
+                Err(_) => {
+                    self.pending_center_chunk = None;
+                }
+            }
+        }
+
         if self.streaming_center_chunk == Some((cx, cy)) {
             return;
         }
-        self.streaming_center_chunk = Some((cx, cy));
-        *self.mesh.borrow_mut() = build_world_mesh(cx, cy, VIEW_RADIUS_CHUNKS);
+
+        if self.mesh_build_join.is_some() {
+            return;
+        }
+
+        self.pending_center_chunk = Some((cx, cy));
+        let radius = VIEW_RADIUS_CHUNKS;
+        self.mesh_build_join = Some(std::thread::spawn(move || {
+            build_world_mesh(cx, cy, radius)
+        }));
     }
 
     /// 与 `world_voxel` 一致：`surface_height` 为该列**最低空气体素**的 z 索引，即草方块顶面所在世界高度。
