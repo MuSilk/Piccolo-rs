@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use runtime::{core::math::{matrix4::Matrix4x4, vector3::Vector3}, function::{framework::component::component::{Component, ComponentTrait}, render::{render_object::GameObjectDynamicMeshDesc, render_type::MeshVertexDataDefinition}}};
+use runtime::{ComponentTrait, core::math::{matrix4::Matrix4x4, vector3::Vector3}, function::{render::{render_object::GameObjectDynamicMeshDesc, render_type::MeshVertexDataDefinition}}};
 
 use crate::block::{self, BLOCK_TEXTURE_DIM, Block, BlockType, FACE_DIRECTION_OFFSETS};
 
@@ -16,28 +16,9 @@ pub struct ChunkData {
     pub blocks: [Rc<Block>; CHUNK_SIZE],
 }
 
-#[derive(Clone)]
+#[derive(Clone, ComponentTrait)]
 pub struct Chunk {
-    pub m_component: Component,
     pub data: ChunkData,
-}
-
-impl ComponentTrait for Chunk  {
-    fn get_component(&self) ->  &Component {
-        &self.m_component
-    }
-
-    fn get_component_mut(&mut self) ->  &mut Component {
-        &mut self.m_component
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }   
 }
 
 impl Chunk {

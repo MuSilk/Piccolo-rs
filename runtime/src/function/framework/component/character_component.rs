@@ -1,9 +1,10 @@
-use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::framework::component::{camera_component::CameraMode, component::{Component, ComponentTrait}}};
+use runtime_derive::ComponentTrait;
+
+use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::framework::component::{camera_component::CameraMode}};
 
 
-#[derive(Clone)]
+#[derive(Clone, ComponentTrait)]
 pub struct CharacterComponent {
-    m_component: Component,
 
     pub m_position: Vector3,
     pub m_rotation: Quaternion,
@@ -15,26 +16,10 @@ pub struct CharacterComponent {
     pub m_is_free_camera: bool,
 }
 
-impl ComponentTrait for CharacterComponent {
-    fn get_component(&self) -> &Component {
-        &self.m_component
-    }
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.m_component
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
-
 impl CharacterComponent {
 
     pub fn new() -> Self {
         Self {
-            m_component: Component::default(),
             m_position: Vector3::new(0.0, 0.0, 0.0),
             m_rotation: Quaternion::identity(),
 

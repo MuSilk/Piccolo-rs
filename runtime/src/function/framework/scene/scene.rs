@@ -181,9 +181,6 @@ impl Scene {
             ids.hash(&mut hasher);
             hasher.finish() as usize
         };
-        for component in &components {
-            component.borrow_mut().set_parent_object(object_id);
-        }
 
         if self.m_archetypes.get(&archetype_type_id).is_none() {
             let mut archetype = Archetype::default();
@@ -242,7 +239,7 @@ impl Scene {
                 let render_swap_context = render_system.get_swap_context();
                 let logic_swap_data = render_swap_context.get_logic_swap_data();
                 transform.set_dirty_flag(false);
-                logic_swap_data.borrow_mut().add_dirty_game_object(&GameObjectDesc::new(mesh.m_component.m_parent_object, dirty_mesh_parts));
+                logic_swap_data.borrow_mut().add_dirty_game_object(&GameObjectDesc::new(mesh.m_parent_object, dirty_mesh_parts));
             }
         });
     }

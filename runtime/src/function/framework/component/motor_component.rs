@@ -1,12 +1,13 @@
-use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{component::{Component, ComponentTrait}, transform_component::TransformComponent}, resource::component::motor::MotorComponentRes}, input::input_system::{GameCommand, InputSystem}}};
+use runtime_derive::ComponentTrait;
+
+use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{transform_component::TransformComponent}, resource::component::motor::MotorComponentRes}, input::input_system::{GameCommand, InputSystem}}};
 
 pub trait Controller{
     fn r#move(&self, current_position: &Vector3, displacement: &Vector3) -> Vector3;
 }
 
-
+#[derive(ComponentTrait)]
 pub struct MotorComponent {
-    m_component: Component,
 
     m_motor_res: MotorComponentRes,
     
@@ -25,26 +26,10 @@ pub struct MotorComponent {
     m_is_landing: bool,
 }
 
-impl ComponentTrait for MotorComponent {
-    fn get_component(&self) -> &Component {
-        &self.m_component
-    }
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.m_component
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
-
 impl MotorComponent {
 
     pub fn new<T: 'static + Controller>(controller: Box<T>) -> Self {
         Self {
-            m_component: Component::default(),
 
             m_motor_res: MotorComponentRes::default(),
             

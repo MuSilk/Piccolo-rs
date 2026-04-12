@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::{Rc}};
 
 use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
-use crate::{core::math::vector2::Vector2, function::{render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_pass::RenderPassCommonInfo, render_resource::RenderResource}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager};
+use crate::{core::math::vector2::Vector2, function::{render::{interface::vulkan::vulkan_rhi::VulkanRHI, passes::{directional_light_pass::{DirectionalLightShadowPass, DirectionalLightShadowPassInitInfo}, main_camera_pass::{LayoutType, MainCameraPass, MainCameraPassInitInfo}, pick_pass::{PickPass, PickPassInitInfo}, point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo}}, render_resource::RenderResource}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager};
 
 pub struct RenderPipelineCreateInfo<'a>{
     pub rhi : &'a Rc<RefCell<VulkanRHI>>,

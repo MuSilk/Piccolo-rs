@@ -102,7 +102,7 @@ impl World {
                 let config_manager = engine.config_manager();
                 
                 let mut mesh_component = Box::new(MeshComponent::default());
-                mesh_component.post_load_resource(&asset_manager, &config_manager, &block.m_mesh_res);
+                mesh_component.post_load_resource(object_id, &asset_manager, &config_manager, &block.m_mesh_res);
                 let mut chunk_data = chunk.update_mesh_data();
                 chunk_data.m_mesh_file = format!("chunk_{}_{}.mesh", i, j);
                 mesh_component.m_raw_meshes.resize(1, GameObjectPartDesc::default());

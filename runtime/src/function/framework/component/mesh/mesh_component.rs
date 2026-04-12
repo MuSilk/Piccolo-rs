@@ -1,37 +1,22 @@
-use crate::{function::{framework::{component::component::{Component, ComponentTrait}, resource::component::mesh::MeshComponentRes}, render::render_object::{GameObjectLazyMeshDesc, GameObjectMeshDesc, GameObjectPartDesc}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::data::material::MaterialRes}};
+use runtime_derive::ComponentTrait;
 
-#[derive(Clone, Default)]
+use crate::{function::{framework::{object::object_id_allocator::GObjectID, resource::component::mesh::MeshComponentRes}, render::render_object::{GameObjectLazyMeshDesc, GameObjectMeshDesc, GameObjectPartDesc}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::data::material::MaterialRes}};
+
+#[derive(Clone, Default, ComponentTrait)]
 pub struct MeshComponent {
-    pub m_component: Component,
+    pub m_parent_object : GObjectID,
     pub m_raw_meshes: Vec<GameObjectPartDesc>,
-}
-
-
-impl ComponentTrait for MeshComponent {
-    fn get_component(&self) -> &Component {
-        &self.m_component
-    }
-    
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.m_component
-    }
-    
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }  
 }
 
 impl MeshComponent {
     pub fn post_load_resource(
         &mut self, 
+        parent_object: GObjectID,
         asset_manager: &AssetManager,
         config_manager: &ConfigManager,
-        mesh_res: &MeshComponentRes
+        mesh_res: &MeshComponentRes,
     ) { 
+        self.m_parent_object = parent_object;
 
         self.m_raw_meshes.resize(mesh_res.m_sub_meshs.len(), GameObjectPartDesc::default());
         for (raw_mesh_index, sub_mesh) in mesh_res.m_sub_meshs.iter().enumerate() {

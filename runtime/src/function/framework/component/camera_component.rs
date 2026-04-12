@@ -1,4 +1,6 @@
-use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent, component::{Component, ComponentTrait}}, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter, FreeCameraParameter}}, input::input_system::{GameCommand, InputSystem}, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem}}};
+use runtime_derive::ComponentTrait;
+
+use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent}, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter, FreeCameraParameter}}, input::input_system::{GameCommand, InputSystem}, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem}}};
 
 #[derive(Clone)]
 pub enum CameraMode{
@@ -8,9 +10,8 @@ pub enum CameraMode{
     Invalid
 }
 
-#[derive(Clone)]
+#[derive(Clone, ComponentTrait)]
 pub struct CameraComponent {
-    m_component: Component,
     pub m_camera_res: CameraComponentRes,
     
     pub m_position: Vector3,
@@ -19,26 +20,10 @@ pub struct CameraComponent {
     pub m_left: Vector3,
 }
 
-impl ComponentTrait for CameraComponent {
-    fn get_component(&self) -> &Component {
-        &self.m_component
-    }
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.m_component
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
-
 impl CameraComponent {
 
     pub fn new_free_camera() -> Self {
         Self { 
-            m_component: Default::default(), 
             m_camera_res: CameraComponentRes {
                 m_parameter: CameraParameter::Free(
                     FreeCameraParameter::default()
@@ -53,7 +38,6 @@ impl CameraComponent {
 
     pub fn new() -> Self {
         Self { 
-            m_component: Default::default(), 
             m_camera_res: CameraComponentRes {
                 m_parameter: CameraParameter::FirstPerson(
                     FirstPersonCameraParameter::default()

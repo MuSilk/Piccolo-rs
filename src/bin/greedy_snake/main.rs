@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 
 use rand::Rng;
+use runtime::ComponentTrait;
 use runtime::engine::Engine;
 use runtime::function::framework::object::object_id_allocator::GObjectID;
 use runtime::function::framework::scene::scene::Scene as EngineScene;
@@ -11,7 +12,7 @@ use runtime::{
         framework::{
             component::{
                 camera_component::CameraComponent,
-                component::{Component, ComponentTrait},
+                component::{ComponentTrait},
                 mesh::mesh_component::MeshComponent,
                 transform_component::TransformComponent,
             },
@@ -401,7 +402,7 @@ fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
             "asset/greedy_snake/ground.json"
         )
         .unwrap();
-    ground.post_load_resource(&asset_manager, &config_manager, &mesh_res);
+    ground.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -431,7 +432,7 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
             "asset/greedy_snake/head.json"
         )
         .unwrap();
-    mesh.post_load_resource(&asset_manager, &config_manager, &mesh_res);
+    mesh.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -454,7 +455,6 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
 fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: usize) -> GObjectID {
     let object = scene.spawn();
     let segment = Box::new(SnakeSegment {
-        component: Component::default(),
         pool_index,
     });
     let mut mesh = Box::new(MeshComponent::default());
@@ -466,7 +466,7 @@ fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: us
             "asset/greedy_snake/head.json"
         )
         .unwrap();
-    mesh.post_load_resource(&asset_manager, &config_manager, &mesh_res);
+    mesh.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -498,7 +498,7 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
             "asset/greedy_snake/head.json"
         )
         .unwrap();
-    mesh.post_load_resource(&asset_manager, &config_manager, &mesh_res);
+    mesh.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -518,66 +518,18 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     object
 }
 
-#[derive(Default)]
+#[derive(Default, ComponentTrait)]
 struct SnakeSegment {
-    component: Component,
     pool_index: usize,
 }
 
-impl ComponentTrait for SnakeSegment {
-    fn get_component(&self) -> &Component {
-        &self.component
-    }
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.component
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
 
-#[derive(Default)]
-struct Food {
-    component: Component,
-}
+#[derive(Default, ComponentTrait)]
+struct Food {}
 
-impl ComponentTrait for Food {
-    fn get_component(&self) -> &Component {
-        &self.component
-    }
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.component
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
 
-#[derive(Default)]
-struct SnakeHead {
-    component: Component,
-}
-
-impl ComponentTrait for SnakeHead {
-    fn get_component(&self) -> &Component {
-        &self.component
-    }
-    fn get_component_mut(&mut self) -> &mut Component {
-        &mut self.component
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
+#[derive(Default, ComponentTrait)]
+struct SnakeHead {}
 
 fn main() {
     let mut app = App::new();
