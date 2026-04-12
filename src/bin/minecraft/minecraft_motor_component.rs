@@ -5,14 +5,13 @@
 use runtime::{
     core::math::{quaternion::Quaternion, vector3::Vector3},
     function::{
-        framework::component::{
+        framework::{component::{
             component::ComponentTrait,
             motor_component::Controller,
             transform_component::TransformComponent,
-        },
+        }, resource::component::motor::MotorComponentRes},
         input::input_system::{GameCommand, InputSystem},
     },
-    resource::component::motor::MotorComponentRes,
 };
 
 /// 地面水平加速度（单位/秒²），略高更「跟手」。
@@ -76,6 +75,7 @@ impl MinecraftMotorComponent {
         input_system: &InputSystem,
         delta_time: f32,
         transform: &mut TransformComponent,
+        facing_rotation: Quaternion,
     ) {
         let command = input_system.get_game_command();
         if command.contains(GameCommand::invalid) {
@@ -85,7 +85,7 @@ impl MinecraftMotorComponent {
         let walk_speed = self.m_motor_res.move_speed * self.m_motor_res.max_move_speed_ratio;
         let sprint_speed = self.m_motor_res.move_speed * self.m_motor_res.max_sprint_speed_ratio;
 
-        let wish_dir = self.wish_direction(command, transform.get_rotation());
+        let wish_dir = self.wish_direction(command, &facing_rotation);
         let has_wish = wish_dir.squared_length() > VEL_EPS;
         let has_move_input = has_wish && !command.contains(GameCommand::free_camera);
         let sprinting = command.contains(GameCommand::sprint) && has_move_input;
@@ -144,20 +144,33 @@ impl MinecraftMotorComponent {
     }
 
     fn wish_direction(&self, command: &GameCommand, rotation: &Quaternion) -> Vector3 {
-        let forward = rotation * Vector3::NEGATIVE_UNIT_Y;
-        let left = rotation * Vector3::UNIT_X;
+        // 只用水平面内的朝向（忽略俯仰），避免低头时把 forward 压到 XY 后方向乱飘或接近零。
+        let forward_full = *rotation * Vector3::NEGATIVE_UNIT_Y;
+        let mut forward_xy = Vector3::new(forward_full.x, forward_full.y, 0.0);
+        if forward_xy.squared_length() < VEL_EPS {
+            forward_xy = Vector3::new(0.0, -1.0, 0.0);
+        } else {
+            forward_xy = forward_xy.normalize();
+        }
+        let mut left_xy = Vector3::UNIT_Z.cross(&forward_xy);
+        if left_xy.squared_length() < VEL_EPS {
+            left_xy = Vector3::UNIT_X;
+        } else {
+            left_xy = left_xy.normalize();
+        }
+
         let mut w = Vector3::ZERO;
         if command.contains(GameCommand::forward) {
-            w = w + forward;
+            w = w + forward_xy;
         }
         if command.contains(GameCommand::backward) {
-            w = w - forward;
+            w = w - forward_xy;
         }
         if command.contains(GameCommand::left) {
-            w = w + left;
+            w = w + left_xy;
         }
         if command.contains(GameCommand::right) {
-            w = w - left;
+            w = w - left_xy;
         }
         let h = xy(w);
         let len_sq = h.squared_length();

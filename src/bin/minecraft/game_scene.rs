@@ -9,8 +9,7 @@ use runtime::{
         framework::{
             component::{
                 camera_component::CameraComponent, character_component::CharacterComponent,
-                component::ComponentTrait, motor_component::MotorComponent,
-                transform_component::TransformComponent,
+                component::ComponentTrait, transform_component::TransformComponent,
             },
             resource::component::motor::MotorComponentRes,
             scene::scene::SceneTrait,
@@ -18,7 +17,10 @@ use runtime::{
     },
 };
 
-use crate::{player_controller::AiPlayerController, voxel_world::VoxelWorld};
+use crate::{
+    minecraft_motor_component::MinecraftMotorComponent, player_controller::AiPlayerController,
+    voxel_world::VoxelWorld,
+};
 
 pub struct GameScene {
     pub inner: runtime::function::framework::scene::scene::Scene,
@@ -48,7 +50,7 @@ impl SceneTrait for GameScene {
         trans.set_position(spawn);
         transform.post_load_resource(trans);
         let controller = Box::new(AiPlayerController::new(world));
-        let mut motor = Box::new(MotorComponent::new(controller));
+        let mut motor = Box::new(MinecraftMotorComponent::new(controller));
         let motor_res: MotorComponentRes = engine
             .asset_manager()
             .load_asset(
@@ -76,10 +78,10 @@ impl SceneTrait for GameScene {
         self.inner.tick_transform_components(engine);
         if !engine.is_editor_mode() {
             self.inner
-                .query_triple_mut::<CharacterComponent, TransformComponent, MotorComponent>()
+                .query_triple_mut::<CharacterComponent, TransformComponent, MinecraftMotorComponent>()
                 .for_each(|(mut character, mut transform, mut motor)| {
                     let input = engine.input_system().borrow();
-                    motor.tick(&input, delta_time, &mut transform);
+                    motor.tick(&input, delta_time, &mut transform, character.get_rotation());
                     if character.m_rotation_dirty {
                         transform.set_rotation(character.m_rotation_buffer);
                         character.m_rotation_dirty = false;
