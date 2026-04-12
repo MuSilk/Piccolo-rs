@@ -1,6 +1,8 @@
 //! 面向方块世界的移动：水平速度 + 地面快速贴目标速度、空中弱加速度，手感接近 Java 版步行/疾跑/起跳。
 //!
 //! 仍使用 `MotorComponentRes` 与 `player.motor.json`：`move_speed`、`max_*_speed_ratio` 控制走/跑标量，`jump_height` 控制起跳初速度。
+//!
+//! 碰撞与地形采样一致，不依赖体素网格是否已提交渲染；但首帧或断点恢复时 `delta_time` 可能极大，若不限制单步积分会出现大位移穿透 AABB 检测，表现为「一出生就在地下」。
 
 use runtime::{
     core::math::{quaternion::Quaternion, vector3::Vector3},
@@ -22,8 +24,10 @@ const GROUND_FRICTION: f32 = 18.0;
 const AIR_ACCEL: f32 = 1.05;
 /// 空中水平速度上限相对疾跑速度的倍数（保留起跳水平动量）。
 const AIR_SPEED_CAP_MUL: f32 = 1.12;
-const GRAVITY: f32 = 9.8;
+const GRAVITY: f32 = 16.0;
 const VEL_EPS: f32 = 1e-5;
+/// 单帧用于积分/摩擦的最大步长（秒），避免 `delta_time` 尖峰导致竖直位移穿透碰撞体。
+const MAX_PHYSICS_DT: f32 = 1.0 / 30.0;
 
 pub struct MinecraftMotorComponent {
     m_motor_res: MotorComponentRes,
@@ -91,6 +95,8 @@ impl MinecraftMotorComponent {
             return;
         }
 
+        let dt = delta_time.max(0.0).min(MAX_PHYSICS_DT);
+
         let walk_speed = self.m_motor_res.move_speed * self.m_motor_res.max_move_speed_ratio;
         let sprint_speed = self.m_motor_res.move_speed * self.m_motor_res.max_sprint_speed_ratio;
 
@@ -108,9 +114,9 @@ impl MinecraftMotorComponent {
         };
 
         if self.m_is_landing {
-            self.tick_vertical_ground(delta_time, command);
+            self.tick_vertical_ground(dt, command);
         } else {
-            self.tick_vertical_air(delta_time);
+            self.tick_vertical_air(dt);
         }
 
         if self.m_is_landing {
@@ -124,14 +130,14 @@ impl MinecraftMotorComponent {
                     self.m_horizontal_vel,
                     wish_vel,
                     GROUND_ACCEL,
-                    delta_time,
+                    dt,
                 );
             } else {
                 self.m_horizontal_vel =
-                    apply_ground_friction_xy(self.m_horizontal_vel, GROUND_FRICTION, delta_time);
+                    apply_ground_friction_xy(self.m_horizontal_vel, GROUND_FRICTION, dt);
             }
         } else if has_move_input {
-            let add = Vector3::new(wish_dir.x, wish_dir.y, 0.0) * (AIR_ACCEL * delta_time);
+            let add = Vector3::new(wish_dir.x, wish_dir.y, 0.0) * (AIR_ACCEL * dt);
             self.m_horizontal_vel = self.m_horizontal_vel + add;
             let cap = sprint_speed * AIR_SPEED_CAP_MUL;
             let h = xy(self.m_horizontal_vel);
@@ -144,9 +150,9 @@ impl MinecraftMotorComponent {
         }
 
         let disp = Vector3::new(
-            self.m_horizontal_vel.x * delta_time,
-            self.m_horizontal_vel.y * delta_time,
-            self.m_vertical_vel * delta_time,
+            self.m_horizontal_vel.x * dt,
+            self.m_horizontal_vel.y * dt,
+            self.m_vertical_vel * dt,
         );
         self.apply_position(transform.get_position(), &disp);
         transform.set_position(self.m_target_position);
