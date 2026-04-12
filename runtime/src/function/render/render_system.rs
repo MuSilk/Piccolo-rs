@@ -15,7 +15,7 @@ pub struct RenderSystem{
     m_swap_context: RenderSwapContext,
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
-    m_render_scene: RefCell<RenderScene>,
+    m_render_scene: RenderScene,
     m_render_resource: RefCell<RenderResource>,
     m_render_pipeline: RefCell<RenderPipeline>,
 
@@ -92,7 +92,7 @@ impl RenderSystem {
             m_swap_context: swap_context,
             m_render_pipeline_type: RenderPipelineType::DeferredPipeline,
             m_render_camera: Rc::new(RefCell::new(render_camera)),
-            m_render_scene: RefCell::new(render_scene),
+            m_render_scene: render_scene,
             m_render_resource: render_resource,
             m_render_pipeline: RefCell::new(render_pipeline),
             m_debugdraw_manager: RefCell::new(debugdraw_manager),
@@ -108,8 +108,8 @@ impl RenderSystem {
     ) -> Result<()>{
         self.process_swap_data(asset_manager, config_manager);
         self.m_rhi.borrow_mut().prepare_context();
-        self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene.borrow(), &self.m_render_camera.borrow());
-        self.m_render_scene.borrow_mut().update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
+        self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
+        self.m_render_scene.update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
         self.m_render_pipeline.borrow_mut().prepare_pass_data(&self.m_rhi.borrow(), &self.m_render_resource.borrow());
         self.m_debugdraw_manager.borrow_mut().prepare_pass_data(&self.m_render_resource.borrow());
         self.m_debugdraw_manager.borrow_mut().tick(delta_time);
@@ -189,22 +189,20 @@ impl RenderSystem {
                             m_go_id: gobject.get_id(),
                             m_part_id: part_index
                         };
-                        let is_entity_in_scene = self.m_render_scene.borrow_mut().get_instance_id_allocator().has_element(&part_id);
                         let mut render_entity = Box::new(RenderEntity::default());
-                        render_entity.m_instance_id = 
-                            self.m_render_scene.borrow_mut().get_instance_id_allocator().alloc_guid(&part_id) as u32;
+                        render_entity.m_instance_id = self.m_render_scene.alloc_instance_id(&part_id) as u32;
                         render_entity.m_model_matrix = Rc::new(game_object_part.m_transform_desc.m_transform_matrix);
                         render_entity.m_base_color_factor = game_object_part.m_base_color_factor;
                         
-                        self.m_render_scene.borrow_mut().add_instance_id_to_map(render_entity.m_instance_id, gobject.get_id());
+                        self.m_render_scene.add_instance_id_to_map(render_entity.m_instance_id, gobject.get_id());
 
                         match game_object_part.m_mesh_desc {
                             GameObjectMeshDesc::LazyMesh(ref mesh_desc) => {
                                 let mesh_source = MeshSourceDesc {
                                     m_mesh_file: mesh_desc.m_mesh_file.clone(),
                                 };
-                                let is_mesh_loaded = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().has_element(&mesh_source);
-                                render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                                let is_mesh_loaded = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().has_element(&mesh_source);
+                                render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().alloc_guid(&mesh_source);
                                 if !is_mesh_loaded {
                                     let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(asset_manager, config_manager, &mesh_source);
                                     render_entity.m_bounding_box = bounding_box;
@@ -219,8 +217,8 @@ impl RenderSystem {
                                 let mesh_source = MeshSourceDesc {
                                     m_mesh_file: mesh_desc.borrow().m_mesh_file.clone(),
                                 };
-                                let is_mesh_loaded = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().has_element(&mesh_source);
-                                render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                                let is_mesh_loaded = self.m_render_scene.get_mesh_asset_id_allocator().borrow().has_element(&mesh_source);
+                                render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().alloc_guid(&mesh_source);
                                 if !is_mesh_loaded {
                                     let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source, &mesh_desc.borrow().m_vertices, &mesh_desc.borrow().m_indices);
                                     render_entity.m_bounding_box = bounding_box;
@@ -235,7 +233,7 @@ impl RenderSystem {
                                 let mesh_source = MeshSourceDesc {
                                     m_mesh_file: mesh_desc.borrow().m_mesh_file.clone(),
                                 };
-                                render_entity.m_mesh_asset_id = self.m_render_scene.borrow_mut().get_mesh_asset_id_allocator().alloc_guid(&mesh_source);
+                                render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().alloc_guid(&mesh_source);
                                 if mesh_desc.borrow().m_is_dirty {
                                     let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source, &mesh_desc.borrow().m_vertices, &mesh_desc.borrow().m_indices);
                                     render_entity.m_bounding_box = bounding_box;
@@ -271,21 +269,15 @@ impl RenderSystem {
                             material_source.m_metallic_roughness_file = "asset/texture/default/mr.jpg".to_string();
                             material_source.m_normal_file = "asset/texture/default/normal.jpg".to_string();
                         }
-                        let is_material_loaded = self.m_render_scene.borrow_mut().get_material_asset_id_allocator().has_element(&material_source);
-                        render_entity.m_material_asset_id = self.m_render_scene.borrow_mut().get_material_asset_id_allocator().alloc_guid(&material_source);
+                        let is_material_loaded = self.m_render_scene.get_material_asset_id_allocator().borrow().has_element(&material_source);
+                        render_entity.m_material_asset_id = self.m_render_scene.get_material_asset_id_allocator().borrow_mut().alloc_guid(&material_source);
                         if !is_material_loaded {
                             println!("load material data");
                             let material_data = RenderResourceBase::load_material_data(asset_manager, config_manager, &material_source);
                             self.m_render_resource.borrow_mut().upload_game_object_render_resource_material(&self.m_rhi.borrow(), &render_entity, &material_data);
                         }
 
-                        if !is_entity_in_scene {
-                            self.m_render_scene.borrow_mut().m_render_entities.insert(render_entity.m_instance_id,render_entity);
-                        }
-                        else{
-                            let instance_id = render_entity.m_instance_id;
-                            *self.m_render_scene.borrow_mut().m_render_entities.get_mut(&instance_id).unwrap() = render_entity;
-                        } 
+                        self.m_render_scene.insert_or_update_render_entity(render_entity);
                     }
                     game_object_resource_desc.pop();
                 }

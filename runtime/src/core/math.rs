@@ -7,6 +7,7 @@ pub mod transform;
 pub mod vector2;
 pub mod vector3;
 pub mod vector4;
+pub mod bounding_box;
 
 pub use math::look_at as look_at;
 pub use math::perspective as perspective;

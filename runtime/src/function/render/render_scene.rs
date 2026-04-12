@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::function::{framework::object::object_id_allocator::GObjectID, render::{light::{AmbientLight, DirectionalLight, PointLightList}, render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_helper::calculate_directional_light_camera, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}};
+use crate::{core::math::bounding_box::{BoundingBox, bounding_box_transform}, function::{framework::object::object_id_allocator::GObjectID, render::{light::{AmbientLight, DirectionalLight, PointLightList}, render_camera::RenderCamera, render_common::RenderMeshNode, render_entity::RenderEntity, render_guid_allocator::GuidAllocator, render_helper::calculate_directional_light_camera, render_object::GameObjectPartId, render_pass::RenderPass, render_resource::RenderResource, render_type::{MaterialSourceDesc, MeshSourceDesc}}}};
 
 
 
@@ -11,16 +11,16 @@ pub struct RenderScene{
     pub m_directional_light: DirectionalLight,
     pub m_point_light_list: PointLightList,
     
-    pub m_render_entities: HashMap<u32, Box<RenderEntity>>,
+    m_render_entities: RefCell<HashMap<u32, Box<RenderEntity>>>,
 
     m_main_camera_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
     m_directional_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
 
-    m_instance_id_allocator: GuidAllocator<GameObjectPartId>,
-    m_mesh_asset_id_allocator: GuidAllocator<MeshSourceDesc>,
-    m_material_asset_id_allocator: GuidAllocator<MaterialSourceDesc>,
+    m_instance_id_allocator: RefCell<GuidAllocator<GameObjectPartId>>,
+    m_mesh_asset_id_allocator: RefCell<GuidAllocator<MeshSourceDesc>>,
+    m_material_asset_id_allocator: RefCell<GuidAllocator<MaterialSourceDesc>>,
 
-    m_mesh_object_id_map: HashMap<u32, GObjectID>,
+    m_mesh_object_id_map: RefCell<HashMap<u32, GObjectID>>,
 }
 
 impl RenderScene {
@@ -36,21 +36,45 @@ impl RenderScene {
         RenderPass::m_visible_nodes().borrow_mut().p_main_camera_visible_mesh_nodes = 
             Rc::downgrade(&self.m_main_camera_visible_mesh_nodes);
     }
-    
-    pub fn get_instance_id_allocator(&mut self) -> &mut GuidAllocator<GameObjectPartId> {
-        &mut self.m_instance_id_allocator
+
+    pub fn alloc_instance_id(&self, part_id: &GameObjectPartId) -> usize {
+        self.m_instance_id_allocator.borrow_mut().alloc_guid(part_id)
     }
 
-    pub fn get_mesh_asset_id_allocator(&mut self) -> &mut GuidAllocator<MeshSourceDesc> {
-        &mut self.m_mesh_asset_id_allocator
+    pub fn get_mesh_asset_id_allocator(&self) -> &RefCell<GuidAllocator<MeshSourceDesc>> {
+        &self.m_mesh_asset_id_allocator
     }
 
-    pub fn get_material_asset_id_allocator(&mut self) -> &mut GuidAllocator<MaterialSourceDesc> {
-        &mut self.m_material_asset_id_allocator
+    pub fn get_material_asset_id_allocator(&self) -> &RefCell<GuidAllocator<MaterialSourceDesc>> {
+        &self.m_material_asset_id_allocator
     }
     
-    pub fn add_instance_id_to_map(&mut self, instance_id: u32, go_id: GObjectID) {
-        self.m_mesh_object_id_map.insert(instance_id, go_id);
+    pub fn add_instance_id_to_map(&self, instance_id: u32, go_id: GObjectID) {
+        self.m_mesh_object_id_map.borrow_mut().insert(instance_id, go_id);
+    }
+
+    pub fn calc_scene_bounding_box(&self) -> BoundingBox {
+        let mut scene_bounding_box = BoundingBox::default();
+
+        self.m_render_entities.borrow().iter().for_each(|(_id, entity)| {
+            let mesh_asset_bounding_box = BoundingBox{
+                min_bound: *entity.m_bounding_box.get_min_corner(),
+                max_bound: *entity.m_bounding_box.get_max_corner(),
+            };
+            let mesh_bounding_box_world = bounding_box_transform(&mesh_asset_bounding_box, &entity.m_model_matrix);
+            scene_bounding_box.merge_box(&mesh_bounding_box_world);
+        });
+        scene_bounding_box
+    }
+
+    pub fn insert_or_update_render_entity(&self, render_entity: Box<RenderEntity>) {
+        let instance_id = render_entity.m_instance_id;
+        if self.m_render_entities.borrow().contains_key(&instance_id) {
+            *self.m_render_entities.borrow_mut().get_mut(&instance_id).unwrap() = render_entity;
+        }
+        else {
+            self.m_render_entities.borrow_mut().insert(instance_id, render_entity);
+        }
     }
 }
 
@@ -61,7 +85,7 @@ impl RenderScene {
             self.m_main_camera_visible_mesh_nodes.borrow_mut();
         main_camera_visible_mesh_nodes.clear();
 
-        for (_instance_id ,entity) in &self.m_render_entities {
+        for (_instance_id ,entity) in self.m_render_entities.borrow().iter() {
             let mut temp_node = RenderMeshNode::default();
             temp_node.model_matrix = entity.m_model_matrix.clone();
             temp_node.node_id = entity.m_instance_id;
@@ -86,7 +110,7 @@ impl RenderScene {
             self.m_directional_light_visible_mesh_nodes.borrow_mut();
         directional_light_visible_mesh_nodes.clear();
 
-        for (_instance_id ,entity) in &self.m_render_entities {
+        for (_instance_id ,entity) in self.m_render_entities.borrow().iter() {
             let mut temp_node = RenderMeshNode::default();
             temp_node.model_matrix = entity.m_model_matrix.clone();
             temp_node.node_id = entity.m_instance_id;
