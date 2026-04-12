@@ -43,7 +43,8 @@ impl SceneTrait for GameScene {
         self.inner.add_resource(world.clone());
 
         let object = self.inner.spawn();
-        let character = Box::new(CharacterComponent::new());
+        let mut character = Box::new(CharacterComponent::new());
+        character.m_position = spawn;
         let camera = Box::new(CameraComponent::new());
         let mut transform = Box::new(TransformComponent::default());
         let mut trans = Transform::default();
@@ -59,6 +60,7 @@ impl SceneTrait for GameScene {
             )
             .expect("player motor");
         motor.post_load_resources(&motor_res);
+        motor.align_spawn(spawn);
         let components = vec![
             RefCell::new(character as Box<dyn ComponentTrait>),
             RefCell::new(camera as Box<dyn ComponentTrait>),

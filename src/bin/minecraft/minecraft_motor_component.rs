@@ -62,6 +62,14 @@ impl MinecraftMotorComponent {
         self.m_motor_res = motor_res.clone();
     }
 
+    /// 与 `Transform`/角色初始位置对齐，避免首帧或 `invalid` 输入时 `m_target_position` 仍为原点（地表以下全是固体）。
+    pub fn align_spawn(&mut self, position: Vector3) {
+        self.m_target_position = position;
+        self.m_horizontal_vel = Vector3::ZERO;
+        self.m_vertical_vel = 0.0;
+        self.m_is_landing = true;
+    }
+
     pub fn get_is_moving(&self) -> bool {
         self.m_is_moving
     }
@@ -79,6 +87,7 @@ impl MinecraftMotorComponent {
     ) {
         let command = input_system.get_game_command();
         if command.contains(GameCommand::invalid) {
+            self.m_target_position = *transform.get_position();
             return;
         }
 

@@ -612,10 +612,13 @@ impl VoxelWorld {
         *self.mesh.borrow_mut() = build_world_mesh(cx, cy, VIEW_RADIUS_CHUNKS);
     }
 
+    /// 与 `world_voxel` 一致：`surface_height` 为该列**最低空气体素**的 z 索引，即草方块顶面所在世界高度。
+    /// 角色碰撞体以 AABB **最小角**为原点且底面为 `position.z`，故脚底应放在该高度略上方，避免与顶面相切被判进固体。
     pub fn suggested_spawn() -> Vector3 {
         let sx = 8i32;
         let sy = 8i32;
-        let z = surface_height(sx, sy) as f32 + 4.0;
+        let ground_z = surface_height(sx, sy) as f32;
+        let z = ground_z + 0.02;
         Vector3::new(sx as f32, sy as f32, z)
     }
 
