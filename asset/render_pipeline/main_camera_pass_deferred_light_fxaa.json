@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "name": "mesh_gbuffer",
+      "vert_spv": "generated/spv/mesh.vert.spv",
+      "frag_spv": "generated/spv/mesh_gbuffer.frag.spv",
+      "in_port": [],
+      "out_port": [
+        {
+          "name": "normal",
+          "type": "ColorAttachment",
+          "format": "R8G8B8A8_SNORM",
+          "width": "$swapchainImageWidth$",
+          "height": "$swapchainImageHeight$"
+        },
+        {
+          "name": "material",
+          "type": "ColorAttachment",
+          "format": "R8G8B8A8_SNORM",
+          "width": "$swapchainImageWidth$",
+          "height": "$swapchainImageHeight$"
+        },
+        {
+          "name": "albedo",
+          "type": "ColorAttachment",
+          "format": "R8G8B8A8_SRGB",
+          "width": "$swapchainImageWidth$",
+          "height": "$swapchainImageHeight$"
+        },
+        {
+          "name": "depth",
+          "type": "DepthAttachment",
+          "format": "$depthImageFormat$",
+          "width": "$swapchainImageWidth$",
+          "height": "$swapchainImageHeight$"
+        }
+      ],
+      "position": [40.0, 40.0]
+    },
+    {
+      "id": 2,
+      "name": "DeferredLighting",
+      "vert_spv": "generated/spv/deferred_lighting.vert.spv",
+      "frag_spv": "generated/spv/deferred_lighting.frag.spv",
+      "in_port": [{
+        "name": "normal",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R8G8B8A8_SNORM",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }, {
+        "name": "material",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R8G8B8A8_SNORM",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }, {
+        "name": "albedo",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R8G8B8A8_SRGB",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "out_port": [{
+        "name": "deferred_lighting_out",
+        "type": "ColorAttachment",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "position": [320.0, 40.0]
+    },
+    {
+      "id": 3,
+      "name": "tone_mapping",
+      "vert_spv": "generated/spv/tone_mapping.vert.spv",
+      "frag_spv": "generated/spv/tone_mapping.frag.spv",
+      "in_port": [{
+        "name": "tone_mapping_in",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "out_port": [{
+        "name": "tone_mapping_out",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "position": [880.0, 40.0]
+    },
+    {
+      "id": 4,
+      "name": "color_grading",
+      "vert_spv": "generated/spv/color_grading.vert.spv",
+      "frag_spv": "generated/spv/color_grading.frag.spv",
+      "in_port": [{
+        "name": "color_grading_in",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "out_port": [{
+        "name": "color_grading_out",
+        "type": "ColorAttachment",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "position": [1160.0, 40.0]
+    },
+    {
+      "id": 5,
+      "name": "FXAA",
+      "vert_spv": "generated/spv/fxaa.vert.spv",
+      "frag_spv": "generated/spv/fxaa.frag.spv",
+      "in_port": [{
+        "name": "fxaa_in",
+        "type": "ColorAttachment",
+        "usage": "sampler2D",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "out_port": [{
+        "name": "fxaa_out",
+        "type": "ColorAttachment",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "position": [1440.0, 40.0]
+    },
+    {
+      "id": 6,
+      "name": "UI",
+      "vert_spv": "generated/spv/ui.vert.spv",
+      "frag_spv": "generated/spv/ui.frag.spv",
+      "in_port": [],
+      "out_port": [{
+        "name": "ui_out",
+        "type": "ColorAttachment",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "position": [1720.0, 140.0]
+    },
+    {
+      "id": 7,
+      "name": "CombineUI",
+      "vert_spv": "generated/spv/combine_ui.vert.spv",
+      "frag_spv": "generated/spv/combine_ui.frag.spv",
+      "in_port": [{
+        "name": "fxaa_out",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }, {
+        "name": "ui_out",
+        "type": "ColorAttachment",
+        "usage": "subpassInput",
+        "format": "R16G16B16A16_SFLOAT",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "out_port": [{
+        "name": "combine_ui_out",
+        "type": "ColorAttachment",
+        "format": "$swapchainImageFormat$",
+        "width": "$swapchainImageWidth$",
+        "height": "$swapchainImageHeight$"
+      }],
+      "position": [1820.0, 140.0]
+    }
+  ],
+  "edges": [
+    {
+      "from_node": 1,
+      "from_port": "normal",
+      "to_node": 2,
+      "to_port": "normal"
+    },
+    {
+      "from_node": 1,
+      "from_port": "material",
+      "to_node": 2,
+      "to_port": "material"
+    },
+    {
+      "from_node": 1,
+      "from_port": "albedo",
+      "to_node": 2,
+      "to_port": "albedo"
+    },
+    {
+      "from_node": 1,
+      "from_port": "depth",
+      "to_node": 2,
+      "to_port": "depth"
+    },
+    {
+      "from_node": 2,
+      "from_port": "deferred_lighting_out",
+      "to_node": 3,
+      "to_port": "tone_mapping_in"
+    },
+    {
+      "from_node": 3,
+      "from_port": "tone_mapping_out",
+      "to_node": 4,
+      "to_port": "color_grading_in"
+    },
+    {
+      "from_node": 4,
+      "from_port": "color_grading_out",
+      "to_node": 5,
+      "to_port": "fxaa_in"
+    },
+    {
+      "from_node": 5,
+      "from_port": "fxaa_out",
+      "to_node": 7,
+      "to_port": "fxaa_out"
+    },
+    {
+      "from_node": 6,
+      "from_port": "ui_out",
+      "to_node": 7,
+      "to_port": "ui_out"
+    }
+  ]
+}

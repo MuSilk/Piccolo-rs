@@ -1,76 +1,53 @@
 {
+  "version": 1,
   "nodes": [
     {
       "id": 1,
       "kind": "BasePass",
       "name": "BasePass",
-      "position": [
-        0.0,
-        230.0
-      ]
+      "position": [40.0, 40.0]
     },
     {
       "id": 2,
       "kind": "DeferredLighting",
       "name": "DeferredLighting",
-      "position": [
-        279.0,
-        26.0
-      ]
+      "position": [320.0, 40.0]
     },
     {
       "id": 3,
       "kind": "ForwardLighting",
       "name": "ForwardLighting",
-      "position": [
-        563.0,
-        267.0
-      ]
+      "position": [600.0, 40.0]
     },
     {
       "id": 4,
       "kind": "ToneMapping",
       "name": "ToneMapping",
-      "position": [
-        703.0,
-        58.0
-      ]
+      "position": [880.0, 40.0]
     },
     {
       "id": 5,
       "kind": "ColorGrading",
       "name": "ColorGrading",
-      "position": [
-        985.0,
-        138.0
-      ]
+      "position": [1160.0, 40.0]
     },
     {
       "id": 6,
-      "kind": "Fxaa",
+      "kind": "FXAA",
       "name": "FXAA",
-      "position": [
-        1298.0,
-        137.0
-      ]
+      "position": [1440.0, 40.0]
     },
     {
       "id": 7,
-      "kind": "UiPass",
+      "kind": "UI",
       "name": "UI",
-      "position": [
-        1189.0,
-        296.0
-      ]
+      "position": [1440.0, 240.0]
     },
     {
       "id": 8,
-      "kind": "CombineUi",
+      "kind": "CombineUI",
       "name": "CombineUI",
-      "position": [
-        1593.0,
-        195.0
-      ]
+      "position": [1720.0, 140.0]
     }
   ],
   "edges": [

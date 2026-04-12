@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,

@@ -1,6 +1,6 @@
 use super::graph_types::{
-    GraphEdge, GraphNode, NodeKind, PortType, RenderGraphAsset, infer_edge_framebuffer, input_ports,
-    output_ports,
+    GraphEdge, GraphNode, NodeKind, PortType, RenderGraphAsset, default_shader_fullscreen_spec,
+    infer_edge_framebuffer, input_ports_for, output_ports_for,
 };
 
 #[derive(Clone)]
@@ -29,48 +29,56 @@ impl RenderGraphState {
                 kind: NodeKind::DirectionalShadow,
                 name: "Directional Shadow".to_string(),
                 position: [24.0, 28.0],
+                shader: None,
             },
             GraphNode {
                 id: 2,
                 kind: NodeKind::MainCamera,
                 name: "Main Camera".to_string(),
                 position: [340.0, 28.0],
+                shader: None,
             },
             GraphNode {
                 id: 3,
                 kind: NodeKind::ToneMapping,
                 name: "Tone Mapping".to_string(),
                 position: [656.0, 28.0],
+                shader: None,
             },
             GraphNode {
                 id: 4,
                 kind: NodeKind::ColorGrading,
                 name: "Color Grading".to_string(),
                 position: [972.0, 28.0],
+                shader: None,
             },
             GraphNode {
                 id: 5,
                 kind: NodeKind::Fxaa,
                 name: "FXAA".to_string(),
                 position: [1288.0, 28.0],
+                shader: None,
             },
             GraphNode {
                 id: 6,
                 kind: NodeKind::UiPass,
                 name: "UI Pass".to_string(),
                 position: [1288.0, 220.0],
+                shader: None,
             },
             GraphNode {
                 id: 7,
                 kind: NodeKind::CombineUi,
                 name: "Combine UI".to_string(),
                 position: [1604.0, 126.0],
+                shader: None,
             },
             GraphNode {
                 id: 8,
                 kind: NodeKind::PointShadow,
                 name: "Point Shadow".to_string(),
                 position: [24.0, 220.0],
+                shader: None,
             },
         ];
         let edges = vec![
@@ -125,7 +133,11 @@ impl RenderGraphState {
             },
         ];
         Self {
-            graph: RenderGraphAsset { nodes, edges },
+            graph: RenderGraphAsset {
+                version: 1,
+                nodes,
+                edges,
+            },
             selected_node: None,
             selected_edge: None,
             dragging_node: None,
@@ -140,9 +152,10 @@ impl RenderGraphState {
         self.next_node_id += 1;
         self.graph.nodes.push(GraphNode {
             id,
-            kind: NodeKind::MainCamera,
-            name: format!("New Node {id}"),
+            kind: NodeKind::ShaderFullscreen,
+            name: format!("Shader {id}"),
             position: [120.0, 120.0],
+            shader: Some(default_shader_fullscreen_spec()),
         });
         self.selected_node = Some(id);
         self.selected_edge = None;
@@ -183,7 +196,8 @@ impl RenderGraphState {
         let Some(node) = self.get_node(from_node) else {
             return Err("source node not found".to_string());
         };
-        let Some(port) = output_ports(&node.kind).iter().find(|p| p.name == from_port) else {
+        let outputs = output_ports_for(node);
+        let Some(port) = outputs.iter().find(|p| p.name == from_port) else {
             return Err("output port not found".to_string());
         };
         self.pending_link = Some(PendingLink {
@@ -210,9 +224,8 @@ impl RenderGraphState {
             self.pending_link = None;
             return Err("target node not found".to_string());
         };
-        let Some(input) = input_ports(&target_node.kind)
-            .iter()
-            .find(|p| p.name == to_port) else {
+        let inputs = input_ports_for(target_node);
+        let Some(input) = inputs.iter().find(|p| p.name == to_port) else {
             self.pending_link = None;
             return Err("input port not found".to_string());
         };
@@ -286,7 +299,14 @@ impl RenderGraphState {
         let Some(node) = self.get_node_mut(id) else {
             return;
         };
-        node.kind = next_kind(&node.kind);
+        let prev = node.kind.clone();
+        node.kind = next_kind(&prev);
+        if matches!(node.kind, NodeKind::ShaderFullscreen) && node.shader.is_none() {
+            node.shader = Some(default_shader_fullscreen_spec());
+        }
+        if matches!(prev, NodeKind::ShaderFullscreen) && !matches!(node.kind, NodeKind::ShaderFullscreen) {
+            node.shader = None;
+        }
     }
 
     pub fn replace_graph(&mut self, graph: RenderGraphAsset) {
@@ -311,13 +331,13 @@ impl RenderGraphState {
         for edge in &mut self.graph.edges {
             if edge.from_port.is_empty()
                 && let Some(from_node) = self.graph.nodes.iter().find(|n| n.id == edge.from_node)
-                && let Some(port) = output_ports(&from_node.kind).first()
+                && let Some(port) = output_ports_for(from_node).first()
             {
                 edge.from_port = port.name.to_string();
             }
             if edge.to_port.is_empty()
                 && let Some(to_node) = self.graph.nodes.iter().find(|n| n.id == edge.to_node)
-                && let Some(port) = input_ports(&to_node.kind).first()
+                && let Some(port) = input_ports_for(to_node).first()
             {
                 edge.to_port = port.name.to_string();
             }
@@ -340,7 +360,8 @@ fn next_kind(kind: &NodeKind) -> NodeKind {
         NodeKind::ColorGrading => NodeKind::Fxaa,
         NodeKind::Fxaa => NodeKind::UiPass,
         NodeKind::UiPass => NodeKind::CombineUi,
-        NodeKind::CombineUi => NodeKind::DirectionalShadow,
+        NodeKind::CombineUi => NodeKind::ShaderFullscreen,
+        NodeKind::ShaderFullscreen => NodeKind::DirectionalShadow,
     }
 }
 

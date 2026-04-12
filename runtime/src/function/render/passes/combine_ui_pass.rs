@@ -4,7 +4,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
 
 pub struct CombineUIPassInitInfo<'a>{
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,

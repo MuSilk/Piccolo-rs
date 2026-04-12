@@ -4,7 +4,9 @@ use super::graph_io::{
     DEFAULT_GRAPH_PATH, MAIN_CAMERA_PASS_GRAPH_PATH, load_graph_from_file, save_graph_to_file,
 };
 use super::graph_state::RenderGraphState;
-use super::graph_types::{NodeKind, input_ports, output_ports};
+use super::graph_types::{GraphNode, NodeKind, input_ports_for, output_ports_for};
+
+pub const PIPELINE_PLAN_EXPORT_PATH: &str = "asset/render_pipeline/pipeline_plan.json";
 
 pub struct RenderGraphUI {
     state: RenderGraphState,
@@ -43,7 +45,7 @@ impl RenderGraphUI {
         let mut clicked_input: Option<(u64, String)> = None;
 
         for node in &self.state.graph.nodes {
-            let node_size = node_box_size(&node.kind);
+            let node_size = node_box_size(node);
             let pos = [origin[0] + node.position[0], origin[1] + node.position[1]];
             let selected = self.state.selected_node == Some(node.id);
             ui_runtime.push_colored_rect(pos, node_size, [48, 58, 78, 240], panel.clip_rect);
@@ -72,11 +74,11 @@ impl RenderGraphUI {
                 panel.clip_rect,
             );
 
-            for (i, p) in input_ports(&node.kind).iter().enumerate() {
+            for (i, p) in input_ports_for(node).iter().enumerate() {
                 let py = pos[1] + 52.0 + i as f32 * 18.0;
                 let resp = ui_runtime.button_in_clip(
                     &format!("InPort::{}::{}", node.id, p.name),
-                    p.name,
+                    &p.name,
                     [pos[0] + 4.0, py],
                     [98.0, 16.0],
                     panel.clip_rect,
@@ -85,11 +87,11 @@ impl RenderGraphUI {
                     clicked_input = Some((node.id, p.name.to_string()));
                 }
             }
-            for (i, p) in output_ports(&node.kind).iter().enumerate() {
+            for (i, p) in output_ports_for(node).iter().enumerate() {
                 let py = pos[1] + 52.0 + i as f32 * 18.0;
                 let resp = ui_runtime.button_in_clip(
                     &format!("OutPort::{}::{}", node.id, p.name),
-                    p.name,
+                    &p.name,
                     [pos[0] + node_size[0] - 102.0, py],
                     [98.0, 16.0],
                     panel.clip_rect,
@@ -183,7 +185,7 @@ impl RenderGraphUI {
             self.state.cancel_link();
             self.status_text = "Link cancelled".to_string();
         }
-        if ui_runtime.button_in_clip("RenderGraph::CycleKind", "Cycle Kind", [panel.body_pos[0] + 974.0, toolbar_y], [130.0, 30.0], panel.clip_rect).clicked {
+        if ui_runtime.button_in_clip("RenderGraph::CycleKind", "Cycle Kind", [panel.body_pos[0] + 1184.0, toolbar_y], [130.0, 30.0], panel.clip_rect).clicked {
             self.state.cycle_selected_node_kind();
             self.status_text = "Switched selected node kind".to_string();
         }
@@ -200,11 +202,11 @@ impl RenderGraphUI {
             let Some(to_node) = self.state.get_node(edge.to_node) else {
                 continue;
             };
-            let from_size = node_box_size(&from_node.kind);
-            let Some(from_pos) = output_port_anchor(origin, from_size, from_node.position, &from_node.kind, &edge.from_port) else {
+            let from_size = node_box_size(from_node);
+            let Some(from_pos) = output_port_anchor(origin, from_size, from_node.position, from_node, &edge.from_port) else {
                 continue;
             };
-            let Some(to_pos) = input_port_anchor(origin, to_node.position, &to_node.kind, &edge.to_port) else {
+            let Some(to_pos) = input_port_anchor(origin, to_node.position, to_node, &edge.to_port) else {
                 continue;
             };
             let selected = self.state.selected_edge == Some(idx);
@@ -234,8 +236,8 @@ impl RenderGraphUI {
         let Some(from_node) = self.state.get_node(pending.from_node) else {
             return;
         };
-        let from_size = node_box_size(&from_node.kind);
-        let Some(from_pos) = output_port_anchor(origin, from_size, from_node.position, &from_node.kind, &pending.from_port) else {
+        let from_size = node_box_size(from_node);
+        let Some(from_pos) = output_port_anchor(origin, from_size, from_node.position, from_node, &pending.from_port) else {
             return;
         };
         let mid_x = (from_pos[0] + mouse[0]) * 0.5;
@@ -342,16 +344,17 @@ fn node_kind_name(kind: &NodeKind) -> &'static str {
         NodeKind::Fxaa => "FXAA",
         NodeKind::UiPass => "UI",
         NodeKind::CombineUi => "Combine",
+        NodeKind::ShaderFullscreen => "ShaderFS",
     }
 }
 
 fn input_port_anchor(
     origin: [f32; 2],
     node_pos: [f32; 2],
-    kind: &NodeKind,
+    node: &GraphNode,
     port_name: &str,
 ) -> Option<[f32; 2]> {
-    let ports = input_ports(kind);
+    let ports = input_ports_for(node);
     let idx = ports.iter().position(|p| p.name == port_name)?;
     Some([
         origin[0] + node_pos[0],
@@ -363,10 +366,10 @@ fn output_port_anchor(
     origin: [f32; 2],
     node_size: [f32; 2],
     node_pos: [f32; 2],
-    kind: &NodeKind,
+    node: &GraphNode,
     port_name: &str,
 ) -> Option<[f32; 2]> {
-    let ports = output_ports(kind);
+    let ports = output_ports_for(node);
     let idx = ports.iter().position(|p| p.name == port_name)?;
     Some([
         origin[0] + node_pos[0] + node_size[0],
@@ -374,9 +377,9 @@ fn output_port_anchor(
     ])
 }
 
-fn node_box_size(kind: &NodeKind) -> [f32; 2] {
+fn node_box_size(node: &GraphNode) -> [f32; 2] {
     let width = 260.0;
-    let port_count = input_ports(kind).len().max(output_ports(kind).len()) as f32;
+    let port_count = input_ports_for(node).len().max(output_ports_for(node).len()) as f32;
     let dynamic_height = 60.0 + port_count * 18.0 + 12.0;
     [width, dynamic_height.max(96.0)]
 }

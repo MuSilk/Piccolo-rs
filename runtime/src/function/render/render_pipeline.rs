@@ -50,9 +50,12 @@ impl RenderPipeline {
             global_render_resource: &global_render_resource,
         })?;
 
-        let descriptor_layouts = m_main_camera_pass.m_render_pass.get_descriptor_set_layouts();
-        m_directional_light_pass.set_per_mesh_layout(descriptor_layouts[LayoutType::PerMesh as usize]);
-        m_point_light_pass.set_per_mesh_layout(descriptor_layouts[LayoutType::PerMesh as usize]);
+        m_directional_light_pass.set_per_mesh_layout(
+            m_main_camera_pass.get_descriptor_set_layouts(LayoutType::PerMesh)
+        );
+        m_point_light_pass.set_per_mesh_layout(
+            m_main_camera_pass.get_descriptor_set_layouts(LayoutType::PerMesh)
+        );
 
         m_directional_light_pass.post_initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,
@@ -65,7 +68,7 @@ impl RenderPipeline {
 
         m_pick_pass.initialize(&PickPassInitInfo {
             rhi: create_info.rhi,
-            per_mesh_layout: descriptor_layouts[LayoutType::PerMesh as usize],
+            per_mesh_layout: m_main_camera_pass.get_descriptor_set_layouts(LayoutType::PerMesh),
             global_render_resource: &global_render_resource,
         })?;
 
@@ -120,6 +123,6 @@ impl RenderPipeline {
     }
 
     pub fn get_descriptor_set_layouts(&self, layout_type: LayoutType) -> vk::DescriptorSetLayout {
-        self.m_main_camera_pass.m_render_pass.m_descriptor_infos[layout_type as usize].layout
+        self.m_main_camera_pass.get_descriptor_set_layouts(layout_type)
     }
 }

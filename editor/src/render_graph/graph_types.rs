@@ -1,22 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum NodeKind {
-    BasePass,
-    DeferredLighting,
-    ForwardLighting,
-    DirectionalShadow,
-    PointShadow,
-    MainCamera,
-    ToneMapping,
-    ColorGrading,
-    #[serde(alias = "FXAA")]
-    Fxaa,
-    #[serde(alias = "UI")]
-    UiPass,
-    #[serde(alias = "CombineUI")]
-    CombineUi,
-}
+pub use runtime::function::render::render_graph::{
+    RenderGraphAsset, RenderGraphEdge as GraphEdge, RenderGraphNode as GraphNode,
+    RenderGraphNodeKind as NodeKind, ShaderNodeSpec, ShaderSubpassInputSpec,
+    ShaderVertexInputKind, resolve_shader_subpass_inputs,
+};
+
+pub type NodeId = u64;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PortType {
@@ -26,33 +16,25 @@ pub enum PortType {
     FinalColor,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct PortDef {
-    pub name: &'static str,
+#[derive(Clone, Debug)]
+pub struct PortDefOwned {
+    pub name: String,
     pub ty: PortType,
 }
 
-pub type NodeId = u64;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GraphNode {
-    pub id: NodeId,
-    pub kind: NodeKind,
-    pub name: String,
-    pub position: [f32; 2],
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GraphEdge {
-    pub from_node: NodeId,
-    #[serde(default)]
-    pub from_port: String,
-    pub to_node: NodeId,
-    #[serde(default)]
-    pub to_port: String,
-    /// 边所对应的 Framebuffer（附件语义），用于图编译器；与端口同名时通常与 `from_port` 一致。
-    #[serde(default)]
-    pub framebuffer: String,
+/// 新建「全屏着色器」节点时的默认 SPIR-V 路径（相对 `asset/`）；运行前请将 `runtime/src/shader/generated/spv/` 下对应文件复制到该目录。
+pub fn default_shader_fullscreen_spec() -> ShaderNodeSpec {
+    ShaderNodeSpec {
+        vert_spirv: "generated/spv/post_process.vert.spv".into(),
+        frag_spirv: "generated/spv/tone_mapping.frag.spv".into(),
+        subpass_inputs: vec![ShaderSubpassInputSpec {
+            name: "hdr".into(),
+            binding: Some(0),
+            input_attachment_index: Some(0),
+        }],
+        color_outputs: vec!["ldr".into()],
+        ..Default::default()
+    }
 }
 
 /// 语义端口名 → 引擎 Framebuffer 附件名（与 `render_pass` 下标对应）。
@@ -69,6 +51,8 @@ pub fn semantic_port_framebuffer(port: &str) -> Option<&'static str> {
         "antialiased" => Some("BACKUP_BUFFER_ODD"),
         "ui_color" => Some("BACKUP_BUFFER_EVEN"),
         "present" => Some("SWAPCHAIN_IMAGE"),
+        "ldr" => Some("BACKUP_BUFFER_EVEN"),
+        "hdr" => Some("BACKUP_BUFFER_ODD"),
         _ => None,
     }
 }
@@ -112,139 +96,177 @@ fn is_framebuffer_attachment_name(s: &str) -> bool {
     )
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct RenderGraphAsset {
-    pub nodes: Vec<GraphNode>,
-    pub edges: Vec<GraphEdge>,
-}
-
-pub fn input_ports(kind: &NodeKind) -> &'static [PortDef] {
-    match kind {
-        NodeKind::BasePass => &[],
-        NodeKind::DeferredLighting => &[
-            PortDef {
-                name: "normal",
+pub fn input_ports_for(node: &GraphNode) -> Vec<PortDefOwned> {
+    use NodeKind::*;
+    match &node.kind {
+        ShaderFullscreen => node
+            .shader
+            .as_ref()
+            .map(|s| {
+                resolve_shader_subpass_inputs(s)
+                    .map(|v| {
+                        v.into_iter()
+                            .map(|r| PortDefOwned {
+                                name: r.name,
+                                ty: PortType::SceneColor,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_else(|_| {
+                        s.inputs
+                            .iter()
+                            .map(|n| PortDefOwned {
+                                name: n.clone(),
+                                ty: PortType::SceneColor,
+                            })
+                            .collect()
+                    })
+            })
+            .unwrap_or_else(|| {
+                vec![PortDefOwned {
+                    name: "hdr".into(),
+                    ty: PortType::SceneColor,
+                }]
+            }),
+        BasePass => vec![],
+        DeferredLighting => vec![
+            PortDefOwned {
+                name: "normal".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "material",
+            PortDefOwned {
+                name: "material".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "base_color",
+            PortDefOwned {
+                name: "base_color".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "depth",
+            PortDefOwned {
+                name: "depth".into(),
                 ty: PortType::SceneColor,
             },
         ],
-        NodeKind::ForwardLighting => &[
-            PortDef {
-                name: "deferred_lit",
+        ForwardLighting => vec![
+            PortDefOwned {
+                name: "deferred_lit".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "depth",
+            PortDefOwned {
+                name: "depth".into(),
                 ty: PortType::SceneColor,
             },
         ],
-        NodeKind::DirectionalShadow => &[],
-        NodeKind::PointShadow => &[],
-        NodeKind::MainCamera => &[
-            PortDef {
-                name: "dir_shadow",
+        DirectionalShadow | PointShadow => vec![],
+        MainCamera => vec![
+            PortDefOwned {
+                name: "dir_shadow".into(),
                 ty: PortType::ShadowMap,
             },
-            PortDef {
-                name: "point_shadow",
+            PortDefOwned {
+                name: "point_shadow".into(),
                 ty: PortType::ShadowMap,
             },
         ],
-        NodeKind::ToneMapping => &[PortDef {
-            name: "lit_hdr",
+        ToneMapping => vec![PortDefOwned {
+            name: "lit_hdr".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::ColorGrading => &[PortDef {
-            name: "tone_mapped",
+        ColorGrading => vec![PortDefOwned {
+            name: "tone_mapped".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::Fxaa => &[PortDef {
-            name: "graded",
+        Fxaa => vec![PortDefOwned {
+            name: "graded".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::UiPass => &[],
-        NodeKind::CombineUi => &[
-            PortDef {
-                name: "antialiased",
+        UiPass => vec![],
+        CombineUi => vec![
+            PortDefOwned {
+                name: "antialiased".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "ui_color",
+            PortDefOwned {
+                name: "ui_color".into(),
                 ty: PortType::UiColor,
             },
         ],
     }
 }
 
-pub fn output_ports(kind: &NodeKind) -> &'static [PortDef] {
-    match kind {
-        NodeKind::BasePass => &[
-            PortDef {
-                name: "normal",
+pub fn output_ports_for(node: &GraphNode) -> Vec<PortDefOwned> {
+    use NodeKind::*;
+    match &node.kind {
+        ShaderFullscreen => node
+            .shader
+            .as_ref()
+            .map(|s| {
+                s.color_outputs
+                    .iter()
+                    .map(|n| PortDefOwned {
+                        name: n.clone(),
+                        ty: PortType::SceneColor,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| {
+                vec![PortDefOwned {
+                    name: "ldr".into(),
+                    ty: PortType::SceneColor,
+                }]
+            }),
+        BasePass => vec![
+            PortDefOwned {
+                name: "normal".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "material",
+            PortDefOwned {
+                name: "material".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "base_color",
+            PortDefOwned {
+                name: "base_color".into(),
                 ty: PortType::SceneColor,
             },
-            PortDef {
-                name: "depth",
+            PortDefOwned {
+                name: "depth".into(),
                 ty: PortType::SceneColor,
             },
         ],
-        NodeKind::DeferredLighting => &[PortDef {
-            name: "deferred_lit",
+        DeferredLighting => vec![PortDefOwned {
+            name: "deferred_lit".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::ForwardLighting => &[PortDef {
-            name: "lit_hdr",
+        ForwardLighting => vec![PortDefOwned {
+            name: "lit_hdr".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::DirectionalShadow => &[PortDef {
-            name: "shadow_out",
+        DirectionalShadow | PointShadow => vec![PortDefOwned {
+            name: "shadow_out".into(),
             ty: PortType::ShadowMap,
         }],
-        NodeKind::PointShadow => &[PortDef {
-            name: "shadow_out",
-            ty: PortType::ShadowMap,
-        }],
-        NodeKind::MainCamera => &[PortDef {
-            name: "lit_hdr",
+        MainCamera => vec![PortDefOwned {
+            name: "lit_hdr".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::ToneMapping => &[PortDef {
-            name: "tone_mapped",
+        ToneMapping => vec![PortDefOwned {
+            name: "tone_mapped".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::ColorGrading => &[PortDef {
-            name: "graded",
+        ColorGrading => vec![PortDefOwned {
+            name: "graded".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::Fxaa => &[PortDef {
-            name: "antialiased",
+        Fxaa => vec![PortDefOwned {
+            name: "antialiased".into(),
             ty: PortType::SceneColor,
         }],
-        NodeKind::UiPass => &[PortDef {
-            name: "ui_color",
+        UiPass => vec![PortDefOwned {
+            name: "ui_color".into(),
             ty: PortType::UiColor,
         }],
-        NodeKind::CombineUi => &[PortDef {
-            name: "present",
+        CombineUi => vec![PortDefOwned {
+            name: "present".into(),
             ty: PortType::FinalColor,
         }],
     }

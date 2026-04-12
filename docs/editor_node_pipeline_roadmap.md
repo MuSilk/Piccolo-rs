@@ -1,299 +1,231 @@
-# Editor 节点编辑器实现路径（用于渲染管线构建）
+# 节点编辑器：从着色器节点到 RenderPass / Subpass / Pipeline（路线图）
+
+本文档在原有「固定 Pass 编排」基础上，**重新规划**为：以**给定着色器节点**为输入，在编辑器中构图，由工具链与运行时**自动推导** `VkRenderPass`（含 subpass、依赖）与 `VkPipeline`（及 layout、descriptor），最终驱动 `RenderPipeline`。
+
+---
 
 ## 1. 目标与边界
 
-### 目标
-- 在 `editor` 中提供可视化节点编辑器，用于构建和调整渲染管线流程。
-- 输出稳定的“管线图描述（Graph）”，由运行时转换为可执行的 pass 调度顺序。
-- 初期优先支持当前已有渲染链路：阴影 -> 主相机 -> 后处理 -> UI 合成。
+### 1.1 核心目标
 
-### 边界（第一阶段）
-- 不修改底层 Vulkan RHI 资源模型，只做编辑器层与渲染管线层的编排适配。
-- 不做任意自定义 shader 节点（先支持固定类型节点 + 参数编辑）。
-- 不做跨工程共享资产系统（先把图存为项目内配置文件）。
+| 层级 | 目标 |
+|------|------|
+| **编辑器** | 基于「着色器节点」构图：每个节点绑定 SPIR-V（或 GLSL 路径）、暴露输入/输出端口（纹理、buffer、attachment 语义等），连线表达数据流与执行顺序。 |
+| **中间表示（IR）** | 图编译为与引擎无关的 **Render Graph IR**（节点、边、资源生命周期、subpass 候选划分）。 |
+| **RenderPass** | 由 IR + 全局 **Framebuffer 契约**（附件槽位、格式）自动生成：`VkAttachmentDescription`、`VkSubpassDescription`、`VkSubpassDependency`、`preserve_attachments` 等。 |
+| **Pipeline** | 每个可执行子图单元对应 **GraphicsPipelineCreateInfo**：shader 阶段、顶点输入（全屏三角等）、blend、dynamic state；与 **PipelineLayout**（descriptor set / push constant）一致。 |
+| **调度** | `RenderPipeline` 按编译后的 **pass 序 + subpass 序** 调用 `cmd_begin_render_pass` / `cmd_next_subpass` / draw，资源绑定与 IR 一致。 |
 
----
+### 1.2 边界（分阶段）
 
-## 2. 与现有工程的对接点
-
-当前代码中，渲染 pass 主要在 `runtime/src/function/render/render_pipeline.rs` 内按固定顺序调用：
-- `m_directional_light_pass.draw()`
-- `m_point_light_pass.draw()`
-- `m_main_camera_pass.draw/draw_forward(...)`
-- `m_ui_pass` + `m_combine_ui_pass`
-
-节点编辑器的目标不是立刻替换全部逻辑，而是先把“顺序与开关”参数化：
-1. 编辑器产出 `RenderGraphAsset`（节点+连线+参数）。
-2. 运行时把 `RenderGraphAsset` 编译为 `CompiledRenderGraph`（可执行拓扑）。
-3. `RenderPipeline` 增加“图驱动模式”，按编译结果调度现有 pass。
+- **阶段 0～1**：仍以「主相机单 framebuffer、已知附件槽」为底盘；节点先覆盖 **全屏后处理链**（Tone / Grade / FXAA 等）或与现有 `SubpassLayout` 可映射的类型。
+- **阶段 2**：引入「纯着色器节点」模板（单输入 RT → 单输出 RT），自动分配 ping-pong attachment，仍限制在**单 render pass、线性 subpass** 内。
+- **阶段 3**（可选）：多 render pass、与 shadow / UI 等 **跨 pass** 资源同步；或迁移 **Vulkan Dynamic Rendering**，弱化传统 `VkRenderPass` 手工拼装。
+- **不做（初期）**：任意拓扑的任意 GLSL（无类型约束）；跨进程资产市场；完整材质图与 Mesh 节点图（可与本路线图并行另立文档）。
 
 ---
 
-## 3. 建议目录结构
+## 2. 概念模型：三层图
 
-### Editor 侧（可视化与编辑）
-- `editor/src/render_graph/`
-  - `graph_types.rs`：节点/Pin/连线的数据结构（编辑态）。
-  - `graph_state.rs`：当前画布状态、选择态、拖拽态、缩放平移。
-  - `graph_commands.rs`：增删节点、连线、撤销重做命令。
-  - `graph_ui.rs`：节点画布 UI 绘制与交互（基于现有 `UiRuntime`）。
-  - `graph_inspector.rs`：节点参数面板（右侧 Detail）。
-  - `graph_io.rs`：图的序列化/反序列化（TOML/JSON）。
+```
+┌─────────────────────────────────────────────────────────────┐
+│  A. 编辑视图图（Editor Graph）                                │
+│  - 节点：ShaderNode | RasterPassNode | CompositeNode …       │
+│  - 边：端口级，带类型（SceneColor / Depth / …）               │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ 序列化 JSON / 二进制
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  B. 资源与执行 IR（Runtime Graph IR）                         │
+│  - 拓扑序、环检测、端口 → 物理 attachment / buffer 绑定        │
+│  - 每个 ShaderNode：SPIR-V、入口、descriptor 绑定意图          │
+│  - Subpass 划分：默认 1 节点 ≈ 1 subpass（可合并见 §6）        │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ build_render_pass + build_pipelines
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  C. Vulkan 对象                                              │
+│  - VkRenderPass + VkFramebuffer + VkPipeline[] + Layout      │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### Runtime 侧（编译与执行）
-- `runtime/src/function/render/render_graph/`
-  - `graph_asset.rs`：运行时可加载的图资源结构。
-  - `graph_compiler.rs`：拓扑排序、连线校验、资源依赖分析。
-  - `graph_executor.rs`：将编译结果映射到 `RenderPipeline` 调用。
-  - `node_registry.rs`：节点类型注册表（节点类型 -> pass 执行器）。
+与现有代码对齐：
+
+- **B 的子集** 已由 `RenderGraphAsset` / `CompiledRenderGraph` / `graph_compiler::compile_render_graph` 实现拓扑与节点种类。
+- **C 的 RenderPass 部分** 已由 `graph_compiler::build_subpass` + 边 `framebuffer` 字段 + `SubpassLayout` 思路生成子通道与依赖；后续把 **Pipeline** 生成接到同一 IR。
 
 ---
 
-## 4. 核心数据模型（建议）
+## 3. 着色器节点：最小 schema（建议）
 
-```rust
-pub type NodeId = u64;
-pub type PinId = u64;
+每个 **ShaderNode**（或后处理节点）在资产中至少包含：
 
-pub enum NodeKind {
-    DirectionalShadow,
-    PointShadow,
-    MainCamera,
-    ToneMapping,
-    ColorGrading,
-    FXAA,
-    UIPass,
-    CombineUI,
-}
-
-pub struct GraphNode {
-    pub id: NodeId,
-    pub kind: NodeKind,
-    pub name: String,
-    pub position: [f32; 2],
-    pub params: std::collections::HashMap<String, String>,
-    pub input_pins: Vec<PinId>,
-    pub output_pins: Vec<PinId>,
-}
-
-pub struct GraphEdge {
-    pub from_pin: PinId,
-    pub to_pin: PinId,
-}
-
-pub struct RenderGraphAsset {
-    pub version: u32,
-    pub nodes: Vec<GraphNode>,
-    pub edges: Vec<GraphEdge>,
+```json
+{
+  "id": 10,
+  "kind": "ShaderFullscreen",
+  "name": "MyTone",
+  "shader": {
+    "spirv_path": "generated/spv/my_tone.frag.spv",
+    "stage": "fragment",
+    "entry": "main"
+  },
+  "ports": {
+    "inputs": [
+      { "name": "hdr", "kind": "SubpassInput", "binding": 0 }
+    ],
+    "outputs": [
+      { "name": "ldr", "kind": "ColorAttachment", "format": "inherit" }
+    ]
+  },
+  "params": []
 }
 ```
 
 设计要点：
-- `NodeKind` 先与现有 pass 一一对应，降低接入复杂度。
-- `params` 先采用字符串字典，后续可升级为强类型参数系统。
-- 必须支持版本号，方便后续资产迁移。
+
+- **ports** 与 Vulkan **descriptor / attachment** 一一可追溯；`binding` / `input_attachment_index` 与 SPIR-V 反射或手写表一致。
+- **outputs** 的物理槽由边 `framebuffer` 字段或自动分配器写入（与当前 `main_camera_pass.json` 一致）。
+- 编辑器侧可先用 **固定模板**（ToneMapping / ColorGrading / FXAA）填好 `ports`，再过渡到通用 `ShaderFullscreen`。
 
 ---
 
-## 5. 节点画布 UI 实现策略
+## 4. RenderPass / Subpass 自动生成策略
 
-结合当前 `editor/src/editor_ui.rs` 的多面板布局，新增一个“Render Graph”面板：
+### 4.1 默认策略（易实现、易调试）
 
-1. 在 `EditorUI::show_editor_game_window` 或新增专用窗口函数中接入画布渲染。
-2. 画布能力最小集：
-   - 网格背景（可选）
-   - 节点框渲染（标题/输入输出 pin）
-   - 鼠标拖拽移动节点
-   - 连线创建（从输出 pin 拖到输入 pin）
-3. 交互状态建议放在 `graph_state.rs`：
-   - `selected_node`
-   - `dragging_node`
-   - `creating_edge_from_pin`
-   - `canvas_offset`, `canvas_zoom`
+- **一个「可 raster 的 Shader 节点」→ 一个 subpass**（与当前 `MainCameraPass` 拆分一致）。
+- **边** 声明 `from_port` / `to_port` / `framebuffer`（附件语义名），编译器映射到 `_MAIN_CAMERA_PASS_*` 常量（见 `graph_compiler::framebuffer_name_to_index`）。
+- **依赖**：线性链 `EXTERNAL → 0` + `i-1 → i`；`preserve_attachments` 用「前序已写 ∩ 后续要读 \ 本 subpass 已用」的通用公式（已实现思路，见 `compute_preserve_attachments`）。
 
-备注：当前 `UiRuntime` 已能渲染文本、按钮、面板，可先用“矩形+文本+按钮点击区域”拼装节点画布，后续再抽象控件。
+### 4.2 与「仅节点、无手工 framebuffer」结合
 
----
+- 自动分配器：在 **DAG + 端口类型** 约束下，为每条「逻辑 RT」分配 `BACKUP_ODD/EVEN/POST_*` ping-pong，并**写回**边或 IR 缓存，再调 `build_subpass`。
+- 校验：无环、无端口类型错连、swapchain 仅出现在最后一级合成等。
 
-## 6. 图校验与编译规则（Runtime）
+### 4.3 可选优化（后期）
 
-编译阶段（`graph_compiler.rs`）建议分三步：
-
-1. **结构校验**
-   - pin 连接方向是否合法（输出 -> 输入）
-   - 单输入 pin 是否被重复连接
-   - 必需节点是否存在（如 MainCamera / CombineUI）
-
-2. **环检测与拓扑排序**
-   - 检测有向环，报错并定位节点。
-   - 输出稳定拓扑序，保证执行确定性。
-
-3. **执行计划生成**
-   - 生成 `CompiledPassCall` 数组（按拓扑顺序）。
-   - 每个调用项带节点参数快照与输入资源引用。
+- **同一 subpass 内合并**多个全屏 draw：仅当两个节点 **无中间 RT 需求** 且可合并为 **单 shader 多 pass 内** 或 **动态渲染单次** 时启用（见前文「单 shader 串行」讨论）；默认关闭。
 
 ---
 
-## 7. 渲染管线接入方案（渐进）
+## 5. Pipeline 自动生成策略
 
-### 阶段 A：仅做“可视化 + 保存”
-- Editor 可编辑图并写入 `asset/render_graph/default_graph.json`。
-- Runtime 不消费该图（仅工具链验证）。
+### 5.1 每个 subpass 对应 pipeline 条目
 
-### 阶段 B：图驱动开关与顺序
-- Runtime 加载图，映射到已有 pass 调用顺序。
-- 先支持 pass 开启/关闭和固定链路顺序调整（受白名单约束）。
+| 组件 | 来源 |
+|------|------|
+| **Shader stages** | 节点 `spirv_path` + `stage`；全屏可共用 `post_process.vert.spv`。 |
+| **Vertex input** | 全屏三角：空或固定 `vec2` 位置。 |
+| **Input attachments** | 端口 `SubpassInput` → `VkDescriptorSetLayout` + `VkPipeline` 与 render pass **subpass 索引** 一致。 |
+| **Color blend** | 默认单 RT `ONE, ZERO`；需 alpha 合成时由节点 meta 或端口类型切换。 |
+| **Dynamic state** | viewport/scissor 与现有一致。 |
+| **Pipeline layout** | 反射 SPIR-V 或节点声明的 `set/binding` 生成 layout；与 **descriptor 写入** 同源。 |
 
-### 阶段 C：图驱动资源依赖
-- 在不重写 RHI 的前提下，补充附件输入输出映射。
-- 把 `tone_mapping/color_grading/fxaa/combine_ui` 的输入附件来源改为图配置。
+### 5.2 实现顺序建议
 
-### 阶段 D：扩展节点类型
-- 引入自定义后处理节点与参数模板。
-- 接入材质/shader 资源描述（可选）。
-
----
-
-## 8. 文件格式（当前 JSON，后续可扩展 TOML）
-
-当前已使用：
-- `asset/render_graph/default_graph.json`
-
-示例（简化）：
-```json
-{
-  "nodes": [
-    {
-      "id": 1,
-      "kind": "DirectionalShadow",
-      "name": "Directional Shadow",
-      "position": [24.0, 28.0]
-    }
-  ],
-  "edges": [
-    {
-      "from_node": 1,
-      "from_port": "shadow_out",
-      "to_node": 2,
-      "to_port": "dir_shadow"
-    }
-  ]
-}
-```
+1. **反射或静态表**：对现有 `tone_mapping` / `color_grading` / `fxaa` 的 SPIR-V 建立「binding → 端口名」表（可先手写，后 `shaderc`/`spirv-reflect`）。
+2. **工厂函数**：`fn build_fullscreen_pipeline(rhi, render_pass, subpass_index, node: &ShaderNodeIr) -> VkPipeline`。
+3. **缓存**：`(render_pass, subpass_index, shader_hash)` 为 key，图变更时 invalidation。
 
 ---
 
-## 9. 开发里程碑（推荐 4 周）
+## 6. 编辑器功能规划（相对旧版路线图的调整）
 
-### Week 1：编辑器基础闭环
-- 完成 `graph_types/graph_state/graph_io`。
-- 在 Editor 中显示节点卡片与拖拽。
-- 支持保存/加载图文件。
+### 6.1 已具备（保留描述）
 
-### Week 2：连线与参数面板
-- 完成 pin 连线交互与删除。
-- 增加 Inspector 参数编辑。
-- 增加基础校验提示（非法连线、缺失输入）。
+- `editor/src/render_graph/*`：节点、端口语义边、校验、JSON IO、画布 UI。
+- 资产：`asset/render_graph/*.json`、`asset/render_pipeline/main_camera_pass*.json`。
 
-### Week 3：Runtime 编译与只读执行
-- 完成 `graph_compiler`（校验+拓扑排序）。
-- `RenderPipeline` 接入图驱动模式（先只读，不改资源绑定）。
-- 输出执行日志用于比对固定管线。
+### 6.2 新增 / 强化
 
-### Week 4：图驱动实际调度
-- 支持 pass 开关、顺序控制。
-- 接入最小附件依赖映射（后处理链）。
-- 做性能与稳定性回归。
+| 模块 | 内容 |
+|------|------|
+| **节点类型** | 区分 `BuiltinPassNode`（与现有一致）与 `ShaderNode`（带 `shader` 字段与端口 schema）。 |
+| **Inspector** | 编辑 `spirv_path`、entry、宏/ specialization、端口 binding 覆盖。 |
+| **预览 / 校验** | 调用 **headless 编译器**（可复用 `runtime` 的 `compile_render_graph` + 未来 `validate_shader_ports`）在保存前报错。 |
+| **导出** | 一键导出「IR JSON + 可选生成的 pipeline 描述 JSON」，供 runtime 加载。 |
 
 ---
 
-## 10. 当前进度快照（已完成）
+## 7. Runtime 集成规划
 
-以下内容已落地到仓库：
-
-### Editor 已完成
-- 已接入 `Render Graph` 面板（`editor/src/editor_ui.rs`）。
-- 已新增模块：`editor/src/render_graph/`。
-- 已实现节点编辑基础交互：
-  - 节点选中高亮
-  - 节点拖拽
-  - 新增节点 / 删除节点
-  - 连线选中 / 删除连线
-- 已实现端口语义连线（不是节点级裸连线）：
-  - 输入口/输出口可点击
-  - 从输出口发起 pending link，点击输入口完成连接
-  - 连线按端口锚点绘制
-- 已实现连线校验：
-  - 禁止自环
-  - 禁止重复边
-  - 禁止形成环
-  - 端口类型必须匹配
-  - 单输入口仅允许一条入边
-- 已支持图文件保存/加载：
-  - `editor/src/render_graph/graph_io.rs`
-  - `asset/render_graph/default_graph.json`
-
-### Runtime 已完成
-- 已新增 `runtime/src/function/render/render_graph.rs` 作为 runtime 图结构入口（当前为基础结构体）。
-- `runtime/src/function/render.rs` 已导出 `render_graph` 模块。
-
-### 现状结论
-- 阶段 A：**完成**（并超出最小目标，已具备端口语义）。
-- 阶段 B：**可启动，但尚未完成**（runtime 尚未按图驱动真实调度）。
+| 步骤 | 工作 |
+|------|------|
+| R1 | 扩展 `RenderGraphNodeKind` 或并行 **ShaderNodeId**，IR 中含 `spirv` 与端口绑定。 |
+| R2 | `graph_compiler`：`compile_render_graph` 保持拓扑；新增 **`compile_pipeline_layout`** / **`build_pipelines_for_graph`**（或并入 `MainCameraPass::initialize`）。 |
+| R3 | `build_subpass` 输入不变或仅增加「自动 framebuffer 分配」分支；与 **pipeline 数组下标** 与 `execution_order` 对齐。 |
+| R4 | `MainCameraPass::draw`：按 `CompiledRenderGraph.execution_order` 绑定 pipeline + descriptor + `cmd_next_subpass`。 |
+| R5 | 特性开关：`use_shader_graph_pipelines`，失败回退固定管线。 |
 
 ---
 
-## 11. 阶段 B 启动条件与计划（下一步）
+## 8. 里程碑（建议重排）
 
-### B 阶段目标（最小闭环）
-- Runtime 加载 `default_graph.json`。
-- 完成 `graph_compiler`：结构校验 + 环检测 + 拓扑排序。
-- `RenderPipeline` 增加 `use_render_graph` 开关。
-- `use_render_graph=true` 时，按编译顺序驱动现有 pass（先白名单映射，不改 RHI 资源模型）。
-
-### 计划拆分（建议）
-1. 在 `runtime/src/function/render/` 新增 `graph_compiler.rs`。
-2. 将 JSON 图资产转换为 runtime 可执行结构（可先复用 editor 同构字段）。
-3. 在 `render_pipeline.rs` 新增“固定模式 / 图模式”分支。
-4. 图模式先做顺序与开关控制，输出执行日志用于与固定管线比对。
-5. 稳定后再推进阶段 C（资源依赖映射）。
+| 阶段 | 交付物 | 说明 |
+|------|--------|------|
+| **M1** | IR 文档 + `ShaderNode` JSON schema + 编辑器加载/展示 | 不接 Vulkan，仅数据层。 |
+| **M2** | 1 个「自定义全屏 ShaderNode」走通：手填 SPIR-V + 单 subpass pipeline | 证明 pipeline 自动生成闭环。 |
+| **M3** | 现有 Tone→Grade→FXAA 链改为 **数据驱动**（节点仍可用内置 kind，但绑定信息来自 IR） | 与 `build_subpass` 对齐。 |
+| **M4** | 自动 attachment 分配 + `preserve` 全自动 | 减少 JSON 手工 `framebuffer`。 |
+| **M5** | 多 shader 链 + 性能与缓存 | 可选动态渲染迁移评估。 |
 
 ---
 
-## 12. 风险与规避
+## 9. 风险与规避
 
-- 风险：UI 交互复杂度高（拖拽、连线、命中）  
-  规避：先做最小交互，不一次性上缩放/框选/多选。
-
-- 风险：图配置与 runtime 实际能力不一致  
-  规避：用 `NodeRegistry` 严格限制节点类型与连接规则。
-
-- 风险：替换固定管线导致回归  
-  规避：保留“固定管线模式”开关，支持 A/B 运行切换。
+| 风险 | 规避 |
+|------|------|
+| SPIR-V 与端口 / attachment 不一致 | 保存时运行校验；CI 跑小型 `vkCreateGraphicsPipelines` 冒烟（可选）。 |
+| RenderPass 与 Pipeline 不同步 | 单一入口 `rebuild_from_graph(asset)` 原子更新两者。 |
+| 调试困难 | 保留「固定管线」开关；导出 IR 与 Vulkan 参数 JSON 对照。 |
+| 合并 subpass 过度优化 | 默认一节点一 subpass；合并仅作实验 flag。 |
 
 ---
 
-## 13. 近期可执行任务清单（更新）
+## 10. 与旧版章节的对应关系
 
-已完成：
-1. `editor/src` 的 `render_graph` 模块骨架与核心文件。
-2. `EditorUI` 的 `Render Graph` 面板接入。
-3. `graph_io.rs` 保存/加载（JSON）。
-4. runtime `render_graph` 模块入口。
+- 原「阶段 A～D」中 **A（编辑+保存）**、编辑器 UI 与 JSON：**已完成**。
+- 原「阶段 B（图驱动调度）」：**部分完成**（`compile_render_graph`、`build_subpass`）；**Pipeline 与 draw 循环仍待接**。
+- 原「阶段 C（资源依赖）」：**演进为** §4 自动分配 + §5 descriptor 与 attachment 同源。
+- 原「阶段 D（扩展节点）」：**聚焦为** ShaderNode + IR schema，而非泛泛自定义节点。
 
-待完成（阶段 B）：
-1. `runtime` 的 `graph_compiler`（校验 + 拓扑排序）。
-2. `RenderPipeline` 的 `use_render_graph` 开关与图驱动调度分支。
-3. 图驱动执行日志与固定管线对比验证。
-4. pass 白名单映射与缺失节点报错提示。
+---
 
-完成以上后，即可认为阶段 B 基本达成，进入阶段 C 的资源依赖映射工作。
+## 11. 附录：依赖层级（示意）
 
+### 执行顺序依赖（DAG）
 
-## 依赖层级
+- 例：`DirectionalShadow` / `PointShadow` → `MainCamera` 子图入口 → … → `CombineUI`。
 
-### 渲染顺序依赖
-maindraw -> debugdraw
-### framebuffer依赖
-directional_light_pass, point_light_pass ->
-### subpass依赖
+### Framebuffer / attachment 依赖
+
+- 边 `framebuffer` 或 IR 分配的物理槽 → `build_subpass` / `VkFramebuffer` 附件列表顺序一致。
+
+### Subpass 依赖
+
+- 线性 `VkSubpassDependency` + 通用 `preserve_attachments`；与拓扑序一致即可保证可见性。
+
+---
+
+## 12. 近期可执行任务清单（按新路线图）
+
+**短期（M1～M2）**
+
+1. 在 `docs/` 或 `asset/schema/` 固化 **ShaderNode JSON schema**（可与编辑器共用）。
+2. 编辑器：`ShaderNode` 类型 + Inspector 编辑 `shader` 元数据。
+3. Runtime：实现 **单节点测试** 的 `build_fullscreen_pipeline` + 与单 subpass render pass 对接。
+
+**中期（M3）**
+
+4. 将 `ToneMapping` / `ColorGrading` / `FXAA` 的绑定信息抽成 **数据表**，由 IR 填充而非硬编码。
+5. `MainCameraPass::draw` 按 `CompiledRenderGraph` 循环 subpass 与 pipeline。
+
+**中长期（M4～M5）**
+
+6. 自动 ping-pong 分配与 JSON 简化。
+7. Pipeline 缓存与可选 Dynamic Rendering 评估。
+
+---
+
+*文档版本：以「着色器节点 → RenderPass + Pipeline」为主线的修订版；与仓库中 `graph_compiler.rs`、`editor/src/render_graph/` 当前实现相互参照更新。*

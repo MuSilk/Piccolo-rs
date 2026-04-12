@@ -4,7 +4,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{Descriptor, MainCameraSubPass, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
+use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
 
 pub struct ToneMappingInitInfo<'a>{
     pub render_pass: vk::RenderPass,

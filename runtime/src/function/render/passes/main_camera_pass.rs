@@ -1,10 +1,35 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::{render::{graph_compiler::{build_subpass, load_main_camera_pass_graph}, interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{_MAIN_CAMERA_PASS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN, _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD, _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_DEPTH, _MAIN_CAMERA_PASS_GBUFFER_A, _MAIN_CAMERA_PASS_GBUFFER_B, _MAIN_CAMERA_PASS_GBUFFER_C, _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN, _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD, _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE, MainCameraSubPass, RenderPass, RenderPassCommonInfo, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}, render_type::RHISamplerType}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::{render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}, render_type::RHISamplerType}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
+
+pub const _MAIN_CAMERA_PASS_GBUFFER_A: usize = 0;
+pub const _MAIN_CAMERA_PASS_GBUFFER_B: usize = 1;
+pub const _MAIN_CAMERA_PASS_GBUFFER_C: usize = 2;
+pub const _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD: usize = 3;
+pub const _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN: usize = 4;
+pub const _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD: usize = 5;
+pub const _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN: usize = 6;
+pub const _MAIN_CAMERA_PASS_DEPTH: usize = 7;
+pub const _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE: usize = 8;
+pub const _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT: usize = 5;
+pub const _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT: usize = 2;
+pub const _MAIN_CAMERA_PASS_ATTACHMENT_COUNT:usize = 9;
+
+pub enum MainCameraSubPass {
+    BasePass = 0,
+    DeferredLighting = 1,
+    ForwardLighting = 2,
+    ToneMapping = 3,
+    ColorGrading = 4,
+    FXAA = 5,
+    UI = 6,
+    CombineUI = 7,
+    EnumCount = 8
+}
 
 pub struct MainCameraPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
@@ -38,7 +63,7 @@ enum RenderPipelineType {
 pub struct MainCameraPass{
     pub m_directional_light_shadow_color_image_view: vk::ImageView, 
     pub m_point_light_shadow_color_image_view: vk::ImageView,
-    pub m_render_pass: RenderPass,
+    m_render_pass: RenderPass,
     m_enable_fxaa: bool,
     m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
     m_swapchain_framebuffers: Vec<vk::Framebuffer>,
@@ -57,7 +82,7 @@ impl MainCameraPass {
         self.m_enable_fxaa = info.enable_fxaa;
         let rhi = info.rhi;
         self.setup_attachments(rhi)?;
-        self.setup_render_pass(rhi, &info.config_manager)?;
+        self.setup_render_pass(rhi)?;
         self.setup_descriptor_layout(rhi)?;
         self.setup_pipelines(rhi)?;
         self.setup_descriptor_set(rhi)?;
@@ -255,6 +280,10 @@ impl MainCameraPass {
 
         Ok(())
     }
+
+    pub fn get_descriptor_set_layouts(&self, layout_type: LayoutType) -> vk::DescriptorSetLayout {
+        self.m_render_pass.m_descriptor_infos[layout_type as usize].layout
+    }
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
@@ -287,8 +316,7 @@ impl MainCameraPass {
         self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].format = vk::Format::R16G16B16A16_SFLOAT;
         self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].format = vk::Format::R16G16B16A16_SFLOAT;
         for buffer_index in 0..attachment_count {
-            let usage = match buffer_index {
-                _MAIN_CAMERA_PASS_GBUFFER_A => vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+            let usage = match buffer_index {                
                 _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD | _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN
                     => vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
                 _ => vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
@@ -319,13 +347,385 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn setup_render_pass(&mut self, rhi: &VulkanRHI, config_manager: &ConfigManager) -> Result<()> {
-        let graph_asset = load_main_camera_pass_graph(&config_manager).unwrap();
-        self.m_render_pass.m_framebuffer.render_pass = build_subpass(
-            rhi, 
-            &self.m_render_pass.m_framebuffer.attachments, 
-            &graph_asset, 
-        ).unwrap();
+    fn setup_render_pass(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        let mut attachments = [vk::AttachmentDescription::default(); _MAIN_CAMERA_PASS_ATTACHMENT_COUNT];
+
+        attachments[_MAIN_CAMERA_PASS_GBUFFER_A] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_GBUFFER_B] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_GBUFFER_C] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN] = vk::AttachmentDescription::builder()
+            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_DEPTH] = vk::AttachmentDescription::builder()
+            .format(rhi.get_depth_image_info().format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+            .build();
+
+        attachments[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE] = vk::AttachmentDescription::builder()
+            .format(rhi.get_swapchain_info().image_format)
+            .samples(vk::SampleCountFlags::_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .build();    
+        let mut subpasses = [vk::SubpassDescription::default(); MainCameraSubPass::EnumCount as usize];
+
+        //gbuffer subpass
+        let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        let color_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_A as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_B as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_C as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+        ];
+        subpasses[MainCameraSubPass::BasePass as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .depth_stencil_attachment(&depth_stencil_attachment_ref)
+            .build();  
+
+        //deferred lighting subpass
+        let input_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_A as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_B as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_GBUFFER_C as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+        ];
+        let color_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+        ];
+        subpasses[MainCameraSubPass::DeferredLighting as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .input_attachments(&input_attachment_refs)
+            .build();
+
+        //forward lighting subpass
+        let color_attachment_refs = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+        ];
+        let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
+            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        subpasses[MainCameraSubPass::ForwardLighting as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .depth_stencil_attachment(&depth_stencil_attachment_ref)
+            .build();
+
+        //tone mapping subpass
+        let input_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+        ];
+
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+        ];
+
+        subpasses[MainCameraSubPass::ToneMapping as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();
+
+        //color grading subpass
+        let input_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+        ];
+
+        let color_attachment_ref = if self.m_enable_fxaa {
+            [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
+                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+            ]
+        }
+        else{
+            [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+            ]
+        };
+
+        subpasses[MainCameraSubPass::ColorGrading as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();
+
+        //fxaa subpass
+        let input_attachment_ref = if self.m_enable_fxaa {
+            [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
+                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+            ]
+        }
+        else{
+            [
+                vk::AttachmentReference::builder()
+                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+            ]
+        };
+
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build()
+        ];
+
+        subpasses[MainCameraSubPass::FXAA as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();   
+
+        //ui subpass
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build()
+        ];
+        let preserve_attachments = [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32];
+        subpasses[MainCameraSubPass::UI as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .preserve_attachments(&preserve_attachments)
+            .build();
+
+        //combine ui subpass
+        let input_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+        ];
+        let color_attachment_ref = [
+            vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build()
+        ];
+        subpasses[MainCameraSubPass::CombineUI as usize] = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_ref)
+            .input_attachments(&input_attachment_ref)
+            .build();
+        let dependencies = [
+            vk::SubpassDependency::builder()
+                .src_subpass(vk::SUBPASS_EXTERNAL)
+                .dst_subpass(MainCameraSubPass::BasePass as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                .dst_stage_mask(vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::BasePass as u32)
+                .dst_subpass(MainCameraSubPass::DeferredLighting as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::DeferredLighting as u32)
+                .dst_subpass(MainCameraSubPass::ForwardLighting as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::ForwardLighting as u32)
+                .dst_subpass(MainCameraSubPass::ToneMapping as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::ToneMapping as u32)
+                .dst_subpass(MainCameraSubPass::ColorGrading as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::ColorGrading as u32)
+                .dst_subpass(MainCameraSubPass::FXAA as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::FXAA as u32)
+                .dst_subpass(MainCameraSubPass::UI as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+            vk::SubpassDependency::builder()
+                .src_subpass(MainCameraSubPass::UI as u32)
+                .dst_subpass(MainCameraSubPass::CombineUI as u32)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
+                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .dependency_flags(vk::DependencyFlags::BY_REGION)
+                .build(),
+        ];
+
+        let info = vk::RenderPassCreateInfo::builder()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
+
+        self.m_render_pass.m_framebuffer.render_pass = rhi.create_render_pass(&info)?;
+
         Ok(())
     }
 
@@ -335,20 +735,15 @@ impl MainCameraPass {
         let framebuffers =  swapchain_info.image_views
             .iter()
             .map(|image_view| {
-                let attachments = &[
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].view,
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].view,
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].view,
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].view,
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].view,
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].view,
-                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].view,
-                    *depth_image_info.image_view,
-                    *image_view,
-                ];
+                let mut attachments = self.m_render_pass
+                    .m_framebuffer.attachments
+                    .iter().map(|a| a.view)
+                    .collect::<Vec<_>>();
+                attachments.push(*depth_image_info.image_view);
+                attachments.push(*image_view);
                 let create_info = vk::FramebufferCreateInfo::builder()
                     .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-                    .attachments(attachments)
+                    .attachments(&attachments)
                     .width(swapchain_info.extent.width)
                     .height(swapchain_info.extent.height)
                     .layers(1);

@@ -4,31 +4,6 @@ use vulkanalia::{prelude::v1_0::*};
 
 use crate::function::render::{ interface::vulkan::vulkan_rhi::VulkanRHI, render_common::RenderMeshNode, render_resource::{GlobalRenderResource, RenderResource}};
 
-pub const _MAIN_CAMERA_PASS_GBUFFER_A: usize = 0;
-pub const _MAIN_CAMERA_PASS_GBUFFER_B: usize = 1;
-pub const _MAIN_CAMERA_PASS_GBUFFER_C: usize = 2;
-pub const _MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD: usize = 3;
-pub const _MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN: usize = 4;
-pub const _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD: usize = 5;
-pub const _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN: usize = 6;
-pub const _MAIN_CAMERA_PASS_DEPTH: usize = 7;
-pub const _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE: usize = 8;
-pub const _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT: usize = 5;
-pub const _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT: usize = 2;
-pub const _MAIN_CAMERA_PASS_ATTACHMENT_COUNT:usize = 9;
-
-pub enum MainCameraSubPass {
-    BasePass = 0,
-    DeferredLighting = 1,
-    ForwardLighting = 2,
-    ToneMapping = 3,
-    ColorGrading = 4,
-    FXAA = 5,
-    UI = 6,
-    CombineUI = 7,
-    EnumCount = 8
-}
-
 #[derive(Default)]
 pub struct VisiableNodes {
     pub p_directional_light_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
