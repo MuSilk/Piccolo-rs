@@ -3,7 +3,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use runtime::{
-    core::math::transform::Transform,
+    core::math::{transform::Transform, vector3::Vector3},
     engine::Engine,
     function::{
         framework::{
@@ -19,18 +19,45 @@ use runtime::{
 
 use crate::{
     minecraft_motor_component::MinecraftMotorComponent, player_controller::AiPlayerController,
-    voxel_world::VoxelWorld,
+    voxel_world::{VoxelKind, VoxelWorld},
 };
+
+/// 左键连续破坏间隔（秒）；松开后再按需立刻响应，故用同一数值做累计器初值。
+const DIG_COOLDOWN: f32 = 0.22;
+/// 右键连续放置间隔（秒）。
+const PLACE_COOLDOWN: f32 = 0.28;
+
+/// 与 `AiPlayerController` 碰撞盒一致：脚底为 `feet` 的 AABB 是否与单位体素格相交。
+fn player_aabb_overlaps_cell(feet: Vector3, wx: i32, wy: i32, wz: i32) -> bool {
+    let min = feet;
+    let max = Vector3::new(feet.x + 0.68, feet.y + 0.68, feet.z + 1.8);
+    let bx0 = wx as f32;
+    let by0 = wy as f32;
+    let bz0 = wz as f32;
+    min.x < bx0 + 1.0
+        && max.x > bx0
+        && min.y < by0 + 1.0
+        && max.y > by0
+        && min.z < bz0 + 1.0
+        && max.z > bz0
+}
 
 pub struct GameScene {
     pub inner: runtime::function::framework::scene::scene::Scene,
+    dig_repeat_accum: f32,
+    place_repeat_accum: f32,
 }
 
 impl GameScene {
     pub fn new() -> Self {
         let mut inner = runtime::function::framework::scene::scene::Scene::new();
         inner.set_url("MinecraftAI");
-        Self { inner }
+        // 预置为间隔：首帧按下即可触发一次（否则需长按满一整段间隔才有反应）。
+        Self {
+            inner,
+            dig_repeat_accum: DIG_COOLDOWN,
+            place_repeat_accum: PLACE_COOLDOWN,
+        }
     }
 }
 
@@ -100,16 +127,66 @@ impl SceneTrait for GameScene {
                 .query_mut::<CharacterComponent>()
                 .next()
                 .map(|c| c.m_position);
+            let input = engine.input_system().borrow();
+            let render = engine.render_system().borrow();
+            self.inner
+                .tick_camera_components(&input, &render, delta_time);
+
+            const REACH: f32 = 5.5;
+            let (mouse_left, mouse_right) = {
+                let inp = engine.input_system().borrow();
+                (inp.is_mouse_button_down(0), inp.is_mouse_button_down(1))
+            };
+            let cam_snap = self
+                .inner
+                .query_pair::<CameraComponent, CharacterComponent>()
+                .next()
+                .map(|(cam, ch)| (cam.m_position, cam.m_forward, ch.get_position()));
+
+            if let (Some(world_rc), Some((origin, forward, feet))) = (
+                self.inner.get_mut_resource::<Rc<RefCell<Box<VoxelWorld>>>>(),
+                cam_snap,
+            ) {
+                let mut world = world_rc.borrow_mut();
+                if mouse_left {
+                    self.dig_repeat_accum += delta_time;
+                    while self.dig_repeat_accum >= DIG_COOLDOWN {
+                        self.dig_repeat_accum -= DIG_COOLDOWN;
+                        if let Some((x, y, z)) =
+                            world.raycast_first_solid(origin, forward, REACH)
+                        {
+                            world.set_voxel(x, y, z, VoxelKind::Air);
+                        }
+                    }
+                } else {
+                    self.dig_repeat_accum = DIG_COOLDOWN;
+                }
+                if mouse_right {
+                    self.place_repeat_accum += delta_time;
+                    while self.place_repeat_accum >= PLACE_COOLDOWN {
+                        self.place_repeat_accum -= PLACE_COOLDOWN;
+                        if let Some((x, y, z)) =
+                            world.raycast_place_cell(origin, forward, REACH)
+                        {
+                            if world.voxel_at(x, y, z) == VoxelKind::Air
+                                && !player_aabb_overlaps_cell(feet, x, y, z)
+                            {
+                                world.set_voxel(x, y, z, VoxelKind::Dirt);
+                            }
+                        }
+                    }
+                } else {
+                    self.place_repeat_accum = PLACE_COOLDOWN;
+                }
+                world.flush_voxel_mesh_sync(&feet);
+            }
+
             if let (Some(world_rc), Some(pos)) = (
                 self.inner.get_mut_resource::<Rc<RefCell<Box<VoxelWorld>>>>(),
                 player_pos,
             ) {
                 world_rc.borrow_mut().update_streaming(&pos);
             }
-            let input = engine.input_system().borrow();
-            let render = engine.render_system().borrow();
-            self.inner
-                .tick_camera_components(&input, &render, delta_time);
         }
         let render = engine.render_system().borrow();
         self.inner.tick_mesh_components(&render);

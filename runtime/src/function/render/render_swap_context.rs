@@ -51,6 +51,7 @@ impl GameObjectResourceDesc{
 pub struct RenderSwapData{
     pub m_camera_swap_data: Option<CameraSwapData>,
     pub m_game_object_resource_descs: Option<GameObjectResourceDesc>,
+    pub m_game_object_to_delete: Option<GameObjectResourceDesc>,
 }
 
 impl RenderSwapData{
@@ -66,6 +67,20 @@ impl RenderSwapData{
             }
         }
     }
+
+    pub fn add_delete_game_object(&mut self, desc: &GameObjectDesc){
+        match &mut self.m_game_object_to_delete{
+            Some(resource_desc) => {
+                resource_desc.add(desc.clone());
+            },
+            None => {
+                let mut resource_desc = GameObjectResourceDesc::default();
+                resource_desc.add(desc.clone());
+                self.m_game_object_to_delete = Some(resource_desc);
+            }
+        }
+    }
+
 }
 
 pub enum SwapDataType{
@@ -108,12 +123,17 @@ impl RenderSwapContext{
 
 impl RenderSwapContext{
     fn is_ready_to_swap(&self) -> bool {
-        self.m_swap_data[self.m_render_swap_data_index].borrow().m_camera_swap_data.is_none() &&
-        self.m_swap_data[self.m_render_swap_data_index].borrow().m_game_object_resource_descs.is_none()
+        self.m_swap_data[self.m_render_swap_data_index].borrow().m_game_object_resource_descs.is_none() &&
+        self.m_swap_data[self.m_render_swap_data_index].borrow().m_game_object_to_delete.is_none() &&
+        self.m_swap_data[self.m_render_swap_data_index].borrow().m_camera_swap_data.is_none() 
     }
 
     pub fn reset_game_object_resource_swap_data(&self){
         self.m_swap_data[self.m_render_swap_data_index].borrow_mut().m_game_object_resource_descs = None;
+    }
+
+    pub fn reset_game_object_to_delete_swap_data(&self){
+        self.m_swap_data[self.m_render_swap_data_index].borrow_mut().m_game_object_to_delete = None;
     }
 
     pub fn reset_camera_swap_data(&self){

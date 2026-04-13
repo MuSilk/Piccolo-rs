@@ -4,7 +4,7 @@
 //!
 //! 区块切换时网格合并 `build_world_mesh` 计算量大；在后台线程构建、主线程每帧取回结果，避免逻辑帧长时间卡住。
 
-use std::{cell::RefCell, rc::Rc, thread::JoinHandle};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, thread::JoinHandle};
 
 use serde::Deserialize;
 use runtime::{
@@ -105,7 +105,7 @@ fn surface_height(wx: i32, wy: i32) -> i32 {
     h.clamp(8.0, (WZ - 4) as f32) as i32
 }
 
-fn world_voxel(wx: i32, wy: i32, wz: i32) -> VoxelKind {
+fn procedural_voxel(wx: i32, wy: i32, wz: i32) -> VoxelKind {
     if wz < 0 || wz >= WZ {
         return VoxelKind::Air;
     }
@@ -540,10 +540,21 @@ fn emit_faces_for_cell(
     }
 }
 
-fn build_world_mesh(center_cx: i32, center_cy: i32, radius: i32) -> GameObjectDynamicMeshDesc {
+fn build_world_mesh(
+    center_cx: i32,
+    center_cy: i32,
+    radius: i32,
+    overrides: HashMap<(i32, i32, i32), VoxelKind>,
+) -> GameObjectDynamicMeshDesc {
     let mut verts = Vec::new();
     let mut indices = Vec::new();
-    let get = |x: i32, y: i32, z: i32| world_voxel(x, y, z);
+    let get = move |x: i32, y: i32, z: i32| {
+        if let Some(&k) = overrides.get(&(x, y, z)) {
+            k
+        } else {
+            procedural_voxel(x, y, z)
+        }
+    };
     let span = CHUNK_SIZE * (radius * 2 + 1);
     let x0 = (center_cx - radius) * CHUNK_SIZE;
     let y0 = (center_cy - radius) * CHUNK_SIZE;
@@ -570,6 +581,10 @@ fn build_world_mesh(center_cx: i32, center_cy: i32, radius: i32) -> GameObjectDy
 
 pub struct VoxelWorld {
     pub mesh: Rc<RefCell<GameObjectDynamicMeshDesc>>,
+    /// 相对程序化地形的体素覆盖（破坏/放置）；与程序化一致时可 `remove` 节省内存。
+    overrides: HashMap<(i32, i32, i32), VoxelKind>,
+    /// 同区块内编辑后需要刷新合并网格。
+    mesh_rebuild_queued: bool,
     /// 当前已提交到 `mesh` 的区块中心（与碰撞程序化采样无关，仅用于流式刷新判定）。
     streaming_center_chunk: Option<(i32, i32)>,
     /// 正在后台构建的网格对应的中心区块（`JoinHandle` 存在时有效）。
@@ -581,7 +596,12 @@ impl VoxelWorld {
     pub fn new_box(engine: &Engine, scene: &mut Scene) -> Box<Self> {
         let spawn_xy = (8i32, 8i32);
         let (icx, icy) = world_chunk_coords(spawn_xy.0, spawn_xy.1);
-        let mesh = Rc::new(RefCell::new(build_world_mesh(icx, icy, VIEW_RADIUS_CHUNKS)));
+        let mesh = Rc::new(RefCell::new(build_world_mesh(
+            icx,
+            icy,
+            VIEW_RADIUS_CHUNKS,
+            HashMap::new(),
+        )));
         let object_id = scene.spawn();
         let asset_manager = engine.asset_manager();
         let config_manager = engine.config_manager();
@@ -602,15 +622,116 @@ impl VoxelWorld {
         scene.create_object(object_id, components);
         Box::new(Self {
             mesh,
+            overrides: HashMap::new(),
+            mesh_rebuild_queued: false,
             streaming_center_chunk: Some((icx, icy)),
             pending_center_chunk: None,
             mesh_build_join: None,
         })
     }
 
+    #[inline]
+    pub fn voxel_at(&self, wx: i32, wy: i32, wz: i32) -> VoxelKind {
+        if let Some(&k) = self.overrides.get(&(wx, wy, wz)) {
+            k
+        } else {
+            procedural_voxel(wx, wy, wz)
+        }
+    }
+
+    pub fn set_voxel(&mut self, wx: i32, wy: i32, wz: i32, kind: VoxelKind) {
+        if kind == procedural_voxel(wx, wy, wz) {
+            self.overrides.remove(&(wx, wy, wz));
+        } else {
+            self.overrides.insert((wx, wy, wz), kind);
+        }
+        self.mesh_rebuild_queued = true;
+    }
+
+    /// 将 `set_voxel` 累积的修改立刻反映到合并网格（主线程同步构建）。
+    ///
+    /// 破坏/放置若仍走后台线程，要等整幅网格算完才有画面，体感延迟大；编辑后应优先调用本函数。
+    /// 若仍有未完成的异步区块构建，会先 `join` 丢弃其结果，再以当前 `overrides` 与玩家所在区块中心重建。
+    pub fn flush_voxel_mesh_sync(&mut self, player_position: &Vector3) {
+        if !self.mesh_rebuild_queued {
+            return;
+        }
+        self.mesh_rebuild_queued = false;
+
+        if let Some(handle) = self.mesh_build_join.take() {
+            let _ = handle.join();
+        }
+        self.pending_center_chunk = None;
+
+        let wx = player_position.x.floor() as i32;
+        let wy = player_position.y.floor() as i32;
+        let (cx, cy) = world_chunk_coords(wx, wy);
+        let mesh = build_world_mesh(cx, cy, VIEW_RADIUS_CHUNKS, self.overrides.clone());
+        *self.mesh.borrow_mut() = mesh;
+        self.streaming_center_chunk = Some((cx, cy));
+    }
+
+    /// 射线命中第一个非空气体素（世界格坐标），用于破坏。
+    pub fn raycast_first_solid(
+        &self,
+        origin: Vector3,
+        dir: Vector3,
+        max_dist: f32,
+    ) -> Option<(i32, i32, i32)> {
+        let dir_len = dir.length();
+        if dir_len < 1e-6 {
+            return None;
+        }
+        let dir = dir * (1.0 / dir_len);
+        let mut t = 0.08_f32;
+        let step = 0.07_f32;
+        while t < max_dist {
+            let p = origin + dir * t;
+            let wx = p.x.floor() as i32;
+            let wy = p.y.floor() as i32;
+            let wz = p.z.floor() as i32;
+            if self.voxel_at(wx, wy, wz) != VoxelKind::Air {
+                return Some((wx, wy, wz));
+            }
+            t += step;
+        }
+        None
+    }
+
+    /// 射线方向上，紧贴首个固体前的空气格，用于放置。
+    pub fn raycast_place_cell(
+        &self,
+        origin: Vector3,
+        dir: Vector3,
+        max_dist: f32,
+    ) -> Option<(i32, i32, i32)> {
+        let dir_len = dir.length();
+        if dir_len < 1e-6 {
+            return None;
+        }
+        let dir = dir * (1.0 / dir_len);
+        let mut t = 0.08_f32;
+        let step = 0.07_f32;
+        let mut last_air: Option<(i32, i32, i32)> = None;
+        while t < max_dist {
+            let p = origin + dir * t;
+            let wx = p.x.floor() as i32;
+            let wy = p.y.floor() as i32;
+            let wz = p.z.floor() as i32;
+            let cell = (wx, wy, wz);
+            if self.voxel_at(wx, wy, wz) != VoxelKind::Air {
+                return last_air;
+            }
+            last_air = Some(cell);
+            t += step;
+        }
+        None
+    }
+
     /// 当玩家进入新区块时重建可见范围合并网格（程序化地形，水平方向无硬边界）。
     ///
-    /// 网格在独立线程中生成，避免单帧内主线程阻塞；若玩家在构建完成前又离开该区块，会丢弃过时结果并在下一帧发起新构建。
+    /// **仅区块中心变化**时走后台线程，避免边跑图边算大图卡逻辑帧。体素编辑后的网格刷新请用
+    /// [`Self::flush_voxel_mesh_sync`]，不要依赖本函数的 `mesh_rebuild_queued` 分支（已移除）。
     pub fn update_streaming(&mut self, player_position: &Vector3) {
         let wx = player_position.x.floor() as i32;
         let wy = player_position.y.floor() as i32;
@@ -624,7 +745,6 @@ impl VoxelWorld {
             let handle = self.mesh_build_join.take().unwrap();
             match handle.join() {
                 Ok(new_mesh) => {
-                    // 仅当玩家仍停留在为该次构建请求的区块时提交，否则丢弃（避免快速折返时闪旧网格）。
                     if self.pending_center_chunk == Some((cx, cy)) {
                         *self.mesh.borrow_mut() = new_mesh;
                         self.streaming_center_chunk = Some((cx, cy));
@@ -637,22 +757,20 @@ impl VoxelWorld {
             }
         }
 
-        if self.streaming_center_chunk == Some((cx, cy)) {
-            return;
-        }
+        let need_new_mesh =
+            self.mesh_build_join.is_none() && self.streaming_center_chunk != Some((cx, cy));
 
-        if self.mesh_build_join.is_some() {
-            return;
+        if need_new_mesh {
+            self.pending_center_chunk = Some((cx, cy));
+            let radius = VIEW_RADIUS_CHUNKS;
+            let overrides = self.overrides.clone();
+            self.mesh_build_join = Some(std::thread::spawn(move || {
+                build_world_mesh(cx, cy, radius, overrides)
+            }));
         }
-
-        self.pending_center_chunk = Some((cx, cy));
-        let radius = VIEW_RADIUS_CHUNKS;
-        self.mesh_build_join = Some(std::thread::spawn(move || {
-            build_world_mesh(cx, cy, radius)
-        }));
     }
 
-    /// 与 `world_voxel` 一致：`surface_height` 为该列**最低空气体素**的 z 索引，即草方块顶面所在世界高度。
+    /// 与 `procedural_voxel` 一致：`surface_height` 为该列**最低空气体素**的 z 索引，即草方块顶面所在世界高度。
     /// 角色碰撞体以 AABB **最小角**为原点且底面为 `position.z`，故脚底应放在该高度略上方，避免与顶面相切被判进固体。
     pub fn suggested_spawn() -> Vector3 {
         let sx = 8i32;
@@ -673,7 +791,7 @@ impl VoxelWorld {
         for ix in x0..=x1 {
             for iy in y0..=y1 {
                 for iz in z0..=z1 {
-                    if world_voxel(ix, iy, iz) == VoxelKind::Air {
+                    if self.voxel_at(ix, iy, iz) == VoxelKind::Air {
                         continue;
                     }
                     out.push(AxisAlignedBox::new(

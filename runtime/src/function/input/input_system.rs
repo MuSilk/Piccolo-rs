@@ -44,6 +44,10 @@ impl InputSystem {
         &self.m_game_command
     }
 
+    pub fn is_mouse_button_down(&self, button: usize) -> bool {
+        button < 3 && self.m_mouse_down[button]
+    }
+
     pub fn reset_game_command(&mut self) {
         self.m_game_command = GameCommand::empty();
     }

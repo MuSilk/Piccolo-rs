@@ -127,6 +127,9 @@ impl RenderSystem {
         self.m_debugdraw_manager.borrow_mut()
             .destroy(&self);
         self.m_render_pipeline.borrow_mut().destroy(&self.m_rhi.borrow());
+        self.m_render_resource
+            .borrow_mut()
+            .flush_deferred_mesh_destroys(&self.m_rhi.borrow());
         self.m_rhi.borrow_mut().destroy();
         Ok(())
     }
@@ -285,6 +288,31 @@ impl RenderSystem {
             self.m_swap_context.reset_game_object_resource_swap_data();
         }
 
+        if swap_data.borrow().m_game_object_to_delete.is_some() {
+            {
+                let mut swap_data = swap_data.borrow_mut();
+                let game_object_to_delete = swap_data.m_game_object_to_delete.as_mut().unwrap();
+                while !game_object_to_delete.is_empty() {
+                    let gobject = game_object_to_delete.get_next_process_object();
+                    for (_part_index, game_object_part) in gobject.get_object_parts().iter().enumerate() {
+                        match game_object_part.m_mesh_desc {
+                            GameObjectMeshDesc::DynamicMesh(ref mesh_desc) => {
+                                let mesh_source = MeshSourceDesc {
+                                    m_mesh_file: mesh_desc.borrow().m_mesh_file.clone(),
+                                };
+                                let asset_id = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().alloc_guid(&mesh_source);
+                                self.m_render_resource.borrow_mut().destroy_game_object_render_resource(asset_id);
+                            }
+                            _ => {}
+                        }
+                    }
+                    self.m_render_scene.delete_entity_by_gobject_id(gobject.get_id());
+                    game_object_to_delete.pop();
+                }
+            }
+            self.m_swap_context.reset_game_object_to_delete_swap_data();
+        }
+        
         if swap_data.borrow().m_camera_swap_data.is_some() {
             {
                 let mut swap_data = swap_data.borrow_mut();
@@ -337,6 +365,9 @@ impl RenderSystem {
             rhi.submit_rendering(&|rhi: &VulkanRHI|
                 self.pass_update_after_recreate_swapchain(&rhi))?;
         }
+        self.m_render_resource
+            .borrow_mut()
+            .on_main_frame_submit_complete(&self.m_rhi.borrow());
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI, K_MAX_FRAMES_IN_FLIGHT}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 #[distributed_slice(vulkan_rhi::VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
 static STORAGE_BUFFER_COUNT_RENDER_RESOURCE: u32 = vulkan_rhi::MAX_MATERIAL_COUNT;
@@ -59,7 +59,12 @@ pub struct GlobalRenderResource {
     pub _storage_buffer: StorageBuffer,
 }
 
-#[derive(Clone, Default)]
+struct DeferredVkMeshDestroy {
+    destroy_after_submit_index: u64,
+    mesh: VulkanMesh,
+}
+
+#[derive(Default)]
 pub struct RenderResource{
     pub m_base:RenderResourceBase,
 
@@ -75,9 +80,55 @@ pub struct RenderResource{
 
     pub m_mesh_descriptor_set_layout: vk::DescriptorSetLayout,
     pub m_material_descriptor_set_layout: vk::DescriptorSetLayout,
+    m_free_mesh_vertex_blending_descriptor_sets: Vec<vk::DescriptorSet>,
+
+    /// Count of successful main `submit_rendering` calls; used to retire replaced meshes after `K_MAX_FRAMES_IN_FLIGHT` further submits.
+    m_completed_main_submit_index: u64,
+    m_deferred_destroy_meshes: Vec<DeferredVkMeshDestroy>,
 }
 
 impl RenderResource {
+    pub fn on_main_frame_submit_complete(&mut self, rhi: &VulkanRHI) {
+        self.m_completed_main_submit_index += 1;
+        let threshold = self.m_completed_main_submit_index;
+        let pending = std::mem::take(&mut self.m_deferred_destroy_meshes);
+        for d in pending {
+            if d.destroy_after_submit_index <= threshold {
+                self.destroy_vulkan_mesh_resources(rhi, &d.mesh).unwrap();
+            } else {
+                self.m_deferred_destroy_meshes.push(d);
+            }
+        }
+    }
+
+    /// Destroy all pending meshes immediately (e.g. before `VulkanRHI::destroy`).
+    pub fn flush_deferred_mesh_destroys(&mut self, rhi: &VulkanRHI) {
+        let pending = std::mem::take(&mut self.m_deferred_destroy_meshes);
+        for d in pending {
+            self.destroy_vulkan_mesh_resources(rhi, &d.mesh).unwrap();
+        }
+    }
+
+    pub fn destroy_game_object_render_resource(&mut self, assetid: usize) {
+        if let Some(old_rc) = self.m_vulkan_meshes.remove(&assetid) {
+            let old_mesh = match Rc::try_unwrap(old_rc) {
+                Ok(m) => m,
+                Err(_) => panic!(
+                    "mesh should only be strongly referenced by m_vulkan_meshes when replacing"
+                ),
+            };
+            self.defer_vulkan_mesh_destroy(old_mesh);
+        }
+    }
+
+    fn defer_vulkan_mesh_destroy(&mut self, mesh: VulkanMesh) {
+        self.m_deferred_destroy_meshes.push(DeferredVkMeshDestroy {
+            destroy_after_submit_index: self.m_completed_main_submit_index
+                + K_MAX_FRAMES_IN_FLIGHT as u64,
+            mesh,
+        });
+    }
+
     pub fn reset_ring_buffer_offset(&mut self, current_frame_index: usize) {
         let mut resource = self.m_global_render_resource.borrow_mut();
         resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
@@ -199,12 +250,12 @@ impl RenderResource {
     }
 
     pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData, material_data: &RenderMaterialData) {
-        self.update_vulkan_mesh(rhi, render_entity, mesh_data);
+        self.update_vulkan_mesh(rhi, render_entity.m_mesh_asset_id, mesh_data);
         self.get_or_create_vulkan_material(rhi, render_entity, material_data);
     }
 
     pub fn upload_game_object_render_resource_mesh(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData){
-        self.update_vulkan_mesh(rhi, render_entity, mesh_data);
+        self.update_vulkan_mesh(rhi, render_entity.m_mesh_asset_id, mesh_data);
     }
 
     pub fn upload_game_object_render_resource_material(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, material_data: &RenderMaterialData){
@@ -221,11 +272,77 @@ impl RenderResource {
 }
 
 impl RenderResource {
-    fn update_vulkan_mesh(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, mesh_data: &RenderMeshData) {
-        let assetid = entity.m_mesh_asset_id;
+    fn acquire_mesh_vertex_blending_descriptor_set(&mut self, rhi: &VulkanRHI) -> vk::DescriptorSet {
+        if let Some(descriptor_set) = self.m_free_mesh_vertex_blending_descriptor_sets.pop() {
+            descriptor_set
+        } else {
+            let set_layouts = [self.m_mesh_descriptor_set_layout];
+            let mesh_vertex_blending_per_mesh_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&set_layouts)
+                .build();
+            rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info).unwrap()[0]
+        }
+    }
 
-        if let Some(_mesh) = self.m_vulkan_meshes.get(&assetid) {
-            //todo: destroy the old mesh
+    fn recycle_mesh_vertex_blending_descriptor_set(&mut self, descriptor_set: vk::DescriptorSet) {
+        if descriptor_set != vk::DescriptorSet::null() {
+            self.m_free_mesh_vertex_blending_descriptor_sets.push(descriptor_set);
+        }
+    }
+
+    fn destroy_vulkan_mesh_resources(&mut self, rhi: &VulkanRHI, mesh: &VulkanMesh) -> Result<()> {
+        if mesh.mesh_vertex_blending_descriptor_set != vk::DescriptorSet::null() {
+            self.recycle_mesh_vertex_blending_descriptor_set(mesh.mesh_vertex_blending_descriptor_set);
+        }
+
+        if mesh.mesh_index_buffer != vk::Buffer::null() {
+            rhi.destroy_buffer(mesh.mesh_index_buffer);
+        }
+        if mesh.mesh_index_buffer_allocation != vk::DeviceMemory::null() {
+            rhi.free_memory(mesh.mesh_index_buffer_allocation);
+        }
+
+        if mesh.mesh_vertex_position_buffer != vk::Buffer::null() {
+            rhi.destroy_buffer(mesh.mesh_vertex_position_buffer);
+        }
+        if mesh.mesh_vertex_position_buffer_allocation != vk::DeviceMemory::null() {
+            rhi.free_memory(mesh.mesh_vertex_position_buffer_allocation);
+        }
+
+        if mesh.mesh_vertex_varying_enable_blending_buffer != vk::Buffer::null() {
+            rhi.destroy_buffer(mesh.mesh_vertex_varying_enable_blending_buffer);
+        }
+        if mesh.mesh_vertex_varying_enable_blending_buffer_allocation != vk::DeviceMemory::null() {
+            rhi.free_memory(mesh.mesh_vertex_varying_enable_blending_buffer_allocation);
+        }
+
+        if mesh.mesh_vertex_varying_buffer != vk::Buffer::null() {
+            rhi.destroy_buffer(mesh.mesh_vertex_varying_buffer);
+        }
+        if mesh.mesh_vertex_varying_buffer_allocation != vk::DeviceMemory::null() {
+            rhi.free_memory(mesh.mesh_vertex_varying_buffer_allocation);
+        }
+
+        if mesh.mesh_vertex_joint_binding_buffer != vk::Buffer::null() {
+            rhi.destroy_buffer(mesh.mesh_vertex_joint_binding_buffer);
+        }
+        if mesh.mesh_vertex_joint_binding_buffer_allocation != vk::DeviceMemory::null() {
+            rhi.free_memory(mesh.mesh_vertex_joint_binding_buffer_allocation);
+        }
+        Ok(())
+    }
+
+    fn update_vulkan_mesh(&mut self, rhi: &VulkanRHI, assetid: usize, mesh_data: &RenderMeshData) {
+
+        if let Some(old_rc) = self.m_vulkan_meshes.remove(&assetid) {
+            let old_mesh = match Rc::try_unwrap(old_rc) {
+                Ok(m) => m,
+                Err(_) => panic!(
+                    "mesh should only be strongly referenced by m_vulkan_meshes when replacing"
+                ),
+            };
+            self.defer_vulkan_mesh_destroy(old_mesh);
         }
         let mut now_mesh = VulkanMesh::default();
 
@@ -519,7 +636,7 @@ impl RenderResource {
     }
     
     fn update_mesh_data<IndexType>(
-        &self,
+        &mut self,
         rhi: &VulkanRHI,
         enable_vertex_blending: bool,
         index_buffer_data: &[u8],
@@ -534,7 +651,7 @@ impl RenderResource {
     }
 
     fn update_vertex_buffer(
-        &self,
+        &mut self,
         rhi: &VulkanRHI,
         enable_vertex_blending: bool,
         vertex_buffer_data: &[MeshVertexDataDefinition],
@@ -631,14 +748,8 @@ impl RenderResource {
             rhi.destroy_buffer(staging_buffer);
             rhi.free_memory(staging_memory);
 
-            let set_layouts = [self.m_mesh_descriptor_set_layout];
-            let mesh_vertex_blending_per_mesh_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(rhi.get_descriptor_pool())
-                .set_layouts(&set_layouts)
-                .build();
-
             now_mesh.mesh_vertex_blending_descriptor_set =
-                rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info).unwrap()[0];
+                self.acquire_mesh_vertex_blending_descriptor_set(rhi);
 
             let mesh_vertex_joint_binding_storage_buffer_info = [
                 vk::DescriptorBufferInfo::builder()

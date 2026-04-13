@@ -53,6 +53,18 @@ impl RenderScene {
         self.m_mesh_object_id_map.borrow_mut().insert(instance_id, go_id);
     }
 
+    pub fn delete_entity_by_gobject_id(&self, go_id: GObjectID) {
+        self.m_mesh_object_id_map.borrow_mut().remove(&(go_id as u32));
+
+        let part_id = GameObjectPartId{
+            m_go_id: go_id,
+            m_part_id: 0
+        };
+        if let Some(instance_id) = self.m_instance_id_allocator.borrow().get_element_guid(&part_id) {   
+            self.m_render_entities.borrow_mut().remove(&(instance_id as u32));
+        }
+    }
+
     pub fn calc_scene_bounding_box(&self) -> BoundingBox {
         let mut scene_bounding_box = BoundingBox::default();
 

@@ -40,6 +40,13 @@ impl Archetype {
         self.m_entities.len() - 1
     }
 
+    fn remove_entity(&mut self, engine: &Engine, entity_index: usize) {
+        self.m_entities.remove(entity_index);
+        for (_type_id, column) in self.m_columns.iter_mut() {
+            column.remove(entity_index).borrow_mut().on_delete(engine);
+        }
+    }
+
     fn get_entity(&self, index: GObjectID) -> impl Iterator<Item = &RefCell<Box<dyn ComponentTrait>>> {
         self.m_columns.iter()
             .map(move |(_type_id, column)| {
@@ -193,6 +200,11 @@ impl Scene {
         self.m_entity_location.insert(object_id, (archetype_type_id, entity_index));
     }
 
+    pub fn delete_object_by_id(&mut self, engine: &Engine, object_id: GObjectID) {
+        self.m_entities.remove(&object_id);
+        let (archetype_type_id, entity_index) = self.m_entity_location.remove(&object_id).unwrap();
+        self.m_archetypes.get_mut(&archetype_type_id).unwrap().remove_entity(engine, entity_index);
+    }
 
     pub fn add_resource<T: 'static>(&mut self, resource: T) {
         self.m_resources.insert(TypeId::of::<T>(),Box::new(resource));
