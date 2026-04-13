@@ -1,6 +1,6 @@
 //! `minecraft-ai` 独立场景：不引用 `crate::minecraft` 下任何模块。
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 use std::{fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -71,6 +71,7 @@ fn player_aabb_overlaps_cell(feet: Vector3, wx: i32, wy: i32, wz: i32) -> bool {
 pub struct GameScene {
     pub inner: runtime::function::framework::scene::scene::Scene,
     world: Option<Rc<RefCell<Box<VoxelWorld>>>>,
+    hotbar_texture_id: Option<u32>,
     latest_player_position: Vector3,
     dig_repeat_accum: f32,
     place_repeat_accum: f32,
@@ -84,9 +85,104 @@ impl GameScene {
         Self {
             inner,
             world: None,
+            hotbar_texture_id: None,
             latest_player_position: Vector3::ZERO,
             dig_repeat_accum: DIG_COOLDOWN,
             place_repeat_accum: PLACE_COOLDOWN,
+        }
+    }
+
+    fn block_uv_rect(block: VoxelKind) -> [f32; 4] {
+        let (tx, ty) = match block {
+            VoxelKind::Dirt => (2, 0),
+            VoxelKind::Stone => (3, 0),
+            VoxelKind::Sand => (4, 0),
+            VoxelKind::Plank => (5, 0),
+            VoxelKind::Brick => (6, 0),
+            VoxelKind::Log => (7, 0),
+            VoxelKind::Leaves => (9, 0),
+            _ => (2, 0),
+        };
+        const ATLAS: f32 = 16.0;
+        let u0 = tx as f32 / ATLAS;
+        let v0 = ty as f32 / ATLAS;
+        let u1 = (tx + 1) as f32 / ATLAS;
+        let v1 = (ty + 1) as f32 / ATLAS;
+        [u0, v0, u1, v1]
+    }
+
+    fn draw_hotbar_ui(&mut self, engine: &Engine) {
+        let selected_slot = {
+            let input = engine.input_system().borrow();
+            input.get_selected_block_slot().clamp(1, 7)
+        };
+        let slots: [VoxelKind; 7] = [
+            VoxelKind::Dirt,
+            VoxelKind::Stone,
+            VoxelKind::Sand,
+            VoxelKind::Plank,
+            VoxelKind::Brick,
+            VoxelKind::Log,
+            VoxelKind::Leaves,
+        ];
+
+        let mut ui = engine.ui_runtime().borrow_mut();
+        if self.hotbar_texture_id.is_none() {
+            let tex_path = engine
+                .asset_manager()
+                .get_full_path(engine.config_manager(), "asset/minecraft-ai/texture/block.png");
+            if let Ok(texture_id) = ui.load_texture_from_path(Path::new(&tex_path)) {
+                self.hotbar_texture_id = Some(texture_id);
+            }
+            println!("hotbar_texture_id: {:?}", self.hotbar_texture_id);
+        }
+        let Some(texture_id) = self.hotbar_texture_id else {
+            return;
+        };
+
+        let vp = ui.get_viewport();
+        let slot_size = 42.0_f32;
+        let pad = 8.0_f32;
+        let total_w = slot_size * slots.len() as f32 + pad * (slots.len() as f32 - 1.0);
+        let x0 = (vp[0] - total_w) * 0.5;
+        let y0 = vp[1] - slot_size - 22.0;
+        let clip = [0.0, 0.0, vp[0], vp[1]];
+
+        ui.push_colored_rect(
+            [x0 - 12.0, y0 - 10.0],
+            [total_w + 24.0, slot_size + 20.0],
+            [14, 16, 20, 160],
+            clip,
+        );
+
+        for (i, block) in slots.iter().enumerate() {
+            let x = x0 + i as f32 * (slot_size + pad);
+            let selected = (i + 1) as u8 == selected_slot;
+            let border_col = if selected {
+                [255, 220, 128, 255]
+            } else {
+                [120, 128, 150, 220]
+            };
+            ui.push_colored_rect([x, y0], [slot_size, slot_size], [36, 40, 52, 220], clip);
+            ui.push_colored_rect([x, y0], [slot_size, 2.0], border_col, clip);
+            ui.push_colored_rect([x, y0 + slot_size - 2.0], [slot_size, 2.0], border_col, clip);
+            ui.push_colored_rect([x, y0], [2.0, slot_size], border_col, clip);
+            ui.push_colored_rect([x + slot_size - 2.0, y0], [2.0, slot_size], border_col, clip);
+            ui.push_textured_rect(
+                [x + 6.0, y0 + 6.0],
+                [slot_size - 12.0, slot_size - 12.0],
+                Self::block_uv_rect(*block),
+                [255, 255, 255, 255],
+                clip,
+                texture_id,
+            );
+            ui.push_text_ascii(
+                &(i + 1).to_string(),
+                [x + 2.0, y0 + slot_size - 14.0],
+                [7.0, 12.0],
+                [230, 230, 235, 255],
+                clip,
+            );
         }
     }
 }
@@ -256,6 +352,7 @@ impl SceneTrait for GameScene {
                     .borrow_mut()
                     .update_streaming(engine, &mut self.inner, &pos);
             }
+            self.draw_hotbar_ui(engine);
         }
         let render = engine.render_system().borrow();
         self.inner.tick_mesh_components(&render);

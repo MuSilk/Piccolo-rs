@@ -52,7 +52,7 @@ impl RuntimeGlobalContext {
         });
         self.m_ui_runtime
             .borrow_mut()
-            .load_font_texture(&render_system.get_rhi().borrow(), &self.m_config_manager)
+            .load_font_texture(&self.m_config_manager)
             .unwrap();
         self.m_render_system = Some(RefCell::new(render_system));
     }
@@ -89,7 +89,7 @@ impl RuntimeGlobalContext {
     pub fn shutdown_systems(&self){
         self.m_ui_runtime
             .borrow_mut()
-            .destroy_textures(&self.m_render_system.as_ref().unwrap().borrow().get_rhi().borrow());
+            .destroy_textures();
         self.m_render_system.as_ref().unwrap().borrow().get_rhi().borrow().wait_idle().unwrap();
         self.m_render_system.as_ref().unwrap().borrow().destroy().unwrap();
     }

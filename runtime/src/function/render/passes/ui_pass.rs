@@ -3,7 +3,7 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{render::{interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{render::{interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiRuntime, UiVertex}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
@@ -15,6 +15,16 @@ pub struct UIPassInitInfo<'a>{
 pub struct UIPass {
     pub m_render_pass: RenderPass,
     renderer_data: [RefCell<RendererData>; K_MAX_FRAMES_IN_FLIGHT],
+    texture_resources: RefCell<Vec<Option<UiTextureGpuResource>>>,
+    synced_texture_version: RefCell<u64>,
+}
+
+#[derive(Copy, Clone, Default)]
+struct UiTextureGpuResource {
+    image: vk::Image,
+    view: vk::ImageView,
+    memory: vk::DeviceMemory,
+    descriptor_set: vk::DescriptorSet,
 }
 
 impl UIPass {
@@ -24,7 +34,6 @@ impl UIPass {
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi)?;
         self.setup_pipelines(info.rhi)?;
-        self.setup_descriptor_set(info.rhi)?;
         self.update_after_framebuffer_recreate(info.rhi)?;
         Ok(())
     }
@@ -34,7 +43,7 @@ impl UIPass {
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "UI\0", color);
 
-        self.render_ui_draw_list(&rhi, &ui_runtime).unwrap();
+        self.render_ui_draw_list(&rhi, ui_runtime).unwrap();
 
         rhi.pop_event(command_buffer);
     }
@@ -48,6 +57,7 @@ impl UIPass {
         rhi: &VulkanRHI,
         ui_runtime: &UiRuntime,
     ) -> Result<()> {
+        self.sync_texture_resources(rhi, ui_runtime)?;
         let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
 
         if draw_list.vertices.is_empty() || draw_list.indices.is_empty() || draw_list.commands.is_empty() {
@@ -88,14 +98,6 @@ impl UIPass {
         }
 
         rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
-        rhi.cmd_bind_descriptor_sets(
-            command_buffer,
-            vk::PipelineBindPoint::GRAPHICS,
-            self.m_render_pass.m_render_pipeline[0].layout,
-            0,
-            &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
-            &[],
-        );
         rhi.cmd_bind_vertex_buffers(command_buffer, 0, &[data.vertex_buffer], &[0]);
         rhi.cmd_bind_index_buffer(command_buffer, data.index_buffer, 0, vk::IndexType::UINT32);
         let viewport = vk::Viewport {
@@ -130,22 +132,18 @@ impl UIPass {
                     clip_rect,
                     texture_id,
                 } => {
-                    if let Some(texture) = ui_runtime.get_texture(*texture_id) {
-                        let texture_info = [vk::DescriptorImageInfo::builder()
-                            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                            .image_view(texture.view)
-                            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Linear)?)
-                            .build()];
-                        let descriptor_write = [vk::WriteDescriptorSet::builder()
-                            .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
-                            .dst_binding(0)
-                            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                            .image_info(&texture_info)
-                            .build()];
-                        rhi.update_descriptor_sets(&descriptor_write)?;
-                    } else {
-                        continue;
-                    }
+                    let descriptor_set = match self.get_texture_descriptor_set(*texture_id) {
+                        Some(descriptor_set) => descriptor_set,
+                        None => continue,
+                    };
+                    rhi.cmd_bind_descriptor_sets(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.m_render_pass.m_render_pipeline[0].layout,
+                        0,
+                        &[descriptor_set],
+                        &[],
+                    );
                     let scissor = vk::Rect2D {
                         offset: vk::Offset2D {
                             x: clip_rect[0] as i32,
@@ -174,7 +172,7 @@ impl UIPass {
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
-static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 1;
+static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 4096;
 
 impl UIPass {
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
@@ -300,14 +298,77 @@ impl UIPass {
         Ok(())
     }
 
-    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
-        let post_process_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(&set_layouts);
+    fn sync_texture_resources(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime) -> Result<()> {
+        let current_version = ui_runtime.textures_version();
+        if *self.synced_texture_version.borrow() == current_version {
+            return Ok(());
+        }
+        self.destroy_texture_resources(rhi);
 
-        self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
+        let mut resources = self.texture_resources.borrow_mut();
+        let max_textures = ui_runtime.texture_capacity() as u32;
+        resources.resize(max_textures as usize, None);
+        let sampler = *rhi.get_or_create_default_sampler(RHISamplerType::Linear)?;
+        for texture_id in 0..max_textures {
+            let Some(texture_data) = ui_runtime.get_texture(texture_id) else {
+                continue;
+            };
+            let (image, memory, view) = rhi.create_texture_image(
+                texture_data.width,
+                texture_data.height,
+                &texture_data.pixels_rgba8,
+                vk::Format::R8G8B8A8_UNORM,
+                0,
+            )?;
+            let layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
+            let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&layouts);
+            let allocated_sets = rhi.allocate_descriptor_sets(&alloc_info)?;
+            let descriptor_set = allocated_sets[0];
+            let texture_info = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(view)
+                .sampler(sampler)
+                .build()];
+            let descriptor_write = [vk::WriteDescriptorSet::builder()
+                .dst_set(descriptor_set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(&texture_info)
+                .build()];
+            rhi.update_descriptor_sets(&descriptor_write)?;
+            resources[texture_id as usize] = Some(UiTextureGpuResource {
+                image,
+                view,
+                memory,
+                descriptor_set,
+            });
+        }
+        *self.synced_texture_version.borrow_mut() = current_version;
         Ok(())
+    }
+
+    fn get_texture_descriptor_set(&self, texture_id: u32) -> Option<vk::DescriptorSet> {
+        self.texture_resources
+            .borrow()
+            .get(texture_id as usize)
+            .and_then(|resource| resource.as_ref())
+            .map(|resource| resource.descriptor_set)
+    }
+
+    fn destroy_texture_resources(&self, rhi: &VulkanRHI) {
+        for resource in self.texture_resources.borrow_mut().iter_mut().filter_map(Option::take) {
+            if resource.view != vk::ImageView::null() {
+                rhi.destroy_image_view(resource.view);
+            }
+            if resource.image != vk::Image::null() {
+                rhi.destroy_image(resource.image);
+            }
+            if resource.memory != vk::DeviceMemory::null() {
+                rhi.free_memory(resource.memory);
+            }
+        }
     }
 }
 

@@ -1,11 +1,7 @@
 use anyhow::Result;
 use std::path::Path;
-use vulkanalia::prelude::v1_0::*;
 use crate::{
-    function::render::{
-        font_atlas::{create_ascii_font_texture_rgba, get_ascii_character_texture_rect},
-        interface::vulkan::vulkan_rhi::VulkanRHI,
-    },
+    function::render::font_atlas::{get_ascii_character_texture_rect, rasterize_ascii_coverage, ASCII_BITMAP_H, ASCII_BITMAP_W},
     resource::config_manager::ConfigManager,
 };
 use bitflags::bitflags;
@@ -45,11 +41,11 @@ pub enum UiDrawCmd {
 
 pub const UI_TEXTURE_ID_FONT_ATLAS: u32 = 0;
 
-#[derive(Copy, Clone, Debug, Default)]
-pub struct UiTextureResource {
-    pub image: vk::Image,
-    pub view: vk::ImageView,
-    pub memory: vk::DeviceMemory,
+#[derive(Clone, Debug, Default)]
+pub struct UiTextureData {
+    pub width: u32,
+    pub height: u32,
+    pub pixels_rgba8: Vec<u8>,
 }
 
 #[derive(Default)]
@@ -76,8 +72,8 @@ pub struct UiRuntime {
     current_menu_popup_pos: [f32; 2],
     current_menu_popup_size: [f32; 2],
     current_menu_item_cursor_y: f32,
-    textures: Vec<Option<UiTextureResource>>,
-    textures_dirty: bool,
+    textures: Vec<Option<UiTextureData>>,
+    textures_version: u64,
 }
 
 pub struct UiButtonResult {
@@ -111,27 +107,19 @@ impl Default for UiPanelFlags {
 }
 
 impl UiRuntime {
-    pub fn load_texture_from_path(&mut self, rhi: &VulkanRHI, image_path: &Path) -> Result<u32> {
+    pub fn load_texture_from_path(&mut self, image_path: &Path) -> Result<u32> {
         let image = image::open(image_path)?;
         let image = image.to_rgba8();
         let width = image.width();
         let height = image.height();
         let pixels = image.into_raw();
-        let (texture_image, texture_memory, texture_view) = rhi.create_texture_image(
-            width,
-            height,
-            &pixels,
-            vk::Format::R8G8B8A8_UNORM,
-            0,
-        )?;
-
         let texture_id = self.textures.len() as u32;
         self.set_texture(
             texture_id,
-            UiTextureResource {
-                image: texture_image,
-                view: texture_view,
-                memory: texture_memory,
+            UiTextureData {
+                width,
+                height,
+                pixels_rgba8: pixels,
             },
         );
         Ok(texture_id)
@@ -139,68 +127,66 @@ impl UiRuntime {
 
     pub fn load_font_texture(
         &mut self,
-        rhi: &VulkanRHI,
         config_manager: &ConfigManager,
     ) -> Result<u32> {
-        if let Some(old_texture) = self.get_texture(UI_TEXTURE_ID_FONT_ATLAS) {
-            if old_texture.view != vk::ImageView::null() {
-                rhi.destroy_image_view(old_texture.view);
-            }
-            if old_texture.image != vk::Image::null() {
-                rhi.destroy_image(old_texture.image);
-            }
-            if old_texture.memory != vk::DeviceMemory::null() {
-                rhi.free_memory(old_texture.memory);
-            }
-        }
         let font_path = config_manager.get_editor_font_path().to_path_buf();
-        let (image, memory, view) = create_ascii_font_texture_rgba(rhi, font_path.as_path())?;
+        let image_data = rasterize_ascii_coverage(font_path.as_path())?;
+        let mut rgba = vec![0_u8; image_data.len() * 4];
+        for (i, v) in image_data.iter().enumerate() {
+            let alpha = (v.clamp(0.0, 1.0) * 255.0) as u8;
+            rgba[i * 4] = 255;
+            rgba[i * 4 + 1] = 255;
+            rgba[i * 4 + 2] = 255;
+            rgba[i * 4 + 3] = alpha;
+        }
+        if !rgba.is_empty() {
+            rgba[0] = 255;
+            rgba[1] = 255;
+            rgba[2] = 255;
+            rgba[3] = 255;
+        }
         self.set_texture(
             UI_TEXTURE_ID_FONT_ATLAS,
-            UiTextureResource {
-                image,
-                view,
-                memory,
+            UiTextureData {
+                width: ASCII_BITMAP_W as u32,
+                height: ASCII_BITMAP_H as u32,
+                pixels_rgba8: rgba,
             },
         );
         Ok(UI_TEXTURE_ID_FONT_ATLAS)
     }
 
-    pub fn destroy_textures(&mut self, rhi: &VulkanRHI) {
-        for texture in self.textures.iter_mut().filter_map(Option::take) {
-            if texture.view != vk::ImageView::null() {
-                rhi.destroy_image_view(texture.view);
-            }
-            if texture.image != vk::Image::null() {
-                rhi.destroy_image(texture.image);
-            }
-            if texture.memory != vk::DeviceMemory::null() {
-                rhi.free_memory(texture.memory);
-            }
-        }
-        self.textures_dirty = true;
+    pub fn destroy_textures(&mut self) {
+        self.textures.clear();
+        self.textures_version = self.textures_version.wrapping_add(1);
     }
 
-    fn set_texture(&mut self, texture_id: u32, texture: UiTextureResource) {
+    fn set_texture(&mut self, texture_id: u32, texture: UiTextureData) {
         let texture_index = texture_id as usize;
         if self.textures.len() <= texture_index {
             self.textures.resize(texture_index + 1, None);
         }
 
-        if let Some(old_texture) = self.textures[texture_index].replace(texture) {
-            let _ = old_texture; // Caller owns replacement lifecycle.
-        }
-        self.textures_dirty = true;
+        self.textures[texture_index] = Some(texture);
+        self.textures_version = self.textures_version.wrapping_add(1);
     }
 
-    pub fn get_texture(&self, texture_id: u32) -> Option<UiTextureResource> {
+    pub fn get_texture(&self, texture_id: u32) -> Option<&UiTextureData> {
         self.textures
             .get(texture_id as usize)
-            .and_then(|texture| *texture)
+            .and_then(|texture| texture.as_ref())
     }
 
     pub fn has_texture(&self, texture_id: u32) -> bool {
         self.get_texture(texture_id).is_some()
+    }
+
+    pub fn textures_version(&self) -> u64 {
+        self.textures_version
+    }
+
+    pub fn texture_capacity(&self) -> usize {
+        self.textures.len()
     }
 
     pub fn update_input(&mut self, input: UiInputSnapshot) {

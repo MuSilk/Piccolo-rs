@@ -131,6 +131,7 @@ impl InputSystem {
                             KeyCode::Digit4 => self.m_selected_block_slot = 4,
                             KeyCode::Digit5 => self.m_selected_block_slot = 5,
                             KeyCode::Digit6 => self.m_selected_block_slot = 6,
+                            KeyCode::Digit7 => self.m_selected_block_slot = 7,
                             _ => {}
                         }
                     },
