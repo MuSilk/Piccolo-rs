@@ -6,7 +6,7 @@
 
 use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use runtime::{
     core::math::{axis_aligned::AxisAlignedBox, matrix4::Matrix4x4, transform::Transform, vector3::Vector3},
     engine::Engine,
@@ -35,17 +35,23 @@ pub const WZ: i32 = 96;
 /// 水平向区块边长（体素），与常见 MC 区块宽度一致便于理解。
 pub const CHUNK_SIZE: i32 = 16;
 /// 以玩家所在区块为中心，Chebyshev 距离 `<=` 该值内的区块参与网格生成（含边界）。
-const VIEW_RADIUS_CHUNKS: i32 = 3;
+const VIEW_RADIUS_CHUNKS: i32 = 7;
 
 const ATLAS: f32 = 16.0;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum VoxelKind {
     Air = 0,
     Grass = 1,
     Dirt = 2,
     Stone = 3,
+    Sand = 4,
+    Plank = 5,
+    Brick = 6,
+    Log = 7,
+    #[serde(alias = "Glow")]
+    Leaves = 8,
 }
 
 fn world_chunk_coords(wx: i32, wy: i32) -> (i32, i32) {
@@ -106,12 +112,149 @@ fn surface_height(wx: i32, wy: i32) -> i32 {
     h.clamp(8.0, (WZ - 4) as f32) as i32
 }
 
+fn lattice_noise01_3d(ix: i32, iy: i32, iz: i32) -> f32 {
+    let mut n = (ix as u32).wrapping_mul(0x9E37_79B1)
+        ^ (iy as u32).wrapping_mul(0x85EB_CA6B)
+        ^ (iz as u32).wrapping_mul(0xC2B2_AE35);
+    n ^= n >> 16;
+    n = n.wrapping_mul(0x7FEB_352D);
+    n ^= n >> 15;
+    n = n.wrapping_mul(0x846C_A68B);
+    n ^= n >> 16;
+    (n as f32) * (1.0 / u32::MAX as f32)
+}
+
+fn value_noise_3d(x: f32, y: f32, z: f32) -> f32 {
+    let x0f = x.floor();
+    let y0f = y.floor();
+    let z0f = z.floor();
+    let x0 = x0f as i32;
+    let y0 = y0f as i32;
+    let z0 = z0f as i32;
+    let tx = smoothstep3(x - x0f);
+    let ty = smoothstep3(y - y0f);
+    let tz = smoothstep3(z - z0f);
+
+    let c000 = lattice_noise01_3d(x0, y0, z0);
+    let c100 = lattice_noise01_3d(x0 + 1, y0, z0);
+    let c010 = lattice_noise01_3d(x0, y0 + 1, z0);
+    let c110 = lattice_noise01_3d(x0 + 1, y0 + 1, z0);
+    let c001 = lattice_noise01_3d(x0, y0, z0 + 1);
+    let c101 = lattice_noise01_3d(x0 + 1, y0, z0 + 1);
+    let c011 = lattice_noise01_3d(x0, y0 + 1, z0 + 1);
+    let c111 = lattice_noise01_3d(x0 + 1, y0 + 1, z0 + 1);
+
+    let x00 = c000 + (c100 - c000) * tx;
+    let x10 = c010 + (c110 - c010) * tx;
+    let x01 = c001 + (c101 - c001) * tx;
+    let x11 = c011 + (c111 - c011) * tx;
+    let y0v = x00 + (x10 - x00) * ty;
+    let y1v = x01 + (x11 - x01) * ty;
+    y0v + (y1v - y0v) * tz
+}
+
+const CAVE_FREQ_1_XY: f32 = 0.058;
+const CAVE_FREQ_1_Z: f32 = 0.078;
+const CAVE_FREQ_2_XY: f32 = 0.112;
+const CAVE_FREQ_2_Z: f32 = 0.145;
+const CAVE_DEEP_THRESHOLD: f32 = 0.66;
+const CAVE_SURFACE_MOUTH_THRESHOLD: f32 = 0.80;
+const CAVE_SURFACE_LAYER_TOP_OFFSET: i32 = 1;
+const CAVE_SURFACE_LAYER_BOTTOM_OFFSET: i32 = 6;
+
+fn is_cave_air(wx: i32, wy: i32, wz: i32, top: i32) -> bool {
+    if wz < 4 {
+        return false;
+    }
+    let x = wx as f32;
+    let y = wy as f32;
+    let z = wz as f32;
+
+    // 两层 3D 噪声叠加形成连通洞穴（频率略降低，让洞更大、更容易观察到）。
+    let n1 = value_noise_3d(x * CAVE_FREQ_1_XY, y * CAVE_FREQ_1_XY, z * CAVE_FREQ_1_Z);
+    let n2 = value_noise_3d(x * CAVE_FREQ_2_XY + 37.0, y * CAVE_FREQ_2_XY - 11.0, z * CAVE_FREQ_2_Z + 5.0);
+    let cave = n1 * 0.72 + n2 * 0.28;
+
+    // 地表以下较深处：正常洞穴密度。
+    if wz <= top - (CAVE_SURFACE_LAYER_BOTTOM_OFFSET + 1) {
+        return cave > CAVE_DEEP_THRESHOLD;
+    }
+
+    // 近地表薄层（top-6..top-1）：用独立 2D 掩码决定“天窗/井口”，确保可见洞口但不过量。
+    if wz <= top - CAVE_SURFACE_LAYER_TOP_OFFSET {
+        let mouth_mask = value_noise_2d(x * 0.05 + 31.0, y * 0.05 - 17.0);
+        let mouth_depth_noise = value_noise_2d(x * 0.09 - 7.0, y * 0.09 + 23.0);
+        let mouth_depth = 3 + (mouth_depth_noise * 6.0) as i32; // 3..8
+        let in_mouth_depth = wz >= top - mouth_depth && wz <= top - CAVE_SURFACE_LAYER_TOP_OFFSET;
+        return mouth_mask > CAVE_SURFACE_MOUTH_THRESHOLD && in_mouth_depth;
+    }
+
+    false
+}
+
+const TREE_GRID: i32 = 7;
+const TREE_OFFSET: i32 = 3;
+
+fn trunk_height_at(anchor_x: i32, anchor_y: i32) -> i32 {
+    // 4..6
+    4 + (lattice_noise01(anchor_x * 31 + 17, anchor_y * 29 + 41) * 3.0) as i32
+}
+
+fn has_tree_at(anchor_x: i32, anchor_y: i32) -> bool {
+    let top = surface_height(anchor_x, anchor_y);
+    if top < 16 {
+        return false;
+    }
+    let n = lattice_noise01(anchor_x * 13 + 7, anchor_y * 11 + 19);
+    n > 0.62
+}
+
+fn tree_voxel(wx: i32, wy: i32, wz: i32) -> VoxelKind {
+    // 检查可能影响当前体素的邻近树锚点（树叶半径 2，格子间距 7）。
+    let gx0 = (wx - 2 - TREE_OFFSET).div_euclid(TREE_GRID);
+    let gx1 = (wx + 2 - TREE_OFFSET).div_euclid(TREE_GRID);
+    let gy0 = (wy - 2 - TREE_OFFSET).div_euclid(TREE_GRID);
+    let gy1 = (wy + 2 - TREE_OFFSET).div_euclid(TREE_GRID);
+    for gx in gx0..=gx1 {
+        for gy in gy0..=gy1 {
+            let ax = gx * TREE_GRID + TREE_OFFSET;
+            let ay = gy * TREE_GRID + TREE_OFFSET;
+            if !has_tree_at(ax, ay) {
+                continue;
+            }
+
+            let top = surface_height(ax, ay);
+            let trunk_h = trunk_height_at(ax, ay);
+            let trunk_base = top;
+            let trunk_top = trunk_base + trunk_h - 1;
+
+            if wx == ax && wy == ay && wz >= trunk_base && wz <= trunk_top {
+                return VoxelKind::Log;
+            }
+
+            // 树冠：位于树干顶部附近，近似椭球体，且不覆盖树干本体。
+            let crown_cz = trunk_top + 1;
+            let dx = (wx - ax).abs();
+            let dy = (wy - ay).abs();
+            let dz = (wz - crown_cz).abs();
+            let in_crown = dx <= 2 && dy <= 2 && dz <= 2 && (dx + dy + dz <= 4 || (dx <= 1 && dy <= 1 && dz <= 2));
+            if in_crown && !(wx == ax && wy == ay && wz <= trunk_top + 1) {
+                return VoxelKind::Leaves;
+            }
+        }
+    }
+    VoxelKind::Air
+}
+
 fn procedural_voxel(wx: i32, wy: i32, wz: i32) -> VoxelKind {
     if wz < 0 || wz >= WZ {
         return VoxelKind::Air;
     }
     let top = surface_height(wx, wy);
     if wz >= top {
+        return tree_voxel(wx, wy, wz);
+    }
+    if is_cave_air(wx, wy, wz, top) {
         return VoxelKind::Air;
     }
     if wz == top - 1 {
@@ -128,11 +271,21 @@ fn atlas_cell(kind: VoxelKind, face: usize) -> (u32, u32) {
     match kind {
         VoxelKind::Grass => match face {
             4 => (1, 0), // +Z 顶面
-            5 => (1, 0), // -Z 底面（与主工程草方块一致）
+            5 => (2, 0), // -Z 底面
             _ => (0, 0), // 四个侧面
         },
         VoxelKind::Dirt => (2, 0),
         VoxelKind::Stone => (3, 0),
+        VoxelKind::Sand => (4, 0),
+        VoxelKind::Plank => (5, 0),
+        VoxelKind::Brick => (6, 0),
+        // 原木：顶/底与侧面使用不同格子（暂用现有图集占位）。
+        VoxelKind::Log => match face {
+            4 | 5 => (8, 0),
+            _ => (7, 0),
+        },
+        // 树叶先按不透明处理；材质仍走当前 block.material.json。
+        VoxelKind::Leaves => (9, 0),
         VoxelKind::Air => (0, 0),
     }
 }
@@ -593,6 +746,14 @@ struct ChunkRenderEntry {
     mesh: Rc<RefCell<GameObjectDynamicMeshDesc>>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VoxelOverrideRecord {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub kind: VoxelKind,
+}
+
 pub struct VoxelWorld {
     /// 相对程序化地形的体素覆盖（破坏/放置）；与程序化一致时可 `remove` 节省内存。
     overrides: HashMap<(i32, i32, i32), VoxelKind>,
@@ -667,6 +828,24 @@ impl VoxelWorld {
         } else {
             procedural_voxel(wx, wy, wz)
         }
+    }
+
+    pub fn snapshot_overrides(&self) -> Vec<VoxelOverrideRecord> {
+        self.overrides
+            .iter()
+            .map(|(&(x, y, z), &kind)| VoxelOverrideRecord { x, y, z, kind })
+            .collect()
+    }
+
+    pub fn replace_overrides(&mut self, overrides: Vec<VoxelOverrideRecord>) {
+        self.overrides.clear();
+        for rec in overrides {
+            if rec.kind == procedural_voxel(rec.x, rec.y, rec.z) {
+                continue;
+            }
+            self.overrides.insert((rec.x, rec.y, rec.z), rec.kind);
+        }
+        self.dirty_chunks.extend(self.loaded_chunks.keys().copied());
     }
 
     pub fn set_voxel(&mut self, wx: i32, wy: i32, wz: i32, kind: VoxelKind) {

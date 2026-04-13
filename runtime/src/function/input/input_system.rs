@@ -34,6 +34,7 @@ pub struct InputSystem {
     pub m_cursor_delta_pitch: f32,
 
     m_game_command: GameCommand,
+    m_selected_block_slot: u8,
     m_cursor_pos: [f32; 2],
     m_mouse_down: [bool; 3],
 }
@@ -46,6 +47,11 @@ impl InputSystem {
 
     pub fn is_mouse_button_down(&self, button: usize) -> bool {
         button < 3 && self.m_mouse_down[button]
+    }
+
+    /// 1-based hotbar slot index (1..=9), default to 1.
+    pub fn get_selected_block_slot(&self) -> u8 {
+        self.m_selected_block_slot.clamp(1, 9)
     }
 
     pub fn reset_game_command(&mut self) {
@@ -119,6 +125,12 @@ impl InputSystem {
                             KeyCode::KeyF => {
                                 self.m_game_command ^= GameCommand::free_camera;
                             }
+                            KeyCode::Digit1 => self.m_selected_block_slot = 1,
+                            KeyCode::Digit2 => self.m_selected_block_slot = 2,
+                            KeyCode::Digit3 => self.m_selected_block_slot = 3,
+                            KeyCode::Digit4 => self.m_selected_block_slot = 4,
+                            KeyCode::Digit5 => self.m_selected_block_slot = 5,
+                            KeyCode::Digit6 => self.m_selected_block_slot = 6,
                             _ => {}
                         }
                     },

@@ -226,7 +226,6 @@ impl RenderSystem {
                                     let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data_from_raw(&mesh_source, &mesh_desc.borrow().m_vertices, &mesh_desc.borrow().m_indices);
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
-                                    println!("load static mesh data");
                                 }
                                 else{
                                     render_entity.m_bounding_box = self.m_render_resource.borrow_mut().get_cached_bounding_box(&mesh_source).unwrap().clone();

@@ -1,7 +1,9 @@
 //! `minecraft-ai` 独立场景：不引用 `crate::minecraft` 下任何模块。
 
 use std::{cell::RefCell, rc::Rc};
+use std::{fs, path::PathBuf};
 
+use serde::{Deserialize, Serialize};
 use runtime::{
     core::math::{transform::Transform, vector3::Vector3},
     engine::Engine,
@@ -19,13 +21,37 @@ use runtime::{
 
 use crate::{
     minecraft_motor_component::MinecraftMotorComponent, player_controller::AiPlayerController,
-    voxel_world::{VoxelKind, VoxelWorld},
+    voxel_world::{VoxelKind, VoxelOverrideRecord, VoxelWorld},
 };
 
 /// 左键连续破坏间隔（秒）；松开后再按需立刻响应，故用同一数值做累计器初值。
 const DIG_COOLDOWN: f32 = 0.22;
 /// 右键连续放置间隔（秒）。
 const PLACE_COOLDOWN: f32 = 0.28;
+const SAVE_FILE_NAME: &str = "minecraft_ai.save.json";
+
+#[derive(Serialize, Deserialize)]
+struct GameSaveData {
+    player_position: Vector3,
+    overrides: Vec<VoxelOverrideRecord>,
+}
+
+fn save_file_path() -> PathBuf {
+    PathBuf::from("save").join(SAVE_FILE_NAME)
+}
+
+fn slot_to_block(slot: u8) -> VoxelKind {
+    match slot {
+        1 => VoxelKind::Dirt,
+        2 => VoxelKind::Stone,
+        3 => VoxelKind::Sand,
+        4 => VoxelKind::Plank,
+        5 => VoxelKind::Brick,
+        6 => VoxelKind::Log,
+        7 => VoxelKind::Leaves,
+        _ => VoxelKind::Dirt,
+    }
+}
 
 /// 与 `AiPlayerController` 碰撞盒一致：脚底为 `feet` 的 AABB 是否与单位体素格相交。
 fn player_aabb_overlaps_cell(feet: Vector3, wx: i32, wy: i32, wz: i32) -> bool {
@@ -45,6 +71,7 @@ fn player_aabb_overlaps_cell(feet: Vector3, wx: i32, wy: i32, wz: i32) -> bool {
 pub struct GameScene {
     pub inner: runtime::function::framework::scene::scene::Scene,
     world: Option<Rc<RefCell<Box<VoxelWorld>>>>,
+    latest_player_position: Vector3,
     dig_repeat_accum: f32,
     place_repeat_accum: f32,
 }
@@ -57,6 +84,7 @@ impl GameScene {
         Self {
             inner,
             world: None,
+            latest_player_position: Vector3::ZERO,
             dig_repeat_accum: DIG_COOLDOWN,
             place_repeat_accum: PLACE_COOLDOWN,
         }
@@ -67,10 +95,22 @@ impl SceneTrait for GameScene {
     fn load(&mut self, engine: &Engine) {
         engine.window_system().borrow().set_focus_mode(true);
 
-        let spawn = VoxelWorld::suggested_spawn();
+        let mut spawn = VoxelWorld::suggested_spawn();
+        let mut saved_overrides = Vec::new();
+        if let Ok(text) = fs::read_to_string(save_file_path()) {
+            if let Ok(save_data) = serde_json::from_str::<GameSaveData>(&text) {
+                spawn = save_data.player_position;
+                saved_overrides = save_data.overrides;
+            }
+        }
         let world = Rc::new(RefCell::new(VoxelWorld::new_box(engine, &mut self.inner)));
         self.inner.add_resource(world.clone());
         self.world = Some(world.clone());
+        self.latest_player_position = spawn;
+        if !saved_overrides.is_empty() {
+            world.borrow_mut().replace_overrides(saved_overrides);
+            world.borrow_mut().flush_voxel_mesh_sync(&spawn);
+        }
 
         let object = self.inner.spawn();
         let mut character = Box::new(CharacterComponent::new());
@@ -101,7 +141,24 @@ impl SceneTrait for GameScene {
         self.inner.set_loaded(true);
     }
 
-    fn save(&self) {}
+    fn save(&self) {
+        let Some(world_rc) = self.world.as_ref() else {
+            return;
+        };
+        let save = GameSaveData {
+            player_position: self.latest_player_position,
+            overrides: world_rc.borrow().snapshot_overrides(),
+        };
+        let Ok(text) = serde_json::to_string_pretty(&save) else {
+            return;
+        };
+        let path = save_file_path();
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(path, text);
+    }
+    
 
     fn tick(&mut self, engine: &Engine, delta_time: f32) {
         if !self.is_loaded() {
@@ -130,6 +187,9 @@ impl SceneTrait for GameScene {
                 .query_mut::<CharacterComponent>()
                 .next()
                 .map(|c| c.m_position);
+            if let Some(pos) = player_pos {
+                self.latest_player_position = pos;
+            }
             let input = engine.input_system().borrow();
             let render = engine.render_system().borrow();
             self.inner
@@ -140,12 +200,17 @@ impl SceneTrait for GameScene {
                 let inp = engine.input_system().borrow();
                 (inp.is_mouse_button_down(0), inp.is_mouse_button_down(1))
             };
+            let selected_block = {
+                let inp = engine.input_system().borrow();
+                slot_to_block(inp.get_selected_block_slot())
+            };
             let cam_snap = self
                 .inner
                 .query_pair::<CameraComponent, CharacterComponent>()
                 .next()
                 .map(|(cam, ch)| (cam.m_position, cam.m_forward, ch.get_position()));
 
+            let mut world_changed = false;
             if let (Some(world_rc), Some((origin, forward, feet))) = (self.world.as_ref(), cam_snap) {
                 let mut world = world_rc.borrow_mut();
                 if mouse_left {
@@ -156,6 +221,7 @@ impl SceneTrait for GameScene {
                             world.raycast_first_solid(origin, forward, REACH)
                         {
                             world.set_voxel(x, y, z, VoxelKind::Air);
+                            world_changed = true;
                         }
                     }
                 } else {
@@ -171,7 +237,8 @@ impl SceneTrait for GameScene {
                             if world.voxel_at(x, y, z) == VoxelKind::Air
                                 && !player_aabb_overlaps_cell(feet, x, y, z)
                             {
-                                world.set_voxel(x, y, z, VoxelKind::Dirt);
+                                world.set_voxel(x, y, z, selected_block);
+                                world_changed = true;
                             }
                         }
                     }
@@ -179,6 +246,9 @@ impl SceneTrait for GameScene {
                     self.place_repeat_accum = PLACE_COOLDOWN;
                 }
                 world.flush_voxel_mesh_sync(&feet);
+            }
+            if world_changed {
+                self.save();
             }
 
             if let (Some(world_rc), Some(pos)) = (self.world.as_ref(), player_pos) {
