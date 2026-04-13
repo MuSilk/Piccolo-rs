@@ -4,15 +4,16 @@
 //!
 //! 区块切换时网格合并 `build_world_mesh` 计算量大；在后台线程构建、主线程每帧取回结果，避免逻辑帧长时间卡住。
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc, thread::JoinHandle};
+use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
 
 use serde::Deserialize;
 use runtime::{
-    core::math::{axis_aligned::AxisAlignedBox, matrix4::Matrix4x4, vector3::Vector3},
+    core::math::{axis_aligned::AxisAlignedBox, matrix4::Matrix4x4, transform::Transform, vector3::Vector3},
     engine::Engine,
     function::{
         framework::{
             component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent},
+            object::object_id_allocator::GObjectID,
             resource::component::mesh::MeshComponentRes,
             scene::scene::Scene,
         },
@@ -159,8 +160,9 @@ fn transform_corner(v: &mut MeshVertexDataDefinition, origin: Vector3, m: &Matri
     v.z = p.z + origin.z;
 }
 
-/// 在世界体素坐标 `(wx,wy,wz)` 上为外露面生成四顶点（局部 0..1 立方体再平移）。
+/// 在体素格 `(wx,wy,wz)` 上为外露面生成四顶点；`origin` 可是世界坐标（合并网格）或 chunk 局部坐标。
 fn emit_faces_for_cell(
+    origin: Vector3,
     wx: i32,
     wy: i32,
     wz: i32,
@@ -169,7 +171,7 @@ fn emit_faces_for_cell(
     verts: &mut Vec<MeshVertexDataDefinition>,
     idx: &mut Vec<u32>,
 ) {
-    let o = Vector3::new(wx as f32, wy as f32, wz as f32);
+    let o = origin;
     let neighbors = [
         (1i32, 0, 0),
         (-1, 0, 0),
@@ -540,94 +542,122 @@ fn emit_faces_for_cell(
     }
 }
 
-fn build_world_mesh(
-    center_cx: i32,
-    center_cy: i32,
-    radius: i32,
-    overrides: HashMap<(i32, i32, i32), VoxelKind>,
+fn build_chunk_mesh(
+    chunk_cx: i32,
+    chunk_cy: i32,
+    overrides: &HashMap<(i32, i32, i32), VoxelKind>,
 ) -> GameObjectDynamicMeshDesc {
     let mut verts = Vec::new();
     let mut indices = Vec::new();
-    let get = move |x: i32, y: i32, z: i32| {
+    let get = |x: i32, y: i32, z: i32| {
         if let Some(&k) = overrides.get(&(x, y, z)) {
             k
         } else {
             procedural_voxel(x, y, z)
         }
     };
-    let span = CHUNK_SIZE * (radius * 2 + 1);
-    let x0 = (center_cx - radius) * CHUNK_SIZE;
-    let y0 = (center_cy - radius) * CHUNK_SIZE;
+    let x0 = chunk_cx * CHUNK_SIZE;
+    let y0 = chunk_cy * CHUNK_SIZE;
     for lz in 0..WZ {
-        for ly in 0..span {
-            for lx in 0..span {
+        for ly in 0..CHUNK_SIZE {
+            for lx in 0..CHUNK_SIZE {
                 let wx = x0 + lx;
                 let wy = y0 + ly;
                 let k = get(wx, wy, lz);
                 if k == VoxelKind::Air {
                     continue;
                 }
-                emit_faces_for_cell(wx, wy, lz, k, &get, &mut verts, &mut indices);
+                emit_faces_for_cell(
+                    Vector3::new(lx as f32, ly as f32, lz as f32),
+                    wx,
+                    wy,
+                    lz,
+                    k,
+                    &get,
+                    &mut verts,
+                    &mut indices,
+                );
             }
         }
     }
     let mut mesh = GameObjectDynamicMeshDesc::default();
     mesh.m_is_dirty = true;
-    mesh.m_mesh_file = "minecraft_streaming_voxel_world.mesh".to_string();
+    mesh.m_mesh_file = format!("minecraft_chunk_{}_{}.mesh", chunk_cx, chunk_cy);
     mesh.m_vertices = verts;
     mesh.m_indices = indices;
     mesh
 }
 
+struct ChunkRenderEntry {
+    object_id: GObjectID,
+    mesh: Rc<RefCell<GameObjectDynamicMeshDesc>>,
+}
+
 pub struct VoxelWorld {
-    pub mesh: Rc<RefCell<GameObjectDynamicMeshDesc>>,
     /// 相对程序化地形的体素覆盖（破坏/放置）；与程序化一致时可 `remove` 节省内存。
     overrides: HashMap<(i32, i32, i32), VoxelKind>,
-    /// 同区块内编辑后需要刷新合并网格。
-    mesh_rebuild_queued: bool,
-    /// 当前已提交到 `mesh` 的区块中心（与碰撞程序化采样无关，仅用于流式刷新判定）。
-    streaming_center_chunk: Option<(i32, i32)>,
-    /// 正在后台构建的网格对应的中心区块（`JoinHandle` 存在时有效）。
-    pending_center_chunk: Option<(i32, i32)>,
-    mesh_build_join: Option<JoinHandle<GameObjectDynamicMeshDesc>>,
+    mesh_res: MeshComponentRes,
+    loaded_chunks: HashMap<(i32, i32), ChunkRenderEntry>,
+    dirty_chunks: HashSet<(i32, i32)>,
 }
 
 impl VoxelWorld {
-    pub fn new_box(engine: &Engine, scene: &mut Scene) -> Box<Self> {
-        let spawn_xy = (8i32, 8i32);
-        let (icx, icy) = world_chunk_coords(spawn_xy.0, spawn_xy.1);
-        let mesh = Rc::new(RefCell::new(build_world_mesh(
-            icx,
-            icy,
-            VIEW_RADIUS_CHUNKS,
-            HashMap::new(),
-        )));
+    fn create_chunk_object(&mut self, engine: &Engine, scene: &mut Scene, cx: i32, cy: i32) {
+        let mesh = Rc::new(RefCell::new(build_chunk_mesh(cx, cy, &self.overrides)));
         let object_id = scene.spawn();
-        let asset_manager = engine.asset_manager();
-        let config_manager = engine.config_manager();
-        let mesh_res = asset_manager
-            .load_asset::<BlockMeshJson>(config_manager, "asset/minecraft/block.json")
-            .expect("asset/minecraft/block.json")
-            .m_mesh_res;
         let mut mesh_component = Box::new(MeshComponent::default());
-        mesh_component.post_load_resource(object_id, asset_manager, config_manager, &mesh_res);
+        mesh_component.post_load_resource(
+            object_id,
+            engine.asset_manager(),
+            engine.config_manager(),
+            &self.mesh_res,
+        );
         mesh_component.m_raw_meshes.resize(1, GameObjectPartDesc::default());
         mesh_component.m_raw_meshes[0].m_mesh_desc = GameObjectMeshDesc::DynamicMesh(Rc::clone(&mesh));
+
         let mut transform = Box::new(TransformComponent::default());
-        transform.post_load_resource(runtime::core::math::transform::Transform::default());
-        let components = vec![
-            RefCell::new(mesh_component) as RefCell<Box<dyn ComponentTrait>>,
-            RefCell::new(transform),
-        ];
-        scene.create_object(object_id, components);
-        Box::new(Self {
-            mesh,
+        transform.post_load_resource(Transform::new(
+            Vector3::new((cx * CHUNK_SIZE) as f32, (cy * CHUNK_SIZE) as f32, 0.0),
+            runtime::core::math::quaternion::Quaternion::identity(),
+            Vector3::ONES,
+        ));
+
+        scene.create_object(
+            object_id,
+            vec![
+                RefCell::new(mesh_component) as RefCell<Box<dyn ComponentTrait>>,
+                RefCell::new(transform),
+            ],
+        );
+        self.loaded_chunks.insert((cx, cy), ChunkRenderEntry { object_id, mesh });
+    }
+
+    fn rebuild_loaded_chunk(&mut self, cx: i32, cy: i32) {
+        if let Some(entry) = self.loaded_chunks.get(&(cx, cy)) {
+            *entry.mesh.borrow_mut() = build_chunk_mesh(cx, cy, &self.overrides);
+        }
+    }
+
+    pub fn new_box(engine: &Engine, scene: &mut Scene) -> Box<Self> {
+        let mesh_res = engine
+            .asset_manager()
+            .load_asset::<BlockMeshJson>(engine.config_manager(), "asset/minecraft/block.json")
+            .expect("asset/minecraft/block.json")
+            .m_mesh_res;
+        let mut world = Self {
             overrides: HashMap::new(),
-            mesh_rebuild_queued: false,
-            streaming_center_chunk: Some((icx, icy)),
-            pending_center_chunk: None,
-            mesh_build_join: None,
-        })
+            mesh_res,
+            loaded_chunks: HashMap::new(),
+            dirty_chunks: HashSet::new(),
+        };
+        let spawn_xy = (8i32, 8i32);
+        let (icx, icy) = world_chunk_coords(spawn_xy.0, spawn_xy.1);
+        for cy in (icy - VIEW_RADIUS_CHUNKS)..=(icy + VIEW_RADIUS_CHUNKS) {
+            for cx in (icx - VIEW_RADIUS_CHUNKS)..=(icx + VIEW_RADIUS_CHUNKS) {
+                world.create_chunk_object(engine, scene, cx, cy);
+            }
+        }
+        Box::new(world)
     }
 
     #[inline]
@@ -645,30 +675,32 @@ impl VoxelWorld {
         } else {
             self.overrides.insert((wx, wy, wz), kind);
         }
-        self.mesh_rebuild_queued = true;
+
+        let (cx, cy) = world_chunk_coords(wx, wy);
+        self.dirty_chunks.insert((cx, cy));
+        let lx = wx.rem_euclid(CHUNK_SIZE);
+        let ly = wy.rem_euclid(CHUNK_SIZE);
+        if lx == 0 {
+            self.dirty_chunks.insert((cx - 1, cy));
+        } else if lx == CHUNK_SIZE - 1 {
+            self.dirty_chunks.insert((cx + 1, cy));
+        }
+        if ly == 0 {
+            self.dirty_chunks.insert((cx, cy - 1));
+        } else if ly == CHUNK_SIZE - 1 {
+            self.dirty_chunks.insert((cx, cy + 1));
+        }
     }
 
     /// 将 `set_voxel` 累积的修改立刻反映到合并网格（主线程同步构建）。
     ///
     /// 破坏/放置若仍走后台线程，要等整幅网格算完才有画面，体感延迟大；编辑后应优先调用本函数。
     /// 若仍有未完成的异步区块构建，会先 `join` 丢弃其结果，再以当前 `overrides` 与玩家所在区块中心重建。
-    pub fn flush_voxel_mesh_sync(&mut self, player_position: &Vector3) {
-        if !self.mesh_rebuild_queued {
-            return;
+    pub fn flush_voxel_mesh_sync(&mut self, _player_position: &Vector3) {
+        let dirty: Vec<(i32, i32)> = self.dirty_chunks.drain().collect();
+        for (cx, cy) in dirty {
+            self.rebuild_loaded_chunk(cx, cy);
         }
-        self.mesh_rebuild_queued = false;
-
-        if let Some(handle) = self.mesh_build_join.take() {
-            let _ = handle.join();
-        }
-        self.pending_center_chunk = None;
-
-        let wx = player_position.x.floor() as i32;
-        let wy = player_position.y.floor() as i32;
-        let (cx, cy) = world_chunk_coords(wx, wy);
-        let mesh = build_world_mesh(cx, cy, VIEW_RADIUS_CHUNKS, self.overrides.clone());
-        *self.mesh.borrow_mut() = mesh;
-        self.streaming_center_chunk = Some((cx, cy));
     }
 
     /// 射线命中第一个非空气体素（世界格坐标），用于破坏。
@@ -732,42 +764,34 @@ impl VoxelWorld {
     ///
     /// **仅区块中心变化**时走后台线程，避免边跑图边算大图卡逻辑帧。体素编辑后的网格刷新请用
     /// [`Self::flush_voxel_mesh_sync`]，不要依赖本函数的 `mesh_rebuild_queued` 分支（已移除）。
-    pub fn update_streaming(&mut self, player_position: &Vector3) {
+    pub fn update_streaming(&mut self, engine: &Engine, scene: &mut Scene, player_position: &Vector3) {
         let wx = player_position.x.floor() as i32;
         let wy = player_position.y.floor() as i32;
         let (cx, cy) = world_chunk_coords(wx, wy);
-
-        let join_finished = match &self.mesh_build_join {
-            Some(h) => h.is_finished(),
-            None => false,
-        };
-        if join_finished {
-            let handle = self.mesh_build_join.take().unwrap();
-            match handle.join() {
-                Ok(new_mesh) => {
-                    if self.pending_center_chunk == Some((cx, cy)) {
-                        *self.mesh.borrow_mut() = new_mesh;
-                        self.streaming_center_chunk = Some((cx, cy));
-                    }
-                    self.pending_center_chunk = None;
-                }
-                Err(_) => {
-                    self.pending_center_chunk = None;
-                }
+        let mut target = HashSet::new();
+        for y in (cy - VIEW_RADIUS_CHUNKS)..=(cy + VIEW_RADIUS_CHUNKS) {
+            for x in (cx - VIEW_RADIUS_CHUNKS)..=(cx + VIEW_RADIUS_CHUNKS) {
+                target.insert((x, y));
             }
         }
 
-        let need_new_mesh =
-            self.mesh_build_join.is_none() && self.streaming_center_chunk != Some((cx, cy));
-
-        if need_new_mesh {
-            self.pending_center_chunk = Some((cx, cy));
-            let radius = VIEW_RADIUS_CHUNKS;
-            let overrides = self.overrides.clone();
-            self.mesh_build_join = Some(std::thread::spawn(move || {
-                build_world_mesh(cx, cy, radius, overrides)
-            }));
+        let loaded_keys: Vec<(i32, i32)> = self.loaded_chunks.keys().copied().collect();
+        for key in loaded_keys {
+            if !target.contains(&key) {
+                if let Some(entry) = self.loaded_chunks.remove(&key) {
+                    scene.delete_object_by_id(engine, entry.object_id);
+                }
+                self.dirty_chunks.remove(&key);
+            }
         }
+
+        for key in target {
+            if !self.loaded_chunks.contains_key(&key) {
+                self.create_chunk_object(engine, scene, key.0, key.1);
+            }
+        }
+
+        self.flush_voxel_mesh_sync(player_position);
     }
 
     /// 与 `procedural_voxel` 一致：`surface_height` 为该列**最低空气体素**的 z 索引，即草方块顶面所在世界高度。

@@ -44,6 +44,7 @@ fn player_aabb_overlaps_cell(feet: Vector3, wx: i32, wy: i32, wz: i32) -> bool {
 
 pub struct GameScene {
     pub inner: runtime::function::framework::scene::scene::Scene,
+    world: Option<Rc<RefCell<Box<VoxelWorld>>>>,
     dig_repeat_accum: f32,
     place_repeat_accum: f32,
 }
@@ -55,6 +56,7 @@ impl GameScene {
         // 预置为间隔：首帧按下即可触发一次（否则需长按满一整段间隔才有反应）。
         Self {
             inner,
+            world: None,
             dig_repeat_accum: DIG_COOLDOWN,
             place_repeat_accum: PLACE_COOLDOWN,
         }
@@ -68,6 +70,7 @@ impl SceneTrait for GameScene {
         let spawn = VoxelWorld::suggested_spawn();
         let world = Rc::new(RefCell::new(VoxelWorld::new_box(engine, &mut self.inner)));
         self.inner.add_resource(world.clone());
+        self.world = Some(world.clone());
 
         let object = self.inner.spawn();
         let mut character = Box::new(CharacterComponent::new());
@@ -143,10 +146,7 @@ impl SceneTrait for GameScene {
                 .next()
                 .map(|(cam, ch)| (cam.m_position, cam.m_forward, ch.get_position()));
 
-            if let (Some(world_rc), Some((origin, forward, feet))) = (
-                self.inner.get_mut_resource::<Rc<RefCell<Box<VoxelWorld>>>>(),
-                cam_snap,
-            ) {
+            if let (Some(world_rc), Some((origin, forward, feet))) = (self.world.as_ref(), cam_snap) {
                 let mut world = world_rc.borrow_mut();
                 if mouse_left {
                     self.dig_repeat_accum += delta_time;
@@ -181,11 +181,10 @@ impl SceneTrait for GameScene {
                 world.flush_voxel_mesh_sync(&feet);
             }
 
-            if let (Some(world_rc), Some(pos)) = (
-                self.inner.get_mut_resource::<Rc<RefCell<Box<VoxelWorld>>>>(),
-                player_pos,
-            ) {
-                world_rc.borrow_mut().update_streaming(&pos);
+            if let (Some(world_rc), Some(pos)) = (self.world.as_ref(), player_pos) {
+                world_rc
+                    .borrow_mut()
+                    .update_streaming(engine, &mut self.inner, &pos);
             }
         }
         let render = engine.render_system().borrow();

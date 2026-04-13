@@ -202,8 +202,19 @@ impl Scene {
 
     pub fn delete_object_by_id(&mut self, engine: &Engine, object_id: GObjectID) {
         self.m_entities.remove(&object_id);
-        let (archetype_type_id, entity_index) = self.m_entity_location.remove(&object_id).unwrap();
-        self.m_archetypes.get_mut(&archetype_type_id).unwrap().remove_entity(engine, entity_index);
+        let (archetype_type_id, entity_index) = match self.m_entity_location.remove(&object_id) {
+            Some(v) => v,
+            None => return,
+        };
+        if let Some(archetype) = self.m_archetypes.get_mut(&archetype_type_id) {
+            archetype.remove_entity(engine, entity_index);
+        }
+        // Vec::remove 会导致同 archetype 后续实体索引左移，需同步修正位置表。
+        for (_id, (a_type, idx)) in self.m_entity_location.iter_mut() {
+            if *a_type == archetype_type_id && *idx > entity_index {
+                *idx -= 1;
+            }
+        }
     }
 
     pub fn add_resource<T: 'static>(&mut self, resource: T) {
