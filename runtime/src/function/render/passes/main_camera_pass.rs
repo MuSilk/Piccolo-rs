@@ -115,7 +115,6 @@ impl MainCameraPass {
             rhi: rhi,
             global_render_resource: info.global_render_resource,
             render_pass: *self.m_render_pass.get_render_pass(),
-            config_manager: info.config_manager,
         })?;
 
         self.m_combine_ui_pass.initialize(&CombineUIPassInitInfo {
@@ -178,7 +177,7 @@ impl MainCameraPass {
     pub fn draw(
         &self, 
         rhi: &VulkanRHI,
-        ui_runtime: &RefCell<UiRuntime>,
+        ui_runtime: &UiRuntime,
         current_swapchain_image_index: usize,
         forward_draw: bool
     ) -> Result<()> {

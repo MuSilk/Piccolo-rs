@@ -3,35 +3,23 @@ use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{function::{render::{font_atlas::create_ascii_font_texture_rgba, interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}, resource::config_manager::ConfigManager, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{function::{render::{interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiDrawList, UiRuntime, UiVertex}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
 
 pub struct UIPassInitInfo<'a>{
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
-    pub config_manager: &'a ConfigManager,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
-}
-
-#[derive(Default)]
-struct Texture {
-    image: vk::Image,
-    view: vk::ImageView,
-    memory: vk::DeviceMemory,
 }
 
 #[derive(Default)]
 pub struct UIPass {
     pub m_render_pass: RenderPass,
-
-    font_texture: Texture,
     renderer_data: [RefCell<RendererData>; K_MAX_FRAMES_IN_FLIGHT],
 }
 
 impl UIPass {
     pub fn initialize(&mut self, info: &UIPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
-
-        self.font_texture = upload_font_texture(info.rhi, info.config_manager)?;
 
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi)?;
@@ -41,18 +29,12 @@ impl UIPass {
         Ok(())
     }
     
-    pub fn draw(
-        &self, 
-        rhi: &VulkanRHI,
-        ui_runtime: &RefCell<UiRuntime>
-    ) {
+    pub fn draw(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime) {
         let color = [1.0;4];
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "UI\0", color);
 
-        let mut ui_runtime = ui_runtime.borrow_mut();
-        let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
-        self.render_ui_draw_list(&rhi, &draw_list).unwrap();
+        self.render_ui_draw_list(&rhi, &ui_runtime).unwrap();
 
         rhi.pop_event(command_buffer);
     }
@@ -61,44 +43,13 @@ impl UIPass {
         Ok(())
     }
 
-    pub fn reload_font_texture(
-        &mut self, 
+    fn render_ui_draw_list(
+        &self,
         rhi: &VulkanRHI,
-        config_manager: &ConfigManager
+        ui_runtime: &UiRuntime,
     ) -> Result<()> {
-        if self.font_texture.image != vk::Image::null() {
-            rhi.destroy_image_view(self.font_texture.view);
-            rhi.destroy_image(self.font_texture.image);
-            rhi.free_memory(self.font_texture.memory);
-        }
-        self.font_texture = upload_font_texture(&rhi, config_manager)?;
+        let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
 
-        let text_sampler_texture_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.font_texture.view)
-                .sampler(*rhi.get_or_create_default_sampler(
-                    RHISamplerType::Linear
-                ).unwrap())
-                .build()
-        ];
-
-        let descriptor_writes_info = [
-            vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&text_sampler_texture_info)
-                .build(),
-        ];
-
-        rhi.update_descriptor_sets(&descriptor_writes_info)?;
-
-        Ok(())
-    }
-
-
-    fn render_ui_draw_list(&self, rhi: &VulkanRHI, draw_list: &UiDrawList) -> Result<()> {
         if draw_list.vertices.is_empty() || draw_list.indices.is_empty() || draw_list.commands.is_empty() {
             return Ok(());
         }
@@ -179,7 +130,22 @@ impl UIPass {
                     clip_rect,
                     texture_id,
                 } => {
-                    let _ = texture_id;
+                    if let Some(texture) = ui_runtime.get_texture(*texture_id) {
+                        let texture_info = [vk::DescriptorImageInfo::builder()
+                            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                            .image_view(texture.view)
+                            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Linear)?)
+                            .build()];
+                        let descriptor_write = [vk::WriteDescriptorSet::builder()
+                            .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
+                            .dst_binding(0)
+                            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                            .image_info(&texture_info)
+                            .build()];
+                        rhi.update_descriptor_sets(&descriptor_write)?;
+                    } else {
+                        continue;
+                    }
                     let scissor = vk::Rect2D {
                         offset: vk::Offset2D {
                             x: clip_rect[0] as i32,
@@ -341,27 +307,6 @@ impl UIPass {
             .set_layouts(&set_layouts);
 
         self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
-
-        let text_sampler_texture_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.font_texture.view)
-                .sampler(*rhi.get_or_create_default_sampler(
-                    RHISamplerType::Linear
-                ).unwrap())
-                .build()
-        ];
-
-        let descriptor_writes_info = [
-            vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&text_sampler_texture_info)
-                .build(),
-        ];
-
-        rhi.update_descriptor_sets(&descriptor_writes_info)?;
         Ok(())
     }
 }
@@ -451,14 +396,4 @@ impl ImguiDrawVertex {
                 .build(),
         ]
     }
-}
-
-fn upload_font_texture(
-    rhi: &VulkanRHI,
-    config_manager: &ConfigManager
-) -> Result<Texture> {
-    let font_path = config_manager.get_editor_font_path().to_path_buf();
-    let (texture_image, texture_image_memory, texture_image_view) =
-        create_ascii_font_texture_rgba(rhi, font_path.as_path())?;
-    Ok(Texture { image: texture_image, view: texture_image_view, memory: texture_image_memory })
 }

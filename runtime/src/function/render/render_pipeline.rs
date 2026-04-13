@@ -104,7 +104,7 @@ impl RenderPipeline {
     pub fn draw(
         &self,
         rhi: &VulkanRHI,
-        ui_runtime: &RefCell<UiRuntime>,
+        ui_runtime: &UiRuntime,
         forward_draw: bool,
     ) {
         self.m_directional_light_pass.draw(rhi);

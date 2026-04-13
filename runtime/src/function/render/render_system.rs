@@ -101,7 +101,7 @@ impl RenderSystem {
     
     pub fn tick(
         &self, 
-        ui_runtime: &RefCell<UiRuntime>,
+        ui_runtime: &UiRuntime,
         asset_manager: &AssetManager,
         config_manager: &ConfigManager,
         delta_time: f32
@@ -331,8 +331,8 @@ impl RenderSystem {
     }
 
     fn render(
-        &self,ui_runtime: 
-        &RefCell<UiRuntime>, 
+        &self,
+        ui_runtime: &UiRuntime, 
         forward_draw: bool,
     ) -> Result<()> {
         let rhi = &self.m_rhi;

@@ -1,4 +1,13 @@
-use crate::function::render::font_atlas::get_ascii_character_texture_rect;
+use anyhow::Result;
+use std::path::Path;
+use vulkanalia::prelude::v1_0::*;
+use crate::{
+    function::render::{
+        font_atlas::{create_ascii_font_texture_rgba, get_ascii_character_texture_rect},
+        interface::vulkan::vulkan_rhi::VulkanRHI,
+    },
+    resource::config_manager::ConfigManager,
+};
 use bitflags::bitflags;
 
 #[derive(Clone, Debug, Default)]
@@ -34,6 +43,15 @@ pub enum UiDrawCmd {
     },
 }
 
+pub const UI_TEXTURE_ID_FONT_ATLAS: u32 = 0;
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct UiTextureResource {
+    pub image: vk::Image,
+    pub view: vk::ImageView,
+    pub memory: vk::DeviceMemory,
+}
+
 #[derive(Default)]
 pub struct UiDrawList {
     pub vertices: Vec<UiVertex>,
@@ -58,6 +76,8 @@ pub struct UiRuntime {
     current_menu_popup_pos: [f32; 2],
     current_menu_popup_size: [f32; 2],
     current_menu_item_cursor_y: f32,
+    textures: Vec<Option<UiTextureResource>>,
+    textures_dirty: bool,
 }
 
 pub struct UiButtonResult {
@@ -91,6 +111,98 @@ impl Default for UiPanelFlags {
 }
 
 impl UiRuntime {
+    pub fn load_texture_from_path(&mut self, rhi: &VulkanRHI, image_path: &Path) -> Result<u32> {
+        let image = image::open(image_path)?;
+        let image = image.to_rgba8();
+        let width = image.width();
+        let height = image.height();
+        let pixels = image.into_raw();
+        let (texture_image, texture_memory, texture_view) = rhi.create_texture_image(
+            width,
+            height,
+            &pixels,
+            vk::Format::R8G8B8A8_UNORM,
+            0,
+        )?;
+
+        let texture_id = self.textures.len() as u32;
+        self.set_texture(
+            texture_id,
+            UiTextureResource {
+                image: texture_image,
+                view: texture_view,
+                memory: texture_memory,
+            },
+        );
+        Ok(texture_id)
+    }
+
+    pub fn load_font_texture(
+        &mut self,
+        rhi: &VulkanRHI,
+        config_manager: &ConfigManager,
+    ) -> Result<u32> {
+        if let Some(old_texture) = self.get_texture(UI_TEXTURE_ID_FONT_ATLAS) {
+            if old_texture.view != vk::ImageView::null() {
+                rhi.destroy_image_view(old_texture.view);
+            }
+            if old_texture.image != vk::Image::null() {
+                rhi.destroy_image(old_texture.image);
+            }
+            if old_texture.memory != vk::DeviceMemory::null() {
+                rhi.free_memory(old_texture.memory);
+            }
+        }
+        let font_path = config_manager.get_editor_font_path().to_path_buf();
+        let (image, memory, view) = create_ascii_font_texture_rgba(rhi, font_path.as_path())?;
+        self.set_texture(
+            UI_TEXTURE_ID_FONT_ATLAS,
+            UiTextureResource {
+                image,
+                view,
+                memory,
+            },
+        );
+        Ok(UI_TEXTURE_ID_FONT_ATLAS)
+    }
+
+    pub fn destroy_textures(&mut self, rhi: &VulkanRHI) {
+        for texture in self.textures.iter_mut().filter_map(Option::take) {
+            if texture.view != vk::ImageView::null() {
+                rhi.destroy_image_view(texture.view);
+            }
+            if texture.image != vk::Image::null() {
+                rhi.destroy_image(texture.image);
+            }
+            if texture.memory != vk::DeviceMemory::null() {
+                rhi.free_memory(texture.memory);
+            }
+        }
+        self.textures_dirty = true;
+    }
+
+    fn set_texture(&mut self, texture_id: u32, texture: UiTextureResource) {
+        let texture_index = texture_id as usize;
+        if self.textures.len() <= texture_index {
+            self.textures.resize(texture_index + 1, None);
+        }
+
+        if let Some(old_texture) = self.textures[texture_index].replace(texture) {
+            let _ = old_texture; // Caller owns replacement lifecycle.
+        }
+        self.textures_dirty = true;
+    }
+
+    pub fn get_texture(&self, texture_id: u32) -> Option<UiTextureResource> {
+        self.textures
+            .get(texture_id as usize)
+            .and_then(|texture| *texture)
+    }
+
+    pub fn has_texture(&self, texture_id: u32) -> bool {
+        self.get_texture(texture_id).is_some()
+    }
+
     pub fn update_input(&mut self, input: UiInputSnapshot) {
         self.prev_input = self.current_input.clone();
         self.current_input = input;
@@ -111,7 +223,7 @@ impl UiRuntime {
         self.viewport
     }
 
-    pub fn build_frame(&mut self, dt: f32) -> (UiFrame, &UiDrawList) {
+    pub fn build_frame(&self, dt: f32) -> (UiFrame, &UiDrawList) {
         let frame = UiFrame {
             frame_id: self.frame_counter,
             dt,
@@ -174,6 +286,26 @@ impl UiRuntime {
             size,
             color,
             clip_rect,
+        );
+    }
+
+    pub fn push_textured_rect(
+        &mut self,
+        pos: [f32; 2],
+        size: [f32; 2],
+        uv_rect: [f32; 4],
+        color: [u8; 4],
+        clip_rect: [f32; 4],
+        texture_id: u32,
+    ) {
+        push_textured_rect(
+            &mut self.draw_list,
+            pos,
+            size,
+            uv_rect,
+            color,
+            clip_rect,
+            texture_id,
         );
     }
 
@@ -456,19 +588,43 @@ fn push_colored_rect(
     color: [u8; 4],
     clip_rect: [f32; 4],
 ) {
+    push_textured_rect(
+        draw_list,
+        pos,
+        size,
+        [0.0, 0.0, 0.0, 0.0],
+        color,
+        clip_rect,
+        UI_TEXTURE_ID_FONT_ATLAS,
+    );
+}
+
+fn push_textured_rect(
+    draw_list: &mut UiDrawList,
+    pos: [f32; 2],
+    size: [f32; 2],
+    uv_rect: [f32; 4],
+    color: [u8; 4],
+    clip_rect: [f32; 4],
+    texture_id: u32,
+) {
     let base = draw_list.vertices.len() as u32;
     let x = pos[0];
     let y = pos[1];
     let w = size[0];
     let h = size[1];
+    let u0 = uv_rect[0];
+    let v0 = uv_rect[1];
+    let u1 = uv_rect[2];
+    let v1 = uv_rect[3];
 
-    // Current UI shader multiplies vertex color by sampled font texture.
-    // Keep UV fixed at atlas white-pixel to render a solid colored quad.
+    // Colored rects can still use a fixed white pixel UV.
+    // Texture-capable widgets should provide their own UVs and texture_id.
     draw_list.vertices.extend_from_slice(&[
-        UiVertex { pos: [x, y], uv: [0.0, 0.0], col: color },
-        UiVertex { pos: [x + w, y], uv: [0.0, 0.0], col: color },
-        UiVertex { pos: [x + w, y + h], uv: [0.0, 0.0], col: color },
-        UiVertex { pos: [x, y + h], uv: [0.0, 0.0], col: color },
+        UiVertex { pos: [x, y], uv: [u0, v0], col: color },
+        UiVertex { pos: [x + w, y], uv: [u1, v0], col: color },
+        UiVertex { pos: [x + w, y + h], uv: [u1, v1], col: color },
+        UiVertex { pos: [x, y + h], uv: [u0, v1], col: color },
     ]);
     draw_list
         .indices
@@ -478,7 +634,7 @@ fn push_colored_rect(
         index_count: 6,
         vertex_offset: 0,
         clip_rect,
-        texture_id: 0,
+        texture_id,
     });
 }
 
@@ -577,7 +733,7 @@ fn push_text_ascii(
             index_count,
             vertex_offset: 0,
             clip_rect,
-            texture_id: 0,
+            texture_id: UI_TEXTURE_ID_FONT_ATLAS,
         });
     }
 }
