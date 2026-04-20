@@ -1,13 +1,13 @@
-use std::{cell::{RefCell}, path::Path, rc::{Rc, Weak}};
+use std::{cell::{RefCell}, path::Path, rc::{Rc}};
 
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{engine::Engine, function::{framework::world::world_manager::WorldManager, input::input_system::{InputSystem}, render::{render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{function::{framework::world::world_manager::WorldManager, input::{game_command_system::GameCommandInputSystem, input_system::InputSystem}, render::{render_system::{RenderSystem, RenderSystemCreateInfo}, window_system::{WindowCreateInfo, WindowSystem}}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 pub struct RuntimeGlobalContext {
     m_config_manager: ConfigManager,
     m_asset_manager: AssetManager,
-    m_input_system: RefCell<InputSystem>,
+    m_input_system: RefCell<GameCommandInputSystem>,
     m_world_manager: RefCell<WorldManager>,
     m_window_system: Rc<RefCell<WindowSystem>>,
     m_render_system: Option<RefCell<RenderSystem>>,
@@ -24,7 +24,7 @@ impl RuntimeGlobalContext {
         let mut ctx= RuntimeGlobalContext {
             m_config_manager: config_manager,
             m_asset_manager: asset_manager,
-            m_input_system: RefCell::new(InputSystem::default()),
+            m_input_system: RefCell::new(GameCommandInputSystem::default()),
             m_world_manager: RefCell::new(WorldManager::default()),
             m_window_system: Rc::new(RefCell::new(WindowSystem::default())),
             m_render_system: None,
@@ -37,13 +37,13 @@ impl RuntimeGlobalContext {
         ctx
     }
 
-    pub fn resumed_instance(&mut self, event_loop: &ActiveEventLoop, engine: Weak<RefCell<Engine>>) {
+    pub fn resumed_instance(&mut self, event_loop: &ActiveEventLoop) {
         self.m_window_system
             .borrow_mut()
             .initialize(event_loop, WindowCreateInfo::default())
             .unwrap();
 
-        self.register_input_system(engine);
+        self.register_input_system();
 
         let render_system = RenderSystem::create(&RenderSystemCreateInfo {
             window_system: &self.m_window_system.borrow(),
@@ -58,7 +58,7 @@ impl RuntimeGlobalContext {
     }
 
 
-    pub fn input_system(&self) -> &RefCell<InputSystem> {
+    pub fn input_system(&self) -> &RefCell<GameCommandInputSystem> {
         &self.m_input_system
     }
 
@@ -96,38 +96,26 @@ impl RuntimeGlobalContext {
 }
 
 impl RuntimeGlobalContext {
-    fn register_input_system(&self, engine: Weak<RefCell<Engine>>) {
+    fn register_input_system(&self) {
         let mut window_system = self.window_system().borrow_mut();
 
-        let eng = engine.clone();
-        window_system.register_on_key_func(move |device_id, event, is_synthetic| {
-            let eng_ref = eng.upgrade().unwrap();
-            let eng_ref = eng_ref.borrow();
-            eng_ref.input_system().borrow_mut()
-                .on_key(&eng_ref, device_id, event, is_synthetic);
+        window_system.register_on_key_func(move |engine, device_id, event, is_synthetic| {
+            engine.input_system().borrow_mut()
+                .on_key(engine, device_id, event, is_synthetic);
         });
 
-        let eng = engine.clone();
-        window_system.register_on_mouse_motion(move |device_id, position| {
-            let eng_ref = eng.upgrade().unwrap();
-            let eng_ref = eng_ref.borrow();
-            eng_ref.input_system().borrow_mut()
-                .on_mouse_motion(&eng_ref.window_system().borrow(), device_id, position);
+        window_system.register_on_mouse_motion(move |engine, device_id, position| {
+            engine.input_system().borrow_mut()
+                .on_mouse_motion(engine, device_id, position);
         });
 
-        let eng = engine.clone();
-        window_system.register_on_cursor_pos_func(move |device_id, position| {
-            let eng_ref = eng.upgrade().unwrap();
-            let eng_ref = eng_ref.borrow();
-            eng_ref.input_system().borrow_mut()
+        window_system.register_on_cursor_pos_func(move |engine, device_id, position| {
+            engine.input_system().borrow_mut()
                 .on_cursor_pos(device_id, position);
         });
 
-        let eng = engine.clone();
-        window_system.register_on_mouse_button_func(move |device_id, state, button| {
-            let eng_ref = eng.upgrade().unwrap();
-            let eng_ref = eng_ref.borrow();
-            eng_ref.input_system().borrow_mut()
+        window_system.register_on_mouse_button_func(move |engine, device_id, state, button| {
+            engine.input_system().borrow_mut()
                 .on_mouse_button(device_id, state, button);
         });
     }

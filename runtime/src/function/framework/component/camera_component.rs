@@ -1,6 +1,6 @@
 use runtime_derive::ComponentTrait;
 
-use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{character_component::CharacterComponent}, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter, FreeCameraParameter}}, input::input_system::{GameCommand, InputSystem}, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem}}};
+use crate::{core::math::{self, quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::character_component::CharacterComponent, resource::component::camera::{CameraComponentRes, CameraParameter, FirstPersonCameraParameter, FreeCameraParameter}}, input::{game_command_system::{GameCommand, GameCommandInputSystem}}, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, render_system::RenderSystem}}};
 
 #[derive(Clone)]
 pub enum CameraMode{
@@ -52,12 +52,12 @@ impl CameraComponent {
     
     pub fn tick_first_person_camera(
         &mut self, 
-        input_system: &InputSystem, 
+        input_system: &GameCommandInputSystem, 
         render_system: &RenderSystem,
         character: &mut CharacterComponent
     ) {
-        let q_yaw = Quaternion::from_angle_axis(input_system.m_cursor_delta_yaw, &Vector3::UNIT_Z);
-        let q_pitch = Quaternion::from_angle_axis(input_system.m_cursor_delta_pitch, &self.m_left);
+        let q_yaw = Quaternion::from_angle_axis(input_system.cursor_delta_yaw(), &Vector3::UNIT_Z);
+        let q_pitch = Quaternion::from_angle_axis(input_system.cursor_delta_pitch(), &self.m_left);
 
         let (offset, h_eye) = if let CameraParameter::FirstPerson(param) = &self.m_camera_res.m_parameter {
             (param.m_vertical_offset, param.m_horizontal_eye_offset)
@@ -88,12 +88,12 @@ impl CameraComponent {
 
     pub fn tick_third_person_camera(
         &mut self, 
-        input_system: &InputSystem,
+        input_system: &GameCommandInputSystem,
         render_system: &RenderSystem,
         character: &mut CharacterComponent
     ) {
-        let q_yaw = Quaternion::from_angle_axis(input_system.m_cursor_delta_yaw, &Vector3::UNIT_Z);
-        let q_pitch = Quaternion::from_angle_axis(input_system.m_cursor_delta_pitch, &Vector3::UNIT_X);
+        let q_yaw = Quaternion::from_angle_axis(input_system.cursor_delta_yaw(), &Vector3::UNIT_Z);
+        let q_pitch = Quaternion::from_angle_axis(input_system.cursor_delta_pitch(), &Vector3::UNIT_X);
 
         let (vertical_offset, horizontal_offset,param_m_cursor_pitch) =
             if let CameraParameter::ThirdPerson(param) = &mut self.m_camera_res.m_parameter {
@@ -126,7 +126,7 @@ impl CameraComponent {
 
     pub fn tick_free_camera(
         &mut self, 
-        input_system: &InputSystem,
+        input_system: &GameCommandInputSystem,
         render_system: &RenderSystem,
         delta_time: f32
     ) {
@@ -135,8 +135,8 @@ impl CameraComponent {
             return;
         }
 
-        let q_yaw = Quaternion::from_angle_axis(input_system.m_cursor_delta_yaw, &Vector3::UNIT_Z);
-        let q_pitch = Quaternion::from_angle_axis(input_system.m_cursor_delta_pitch, &self.m_left);
+        let q_yaw = Quaternion::from_angle_axis(input_system.cursor_delta_yaw(), &Vector3::UNIT_Z);
+        let q_pitch = Quaternion::from_angle_axis(input_system.cursor_delta_pitch(), &self.m_left);
 
         self.m_forward = q_yaw * q_pitch * self.m_forward;
         self.m_left = q_yaw * q_pitch * self.m_left;

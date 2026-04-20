@@ -316,12 +316,12 @@ impl EditorInputManager {
 pub trait EditorInputManagerExt {
     fn initialize(
         &self, 
-        engine_runtime: &Rc<RefCell<Engine>>, 
+        engine_runtime: &Engine, 
         scene_manager: &Rc<RefCell<EditorSceneManager>>,
     );
     fn register_input(
         &self, 
-        engine_runtime: &Rc<RefCell<Engine>>,
+        engine: &Engine,
         scene_manager: &Rc<RefCell<EditorSceneManager>>,
     );
 }
@@ -329,7 +329,7 @@ pub trait EditorInputManagerExt {
 impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
     fn initialize(
         &self, 
-        engine_runtime: &Rc<RefCell<Engine>>,
+        engine_runtime: &Engine,
         scene_manager: &Rc<RefCell<EditorSceneManager>>,
     ) {
         self.borrow_mut().m_engine_window_size = Vector2::new(1024.0, 768.0);
@@ -339,64 +339,50 @@ impl EditorInputManagerExt for Rc<RefCell<EditorInputManager>> {
 
     fn register_input(
         &self, 
-        engine: &Rc<RefCell<Engine>>, 
+        engine: &Engine, 
         scene_manager: &Rc<RefCell<EditorSceneManager>>,
     ) {
-        let engine_weak = Rc::downgrade(engine);
         let scene_weak = Rc::downgrade(scene_manager);
-        let t_engine = engine.borrow();
-        let mut window_system = t_engine
+        let mut window_system = engine
             .window_system()
             .borrow_mut();
         let this = Rc::downgrade(&self);
-        let engine_for_mouse = engine_weak.clone();
         let scene_for_mouse = scene_weak.clone();
-        window_system.register_on_mouse_motion(move |device_id, delta| {
+        window_system.register_on_mouse_motion(move |engine, device_id, delta| {
             let this = this.upgrade().unwrap();
-            if let (Some(engine), Some(sm)) =
-                (engine_for_mouse.upgrade(), scene_for_mouse.upgrade())
+            if let  Some(sm) = scene_for_mouse.upgrade()
             {
-                let engine_ref = engine.borrow();
                 let sm_ref = sm.borrow();
                 this.borrow_mut()
-                    .on_mouse_motion(&*engine_ref, &*sm_ref, device_id, delta);
+                    .on_mouse_motion(engine, &*sm_ref, device_id, delta);
             }
         });
         let this = Rc::downgrade(&self);
-        let engine_for_key = engine_weak.clone();
-        window_system.register_on_key_func(move |device_id, event, is_synthetic| {
+        window_system.register_on_key_func(move |engine, device_id, event, is_synthetic| {
             let this = this.upgrade().unwrap();
-            if let Some(engine) = engine_for_key.upgrade() {
-                this.borrow_mut()
-                    .on_key(&*engine.borrow(), device_id, event, is_synthetic);
-            }
+            this.borrow_mut()
+                .on_key(engine, device_id, event, is_synthetic);
         });
         let this = Rc::downgrade(&self);
-        let engine_for_mouse_button = engine_weak.clone();
         let scene_for_mouse_button = scene_weak.clone();
-        window_system.register_on_mouse_button_func(move |device_id, state, button| {
+        window_system.register_on_mouse_button_func(move |engine, device_id, state, button| {
             let this = this.upgrade().unwrap();
-            if let (Some(engine), Some(sm)) =
-                (engine_for_mouse_button.upgrade(), scene_for_mouse_button.upgrade())
+            if let Some(sm) = scene_for_mouse_button.upgrade()
             {
-                let engine_ref = engine.borrow();
                 let sm_ref = sm.borrow();
                 this.borrow_mut()
-                    .on_mouse_button(&*engine_ref, &*sm_ref, device_id, state, button);
+                    .on_mouse_button(engine, &*sm_ref, device_id, state, button);
             }
         });
         let this = Rc::downgrade(&self);
-        let engine_for_scroll = engine_weak.clone();
         let scene_for_scroll = scene_weak.clone();
-        window_system.register_on_mouse_wheel_func(move |device_id, delta,phase| {
+        window_system.register_on_mouse_wheel_func(move |engine, device_id, delta,phase| {
             let this = this.upgrade().unwrap();
-            if let (Some(engine), Some(sm)) =
-                (engine_for_scroll.upgrade(), scene_for_scroll.upgrade())
+            if let Some(sm) = scene_for_scroll.upgrade()
             {
-                let engine_ref = engine.borrow();
                 let sm_ref = sm.borrow();
                 this.borrow_mut()
-                    .on_cursor_scroll(&*engine_ref, &*sm_ref, device_id, delta, phase);
+                    .on_cursor_scroll(engine, &*sm_ref, device_id, delta, phase);
             }
         });
     }

@@ -2,7 +2,7 @@ use std::{any::{Any, TypeId}, cell::RefCell, collections::{HashMap, HashSet}, ha
 
 use itertools::Itertools;
 
-use crate::{engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, input::input_system::InputSystem, render::{render_object::{GameObjectDesc, GameObjectMeshDesc}, render_system::RenderSystem}}};
+use crate::{engine::Engine, function::{framework::{component::{camera_component::CameraComponent, character_component::CharacterComponent, component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent}, object::{object::GObject, object_id_allocator::{self, GObjectID}}, resource::component::camera::CameraParameter}, input::{game_command_system::GameCommandInputSystem}, render::{render_object::{GameObjectDesc, GameObjectMeshDesc}, render_system::RenderSystem}}};
 
 type ComponentColumn = Vec<RefCell<Box<dyn ComponentTrait>>>;
 
@@ -276,7 +276,7 @@ impl Scene {
 
     pub fn tick_camera_components(
         &mut self, 
-        input_system: &InputSystem,
+        input_system: &GameCommandInputSystem,
         render_system: &RenderSystem,
         delta_time: f32
     ) {

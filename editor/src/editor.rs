@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::{Rc, Weak}};
+use std::{cell::RefCell, rc::{Rc}};
 
 use runtime::{engine::{self, Engine}, function::ui::window_ui::{WindowUI, WindowUIInitInfo}};
 
@@ -9,7 +9,6 @@ use crate::{editor_global_context::{EditorGlobalContext, EditorGlobalContextCrea
 pub struct Editor {
     m_editor_ui: Rc<RefCell<EditorUI>>,
     m_editor_runtime: Option<EditorGlobalContext>,
-    m_engine_runtime: Weak<RefCell<Engine>>,
 }
 
 impl Default for Editor {
@@ -17,19 +16,16 @@ impl Default for Editor {
         Self {
             m_editor_ui: Rc::new(RefCell::new(EditorUI::default())),
             m_editor_runtime: None,
-            m_engine_runtime: Weak::new(),
         }
     }
 }
 
 impl engine::System for Editor {
-    fn initialize(&mut self, engine_runtime: &Rc<RefCell<Engine>>){
-        engine_runtime.borrow().set_editor_mode(true);
-        self.m_engine_runtime = Rc::downgrade(engine_runtime);
+    fn initialize(&mut self, engine_runtime: &Engine){
+        engine_runtime.set_editor_mode(true);
 
-        let t_engine_runtime = engine_runtime.borrow();
         let render_system = 
-            t_engine_runtime.render_system();
+            engine_runtime.render_system();
 
         let info = EditorGlobalContextCreateInfo {
             engine_runtime: engine_runtime,
@@ -43,7 +39,6 @@ impl engine::System for Editor {
         self.m_editor_ui.borrow_mut().set_editor_handles(
             editor_ctx.m_input_manager.clone(),
             editor_ctx.m_scene_manager.clone(),
-            engine_runtime,
         );
 
         self.m_editor_ui.borrow_mut().initialize(WindowUIInitInfo{
@@ -51,10 +46,10 @@ impl engine::System for Editor {
         });
     }
 
-    fn tick(&mut self, _delta_time: f32) {
+    fn tick(&mut self, engine: &Engine, _delta_time: f32) {
         self.m_editor_runtime.as_ref().unwrap().m_input_manager.borrow().tick(
             &self.m_editor_runtime.as_ref().unwrap().m_scene_manager.borrow()
         );
-        self.m_editor_ui.borrow().pre_render();
+        self.m_editor_ui.borrow().pre_render(engine);
     }
 }

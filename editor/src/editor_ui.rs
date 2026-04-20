@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::{Rc, Weak}};
+use std::{cell::RefCell, rc::{Rc}};
 
-use runtime::{core::math::vector2::Vector2, engine::Engine, function::{input::input_system::InputSystem, render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData, window_system::WindowSystem}, ui::{ui2::{UiPanel, UiPanelFlags, UiRuntime}, window_ui::{WindowUI, WindowUIInitInfo}}}};
+use runtime::{core::math::vector2::Vector2, engine::Engine, function::{render::{render_camera::RenderCameraType, render_swap_context::CameraSwapData}, ui::{ui2::{UiPanel, UiPanelFlags, UiRuntime}, window_ui::{WindowUI, WindowUIInitInfo}}}};
 
 use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
@@ -11,7 +11,6 @@ pub struct EditorUI {
     m_render_graph_ui: RefCell<RenderGraphUI>,
     m_input_manager: Option<Rc<RefCell<EditorInputManager>>>,
     m_scene_manager: Option<Rc<RefCell<EditorSceneManager>>>,
-    m_engine: Weak<RefCell<Engine>>,
 }
 
 impl Default for EditorUI {
@@ -21,7 +20,6 @@ impl Default for EditorUI {
             m_render_graph_ui: RefCell::new(RenderGraphUI::default()),
             m_input_manager: None,
             m_scene_manager: None,
-            m_engine: Weak::new(),
         }
     }
 }
@@ -38,8 +36,7 @@ pub struct State {
 }
 
 impl WindowUI for EditorUI  {
-    fn initialize(&mut self, init_info: WindowUIInitInfo) {
-        self.m_engine = Rc::downgrade(init_info.engine);
+    fn initialize(&mut self, _init_info: WindowUIInitInfo) {
         self.m_state.replace(State{
             m_editor_menu_window_open: true,
             m_asset_window_open: true,
@@ -53,12 +50,10 @@ impl WindowUI for EditorUI  {
 
     fn pre_render(
         &self,
+        engine: &Engine,
     ) {
-        let engine = self.m_engine.upgrade().unwrap();
-        let engine = engine.borrow();
         let window_system = engine.window_system().borrow();
-        let mut input_system = engine.input_system().borrow_mut();
-        self.show_editor_ui(&window_system, &mut input_system);
+        self.show_editor_ui(engine);
         let window_size = window_system.get_window_size();
         if let Some(input_manager) = self.m_input_manager.as_ref() {
             input_manager.borrow_mut().set_engine_window_size(Vector2::new(
@@ -74,28 +69,23 @@ impl EditorUI {
         &mut self,
         input_manager: Rc<RefCell<EditorInputManager>>,
         scene_manager: Rc<RefCell<EditorSceneManager>>,
-        engine: &Rc<RefCell<Engine>>,
     ) {
         self.m_input_manager = Some(input_manager);
         self.m_scene_manager = Some(scene_manager);
-        self.m_engine = Rc::downgrade(engine);
     }
 
     fn show_editor_ui(
         &self, 
-        window_system: &WindowSystem,
-        input_system: &mut InputSystem,
+        engine: &Engine,
     ) {
-        let engine = self.m_engine.upgrade().unwrap();
-        let is_editor_mode = engine.borrow().is_editor_mode();
+        let is_editor_mode = engine.is_editor_mode();
         let mut menu_open = self.m_state.borrow().m_editor_menu_window_open;
 
         let mut switch_to_game = false;
         let mut switch_to_editor = false;
 
         {
-            let t_engine = engine.borrow();
-            let mut ui_runtime = t_engine.ui_runtime().borrow_mut();
+            let mut ui_runtime = engine.ui_runtime().borrow_mut();
             let viewport = ui_runtime.get_viewport();
             let mut context_offset = [0.0, 30.0];
             let mut context_size = [viewport[0], (viewport[1] - 30.0).max(0.0)];
@@ -168,8 +158,8 @@ impl EditorUI {
         self.m_state.borrow_mut().m_editor_menu_window_open = menu_open;
 
         if switch_to_game {
-            engine.borrow().set_editor_mode(true);
-            input_system.reset_game_command();
+            engine.set_editor_mode(true);
+            engine.input_system().borrow_mut().reset_game_command();
             let view_matrix = {
                 let sm = self
                     .m_scene_manager
@@ -182,7 +172,6 @@ impl EditorUI {
                     .unwrap();
                 editor_camera.borrow().get_view_matrix()
             };
-            let engine = engine.borrow();
             let render_system = engine.render_system().borrow();
             let swap_context = render_system.get_swap_context();
             swap_context.get_logic_swap_data().borrow_mut().m_camera_swap_data = Some(CameraSwapData {
@@ -190,15 +179,15 @@ impl EditorUI {
                 m_camera_type: Some(RenderCameraType::Editor),
                 m_view_matrix: Some(view_matrix),
             });
-            window_system.set_focus_mode(false);
+            engine.window_system().borrow().set_focus_mode(false);
         }
 
         if switch_to_editor {
-            engine.borrow().set_editor_mode(false);
+            engine.set_editor_mode(false);
             if let Some(im) = self.m_input_manager.as_ref() {
                 im.borrow_mut().reset_editor_command();
             }
-            window_system.set_focus_mode(true);
+            engine.window_system().borrow().set_focus_mode(true);
         }
     }
 

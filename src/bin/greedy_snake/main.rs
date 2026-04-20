@@ -5,6 +5,7 @@ use runtime::ComponentTrait;
 use runtime::engine::Engine;
 use runtime::function::framework::object::object_id_allocator::GObjectID;
 use runtime::function::framework::scene::scene::Scene as EngineScene;
+use runtime::function::input::game_command_system::GameCommand;
 use runtime::{
     app::App,
     core::math::{quaternion::Quaternion, transform::Transform, vector3::Vector3},
@@ -18,7 +19,6 @@ use runtime::{
             },
             scene::scene::SceneTrait,
         },
-        input::input_system::GameCommand,
     },
 };
 

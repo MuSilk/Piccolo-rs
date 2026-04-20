@@ -12,7 +12,7 @@ use runtime::{
             motor_component::Controller,
             transform_component::TransformComponent,
         }, resource::component::motor::MotorComponentRes},
-        input::input_system::{GameCommand, InputSystem},
+        input::{game_command_system::{GameCommand, GameCommandInputSystem}},
     },
 };
 
@@ -84,7 +84,7 @@ impl MinecraftMotorComponent {
 
     pub fn tick(
         &mut self,
-        input_system: &InputSystem,
+        input_system: &GameCommandInputSystem,
         delta_time: f32,
         transform: &mut TransformComponent,
         facing_rotation: Quaternion,

@@ -1,16 +1,16 @@
-use std::{cell::RefCell, path::Path, rc::{Rc, Weak}, time::Instant};
+use std::{cell::RefCell, path::Path, rc::{Rc}, time::Instant};
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{function::{framework::world::world_manager::WorldManager, global::global_context::RuntimeGlobalContext, input::input_system::InputSystem, render::{render_system::RenderSystem, window_system::WindowSystem}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{function::{framework::world::world_manager::WorldManager, global::global_context::RuntimeGlobalContext, input::{game_command_system::GameCommandInputSystem, input_system::InputSystem}, render::{render_system::RenderSystem, window_system::WindowSystem}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
 
 const S_FPS_ALPHA: f32 = 1.0 / 100.0;
 
 pub trait System {
-    fn initialize(&mut self, _engine: &Rc<RefCell<Engine>>) {}
+    fn initialize(&mut self, _engine: &Engine) {}
 
-    fn tick(&mut self, _delta_time: f32) {}
+    fn tick(&mut self, _engine: &Engine, _delta_time: f32) {}
 }
 
 pub struct Engine {
@@ -43,12 +43,12 @@ impl Engine {
         }
     }
 
-    pub fn resumed(&mut self, event_loop: &ActiveEventLoop, engine: Weak<RefCell<Engine>>) {
-        self.m_runtime_context.resumed_instance(event_loop, engine);
+    pub fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.m_runtime_context.resumed_instance(event_loop);
     }
-    pub fn initialize(engine: &Rc<RefCell<Engine>>){
-        engine.borrow().m_state.borrow_mut().m_last_tick_time_point = Instant::now();
-        engine.borrow().systems.borrow_mut().iter_mut().for_each(|s| s.initialize(&engine));
+    pub fn initialize(engine: &Engine){
+        engine.m_state.borrow_mut().m_last_tick_time_point = Instant::now();
+        engine.systems.borrow_mut().iter_mut().for_each(|s| s.initialize(&engine));
     }
 
     pub fn shutdown_engine(&self){
@@ -116,7 +116,7 @@ impl Engine {
             ui_runtime.new_frame();
         }
 
-        self.systems.borrow_mut().iter_mut().for_each(|s|s.tick(delta_time));
+        self.systems.borrow_mut().iter_mut().for_each(|s|s.tick(self, delta_time));
 
         self.m_runtime_context.world_manager().borrow_mut().tick(
             &self,
@@ -125,9 +125,7 @@ impl Engine {
             delta_time
         );
         self.m_runtime_context.input_system().borrow_mut().tick(
-            &self.m_runtime_context.window_system().borrow(),
-            &self.m_runtime_context.render_system().borrow(),
-            &self.m_runtime_context.ui_runtime(),
+            self,
             delta_time
         );
     }
@@ -149,7 +147,7 @@ impl Engine {
     pub fn ui_runtime(&self) -> &RefCell<UiRuntime> {
         &self.m_runtime_context.ui_runtime()
     }
-    pub fn input_system(&self) -> &RefCell<InputSystem> {
+    pub fn input_system(&self) -> &RefCell<GameCommandInputSystem> {
         &self.m_runtime_context.input_system()
     }
     pub fn asset_manager(&self) -> &AssetManager {

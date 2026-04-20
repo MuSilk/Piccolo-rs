@@ -1,6 +1,6 @@
 use runtime_derive::ComponentTrait;
 
-use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::{transform_component::TransformComponent}, resource::component::motor::MotorComponentRes}, input::input_system::{GameCommand, InputSystem}}};
+use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::transform_component::TransformComponent, resource::component::motor::MotorComponentRes}, input::{game_command_system::{GameCommand, GameCommandInputSystem}}}};
 
 pub trait Controller{
     fn r#move(&self, current_position: &Vector3, displacement: &Vector3) -> Vector3;
@@ -62,7 +62,7 @@ impl MotorComponent {
 
     pub fn tick(
         &mut self, 
-        input_system: &InputSystem,
+        input_system: &GameCommandInputSystem,
         delta_time: f32, 
         transform: &mut TransformComponent
     ) {

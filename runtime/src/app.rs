@@ -1,12 +1,12 @@
-use std::{cell::RefCell, env, rc::Rc};
+use std::{env};
 
 use anyhow::anyhow;
-use winit::{application::ApplicationHandler, event::{DeviceEvent, DeviceId, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
+use winit::{application::ApplicationHandler, event::{DeviceEvent, DeviceId, KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::WindowId};
 
 use crate::{engine::{Engine, System}, function::framework::scene::scene::SceneTrait};
 
 pub struct App{
-    engine: Rc<RefCell<Engine>>,
+    engine: Engine,
 }
 
 impl App {
@@ -18,7 +18,7 @@ impl App {
             anyhow!("Failed to get parent directory")
         ).unwrap().join("PiccoloEditor.ini");
         Self { 
-            engine: Rc::new(RefCell::new(Engine::new(&config_file_path))), 
+            engine: Engine::new(&config_file_path), 
         }
     }
     pub fn run(&mut self) {
@@ -28,30 +28,36 @@ impl App {
     }
 
     pub fn add_system<T>(&mut self, system: T) where T: System + 'static {
-        self.engine.borrow_mut().systems.borrow_mut().push(Box::new(system));
+        self.engine.systems.borrow_mut().push(Box::new(system));
     }
 
     pub fn add_scene<T: SceneTrait + 'static>(&mut self, scene: T) {
-        let engine = self.engine.borrow();
-        let mut world_manager = engine
+        let mut world_manager = self.engine
             .world_manager()
             .borrow_mut();
         world_manager.add_scene(scene);
     }
 
     pub fn set_default_scene(&mut self, scene_url: &str) {
-        let engine = self.engine.borrow();
-        let mut world_manager = engine
+        let mut world_manager = self.engine
             .world_manager()
             .borrow_mut();
         world_manager.set_default_scene(scene_url);
+    }
+
+    pub fn register_on_key_func<F>(&mut self, f: F) 
+        where F: 'static + Fn(&Engine, DeviceId, &KeyEvent, bool) 
+    {
+        let mut window_system = self.engine
+            .window_system()
+            .borrow_mut();
+        window_system.register_on_key_func(f);
     }
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let engine_weak = Rc::downgrade(&self.engine);
-        self.engine.borrow_mut().resumed(event_loop, engine_weak);
+        self.engine.resumed(event_loop);
         Engine::initialize(&self.engine);
     }
 
@@ -59,58 +65,52 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::RedrawRequested => {
                 let minimized = {
-                    let engine = self.engine.borrow();
-                    let window_system = engine
+                    let window_system = self.engine
                         .window_system()
                         .borrow();
                     window_system.is_minimized()
                 };
                 if !event_loop.exiting() &&!minimized {
-                    let delta_time = self.engine.borrow().calculate_delta_time();
-                    if !self.engine.borrow().tick_one_frame(delta_time).unwrap() {
-                        self.engine.borrow().shutdown_engine();
+                    let delta_time = self.engine.calculate_delta_time();
+                    if !self.engine.tick_one_frame(delta_time).unwrap() {
+                        self.engine.shutdown_engine();
                         event_loop.exit();
                     }  
                 }
             }
             WindowEvent::Resized(size) => {
-                let engine = self.engine.borrow();
-                let mut window_system = engine
+                let mut window_system = self.engine
                     .window_system()
                     .borrow_mut();
                 window_system.on_window_size(size);
             }
             WindowEvent::CloseRequested => {
-                self.engine.borrow().shutdown_engine();
+                self.engine.shutdown_engine();
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
-                let engine = self.engine.borrow();
-                let window_system = engine
+                let window_system = self.engine
                     .window_system()
                     .borrow();
-                window_system.on_key(device_id, &event, is_synthetic);
+                window_system.on_key(&self.engine, device_id, &event, is_synthetic);
             }
             WindowEvent::MouseInput { device_id, state, button } => {
-                let engine = self.engine.borrow();
-                let mut window_system = engine
+                let mut window_system = self.engine
                     .window_system()
                     .borrow_mut();
-                window_system.on_mouse_button(device_id, state, button);
+                window_system.on_mouse_button(&self.engine, device_id, state, button);
             }
             WindowEvent::CursorMoved { device_id, position } => {
-                let engine = self.engine.borrow();
-                let window_system = engine
+                let window_system = self.engine
                     .window_system()
                     .borrow();
-                window_system.on_cursor_pos(device_id, position);
+                window_system.on_cursor_pos(&self.engine, device_id, position);
             }
             WindowEvent::MouseWheel { device_id, delta, phase } => {
-                let engine = self.engine.borrow();
-                let window_system = engine
+                let window_system = self.engine
                     .window_system()
                     .borrow();
-                window_system.on_mouse_wheel(device_id, delta, phase);
+                window_system.on_mouse_wheel(&self.engine, device_id, delta, phase);
             }
             _ => {}
         }
@@ -119,19 +119,17 @@ impl ApplicationHandler for App {
     fn device_event(&mut self, _event_loop: &ActiveEventLoop, device_id: DeviceId, event: DeviceEvent) {
         match event {
             DeviceEvent::MouseMotion  { delta } => {
-                let engine = self.engine.borrow();
-                let window_system = engine
+                let window_system = self.engine
                     .window_system()
                     .borrow();
-                window_system.on_mouse_motion(device_id, delta);
+                window_system.on_mouse_motion(&self.engine, device_id, delta);
             },
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        let engine = self.engine.borrow();
-        let window_system = engine
+        let window_system = self.engine
             .window_system()
             .borrow();
         window_system.request_redraw();

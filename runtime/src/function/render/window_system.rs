@@ -3,6 +3,8 @@ use std::{cell::Cell, collections::HashMap, rc::Rc};
 use anyhow::Result;
 use winit::{dpi::{LogicalSize, PhysicalPosition, PhysicalSize}, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, event_loop::ActiveEventLoop, window::{CursorGrabMode, Window}};
 
+use crate::engine::Engine;
+
 pub struct WindowCreateInfo{
     pub width: u32,
     pub height: u32,
@@ -21,12 +23,12 @@ impl Default for WindowCreateInfo{
     }
 }
 
-type OnKeyFunc = dyn Fn(DeviceId, &KeyEvent, bool);
-type OnMouseButtonFunc = dyn Fn(DeviceId, ElementState, MouseButton);
-type OnCursorPosFunc = dyn Fn(DeviceId, PhysicalPosition<f64>);
-type OnMouseWheelFunc = dyn Fn(DeviceId, MouseScrollDelta, TouchPhase);
-type OnWindowSizeFunc = dyn Fn(PhysicalSize<u32>);
-type OnMouseMotionFunc = dyn Fn(DeviceId, (f64, f64));
+type OnKeyFunc = dyn Fn(&Engine, DeviceId, &KeyEvent, bool);
+type OnMouseButtonFunc = dyn Fn(&Engine, DeviceId, ElementState, MouseButton);
+type OnCursorPosFunc = dyn Fn(&Engine, DeviceId, PhysicalPosition<f64>);
+type OnMouseWheelFunc = dyn Fn(&Engine, DeviceId, MouseScrollDelta, TouchPhase);
+type OnWindowSizeFunc = dyn Fn(&Engine, PhysicalSize<u32>);
+type OnMouseMotionFunc = dyn Fn(&Engine, DeviceId, (f64, f64));
 
 #[derive(Default)]
 pub struct WindowSystem{
@@ -91,35 +93,35 @@ impl WindowSystem {
 
     pub fn register_on_key_func<F>(&mut self, f: F) 
     where
-        F: 'static + Fn(DeviceId, &KeyEvent, bool),
+        F: 'static + Fn(&Engine, DeviceId, &KeyEvent, bool),
     {
         self.m_on_key_func.push(Box::new(f));
     }
 
     pub fn register_on_mouse_button_func<F>(&mut self, f: F) 
     where
-        F: 'static + Fn(DeviceId, ElementState, MouseButton),
+        F: 'static + Fn(&Engine, DeviceId, ElementState, MouseButton),
     {
         self.m_on_mouse_button_func.push(Box::new(f));
     }
 
     pub fn register_on_cursor_pos_func<F>(&mut self, f: F) 
     where
-        F: 'static + Fn(DeviceId, PhysicalPosition<f64>),
+        F: 'static + Fn(&Engine, DeviceId, PhysicalPosition<f64>),
     {
         self.m_on_cursor_pos_func.push(Box::new(f));
     }
 
     pub fn register_on_mouse_wheel_func<F>(&mut self, f: F) 
     where
-        F: 'static + Fn(DeviceId, MouseScrollDelta, TouchPhase),
+        F: 'static + Fn(&Engine, DeviceId, MouseScrollDelta, TouchPhase),
     {
         self.m_on_mouse_wheel_func.push(Box::new(f));
     }
 
     pub fn register_on_mouse_motion<F>(&mut self, f: F) 
     where
-        F: 'static + Fn(DeviceId, (f64, f64)),
+        F: 'static + Fn(&Engine, DeviceId, (f64, f64)),
     {
         self.m_on_mouse_motion_func.push(Box::new(f));
     }
@@ -132,29 +134,29 @@ impl WindowSystem {
         }
     }
 
-    pub fn on_key(&self, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) {
-        self.m_on_key_func.iter().for_each(|f| f(device_id, event, is_synthetic));
+    pub fn on_key(&self, engine: &Engine, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) {
+        self.m_on_key_func.iter().for_each(|f| f(engine, device_id, event, is_synthetic));
     }
 
-    pub fn on_mouse_button(&mut self, device_id: DeviceId, state: ElementState, button: MouseButton) {
+    pub fn on_mouse_button(&mut self, engine: &Engine, device_id: DeviceId, state: ElementState, button: MouseButton) {
         self.m_is_mouse_button_down.insert(button, state == ElementState::Pressed);
-        self.m_on_mouse_button_func.iter().for_each(|f| f(device_id, state, button));
+        self.m_on_mouse_button_func.iter().for_each(|f| f(engine, device_id, state, button));
     }
 
-    pub fn on_mouse_wheel(&self, device_id: DeviceId, delta: MouseScrollDelta, phase: TouchPhase) {
-        self.m_on_mouse_wheel_func.iter().for_each(|f| f(device_id, delta, phase));
+    pub fn on_mouse_wheel(&self, engine: &Engine, device_id: DeviceId, delta: MouseScrollDelta, phase: TouchPhase) {
+        self.m_on_mouse_wheel_func.iter().for_each(|f| f(engine, device_id, delta, phase));
     }
 
     pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
         *self.m_is_mouse_button_down.get(&button).unwrap_or_else(|| &false)
     }
 
-    pub fn on_cursor_pos(&self, device_id: DeviceId, physical_position: PhysicalPosition<f64>) {
-        self.m_on_cursor_pos_func.iter().for_each(|f| f(device_id, physical_position));
+    pub fn on_cursor_pos(&self, engine: &Engine, device_id: DeviceId, physical_position: PhysicalPosition<f64>) {
+        self.m_on_cursor_pos_func.iter().for_each(|f| f(engine, device_id, physical_position));
     }
 
-    pub fn on_mouse_motion(&self, device_id: DeviceId, mouse_motion: (f64, f64)) {
-        self.m_on_mouse_motion_func.iter().for_each(|f| f(device_id, mouse_motion));
+    pub fn on_mouse_motion(&self, engine: &Engine, device_id: DeviceId, mouse_motion: (f64, f64)) {
+        self.m_on_mouse_motion_func.iter().for_each(|f| f(engine, device_id, mouse_motion));
     }
 
     pub fn get_focus_mode(&self) -> bool {

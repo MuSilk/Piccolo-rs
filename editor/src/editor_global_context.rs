@@ -5,7 +5,7 @@ use runtime::{engine::Engine};
 use crate::{editor_input_manager::{EditorInputManager, EditorInputManagerExt}, editor_scene_manager::EditorSceneManager};
 
 pub struct EditorGlobalContextCreateInfo<'a> {
-    pub engine_runtime: &'a Rc<RefCell<Engine>>,
+    pub engine_runtime: &'a Engine,
 }
 
 pub struct EditorGlobalContext {
@@ -22,7 +22,7 @@ impl EditorGlobalContext {
         };
         ctx.m_scene_manager.borrow_mut().initialize();
         ctx.m_input_manager
-            .initialize(init_info.engine_runtime, &ctx.m_scene_manager);
+            .initialize(&init_info.engine_runtime, &ctx.m_scene_manager);
         ctx
     }
 }
