@@ -1,4 +1,5 @@
 pub mod axis_aligned;
+pub mod bounding_box;
 mod math;
 pub mod matrix3;
 pub mod matrix4;
@@ -7,8 +8,7 @@ pub mod transform;
 pub mod vector2;
 pub mod vector3;
 pub mod vector4;
-pub mod bounding_box;
 
-pub use math::look_at as look_at;
-pub use math::perspective as perspective;
-pub use math::orthographic_projection_01 as orthographic_projection_01;
+pub use math::look_at;
+pub use math::orthographic_projection_01;
+pub use math::perspective;

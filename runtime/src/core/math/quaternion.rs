@@ -1,8 +1,7 @@
-use std::ops::Mul;
 use serde::{Deserialize, Serialize};
+use std::ops::Mul;
 
 use crate::core::math::{matrix3::Matrix3x3, matrix4::Matrix4x4, vector3::Vector3};
-
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
@@ -10,24 +9,28 @@ pub struct Quaternion {
     pub x: f32,
     pub y: f32,
     pub z: f32,
-    pub w: f32
+    pub w: f32,
 }
 
 impl Quaternion {
-
     pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Quaternion { x, y, z, w }
     }
-    
+
     pub const fn identity() -> Self {
-        Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
+        Quaternion {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: 1.0,
+        }
     }
 
     pub const fn to_rotation_matrix(&self) -> Matrix4x4 {
-        let (x, y, z, w) = (self.x,self.y,self.z,self.w);
-        let f_tx  = x + x;   // 2x
-        let f_ty  = y + y;   // 2y
-        let f_tz  = z + z;   // 2z
+        let (x, y, z, w) = (self.x, self.y, self.z, self.w);
+        let f_tx = x + x; // 2x
+        let f_ty = y + y; // 2y
+        let f_tz = z + z; // 2z
         let f_twx = f_tx * w; // 2xw
         let f_twy = f_ty * w; // 2yw
         let f_twz = f_tz * w; // 2z2
@@ -39,17 +42,22 @@ impl Quaternion {
         let f_tzz = f_tz * z; // 2z^2
 
         Matrix4x4::from_columns(
-            [1.0 - (f_tyy + f_tzz), f_txy + f_twz,          f_txz - f_twy,          0.0],
-            [f_txy - f_twz,         1.0 - (f_txx + f_tzz),  f_tyz + f_twx,          0.0],
-            [f_txz + f_twy,         f_tyz - f_twx,          1.0 - (f_txx + f_tyy),  0.0],
-            [0.0,                   0.0,                    0.0,                    1.0],
+            [1.0 - (f_tyy + f_tzz), f_txy + f_twz, f_txz - f_twy, 0.0],
+            [f_txy - f_twz, 1.0 - (f_txx + f_tzz), f_tyz + f_twx, 0.0],
+            [f_txz + f_twy, f_tyz - f_twx, 1.0 - (f_txx + f_tyy), 0.0],
+            [0.0, 0.0, 0.0, 1.0],
         )
     }
 
     pub const fn conjugate(&self) -> Self {
-        Quaternion { x: -self.x, y: -self.y, z: -self.z, w: self.w }
+        Quaternion {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+            w: self.w,
+        }
     }
-    
+
     pub fn from_angle_axis(angle: f32, axis: &Vector3) -> Self {
         let half_angle = angle * 0.5;
         let (s, c) = half_angle.sin_cos();
@@ -61,7 +69,6 @@ impl Quaternion {
         }
     }
 
-
     pub fn from_axes(x_axis: &Vector3, y_axis: &Vector3, z_axis: &Vector3) -> Self {
         let rot = Matrix3x3::from_columns(
             [x_axis.x, x_axis.y, x_axis.z],
@@ -71,7 +78,6 @@ impl Quaternion {
         Self::from_rotation_matrix(&rot)
     }
 
-
     pub fn from_rotation_matrix(rotation: &Matrix3x3) -> Self {
         let trace = rotation[0][0] + rotation[1][1] + rotation[2][2];
         if trace > 0.0 {
@@ -79,13 +85,12 @@ impl Quaternion {
             let w = 0.5 * root;
             let root = 0.5 / root;
             Self::new(
-                (rotation[1][2] - rotation[2][1]) * root, 
+                (rotation[1][2] - rotation[2][1]) * root,
                 (rotation[2][0] - rotation[0][2]) * root,
-                (rotation[0][1] - rotation[1][0]) * root, 
-                w
+                (rotation[0][1] - rotation[1][0]) * root,
+                w,
             )
-        }
-        else{
+        } else {
             let i_next = [1, 2, 0];
             let mut i = 0;
             if rotation[1][1] > rotation[0][0] {
@@ -109,12 +114,10 @@ impl Quaternion {
         }
     }
 
-
-
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt()
     }
-    
+
     pub fn normalize(&self) -> Self {
         let len_inv = 1.0 / self.length();
         Quaternion {
@@ -135,7 +138,7 @@ impl Mul<&Vector3> for Quaternion {
         let mut uuv = qvec.cross(&uv);
         uv *= 2.0 * self.w;
         uuv *= 2.0;
-        
+
         rhs + uv + uuv
     }
 }
@@ -149,7 +152,7 @@ impl Mul<Vector3> for Quaternion {
         let mut uuv = qvec.cross(&uv);
         uv *= 2.0 * self.w;
         uuv *= 2.0;
-        
+
         rhs + uv + uuv
     }
 }
@@ -163,7 +166,7 @@ impl Mul<&Vector3> for &Quaternion {
         let mut uuv = qvec.cross(&uv);
         uv *= 2.0 * self.w;
         uuv *= 2.0;
-        
+
         rhs + uv + uuv
     }
 }
@@ -177,7 +180,7 @@ impl Mul<Vector3> for &Quaternion {
         let mut uuv = qvec.cross(&uv);
         uv *= 2.0 * self.w;
         uuv *= 2.0;
-        
+
         rhs + uv + uuv
     }
 }

@@ -19,14 +19,19 @@ impl Mul<f32> for Vector2 {
     type Output = Vector2;
 
     fn mul(self, rhs: f32) -> Self::Output {
-        Vector2 { x: self.x * rhs, y: self.y * rhs }
+        Vector2 {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
     }
 }
-
 
 impl Sub for Vector2 {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vector2 { x: self.x - rhs.x, y: self.y - rhs.y}
+        Vector2 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
     }
 }

@@ -1,4 +1,3 @@
-
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[repr(C)]
 pub struct Vector4 {

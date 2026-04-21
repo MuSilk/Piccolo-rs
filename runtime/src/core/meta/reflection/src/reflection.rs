@@ -1,40 +1,48 @@
-use std::{cell::{LazyCell}, collections::HashMap, os::raw::c_void};
+use std::{cell::LazyCell, collections::HashMap, os::raw::c_void};
 
 pub type SetFunction = fn(*mut c_void, *const c_void);
 pub type GetFunction = fn(*const c_void) -> *const c_void;
 pub type GetNameFunction = fn() -> &'static str;
 pub type GetBoolFunction = fn(*const c_void) -> bool;
 
-
-pub type FieldFunctionTuple = (SetFunction, GetFunction, GetNameFunction, GetNameFunction, GetNameFunction, GetBoolFunction);
+pub type FieldFunctionTuple = (
+    SetFunction,
+    GetFunction,
+    GetNameFunction,
+    GetNameFunction,
+    GetNameFunction,
+    GetBoolFunction,
+);
 pub type MethodFunctionTuple = ();
 pub type ClassFunctionTuple = ();
 pub type ArrayFunctionTuple = ();
 
-static mut M_CLASS_MAP : LazyCell<HashMap<&'static str, ClassFunctionTuple>> = LazyCell::new(|| HashMap::new());
-static mut M_FIELD_MAP : LazyCell<HashMap<&'static str, Vec<FieldFunctionTuple>>> = LazyCell::new(|| HashMap::new());
+static mut M_CLASS_MAP: LazyCell<HashMap<&'static str, ClassFunctionTuple>> =
+    LazyCell::new(|| HashMap::new());
+static mut M_FIELD_MAP: LazyCell<HashMap<&'static str, Vec<FieldFunctionTuple>>> =
+    LazyCell::new(|| HashMap::new());
 
 pub struct TypeMetaRegisterInterface;
 
 impl TypeMetaRegisterInterface {
-
     #[allow(static_mut_refs)]
     pub fn register_to_field_map(name: &'static str, field_function_tuple: FieldFunctionTuple) {
-        unsafe{
-            M_FIELD_MAP.entry(name).or_default().push(field_function_tuple);
+        unsafe {
+            M_FIELD_MAP
+                .entry(name)
+                .or_default()
+                .push(field_function_tuple);
         }
     }
 
     #[allow(static_mut_refs)]
     pub fn register_to_class_map(name: &'static str, class_function_tuple: ClassFunctionTuple) {
-        unsafe{
+        unsafe {
             if !M_CLASS_MAP.contains_key(name) {
                 M_CLASS_MAP.insert(name, class_function_tuple);
-            }
-            else{
+            } else {
                 M_CLASS_MAP.remove(name);
             }
-            
         }
     }
 
@@ -55,44 +63,28 @@ pub struct TypeMeta {
     m_is_valid: bool,
 }
 
-impl TypeMeta {
-    
-}
+impl TypeMeta {}
 
 struct FieldAccessor {
     m_functions: FieldFunctionTuple,
     m_field_name: &'static str,
     m_field_type: &'static str,
-} 
+}
 
 impl FieldAccessor {
-    fn get(){
+    fn get() {}
 
-    }
+    fn set() {}
 
-    fn set(){
+    fn get_owner_type_meta() {}
 
-    }
+    fn get_type_meta() {}
 
-    fn get_owner_type_meta(){
+    fn get_field_name() {}
 
-    }
+    fn get_field_type_name() {}
 
-    fn get_type_meta(){
-
-    }
-
-    fn get_field_name(){
-
-    }
-
-    fn get_field_type_name(){
-
-    }
-
-    fn is_array_type(){
-
-    }
+    fn is_array_type() {}
 }
 
 struct MethodAccessor {
@@ -106,9 +98,8 @@ struct ArrayAccessor {
     m_element_type_name: &'static str,
 }
 
-
 #[derive(Default)]
-pub struct ReflectionInstance{
+pub struct ReflectionInstance {
     pub m_meta: TypeMeta,
     pub m_instance: *mut c_void,
 }
@@ -129,9 +120,7 @@ pub struct ReflectionPtr<T: ?Sized> {
 }
 
 impl<T: ?Sized> ReflectionPtr<T> {
-
-    pub fn new(type_name: &'static str, instance: Box<T>) -> Self
-    {
+    pub fn new(type_name: &'static str, instance: Box<T>) -> Self {
         Self {
             m_type_name: type_name,
             m_instance: instance,
@@ -147,9 +136,7 @@ impl<T: ?Sized> ReflectionPtr<T> {
 
     pub fn downcast_ref<U>(&self) -> Option<&U> {
         // if self.m_type_name == std::any::type_name::<U>() {
-            unsafe {
-                Some(&*(self.m_instance.as_ref() as *const T as *const U))
-            }
+        unsafe { Some(&*(self.m_instance.as_ref() as *const T as *const U)) }
         // } else {
         //     None
         // }
@@ -157,15 +144,12 @@ impl<T: ?Sized> ReflectionPtr<T> {
 
     pub fn downcast_mut<U>(&mut self) -> Option<&mut U> {
         // if self.m_type_name == std::any::type_name::<U>() {
-            unsafe {
-                Some(&mut *(self.m_instance.as_mut() as *mut T as *mut U))
-            }
+        unsafe { Some(&mut *(self.m_instance.as_mut() as *mut T as *mut U)) }
         // } else {
         //     None
         // }
     }
 }
-
 
 impl<T: ?Sized> std::ops::Deref for ReflectionPtr<T> {
     type Target = T;

@@ -35,16 +35,16 @@ impl BoundingBox {
     }
 }
 
-pub fn bounding_box_transform(b: &BoundingBox, m: &Matrix4x4) -> BoundingBox { 
+pub fn bounding_box_transform(b: &BoundingBox, m: &Matrix4x4) -> BoundingBox {
     let g_box_offset = [
-        Vector3::new(-1.0, -1.0,  1.0),
-        Vector3::new( 1.0, -1.0,  1.0),
-        Vector3::new( 1.0,  1.0,  1.0),
-        Vector3::new(-1.0,  1.0,  1.0),
+        Vector3::new(-1.0, -1.0, 1.0),
+        Vector3::new(1.0, -1.0, 1.0),
+        Vector3::new(1.0, 1.0, 1.0),
+        Vector3::new(-1.0, 1.0, 1.0),
         Vector3::new(-1.0, -1.0, -1.0),
-        Vector3::new( 1.0, -1.0, -1.0),
-        Vector3::new( 1.0,  1.0, -1.0),
-        Vector3::new(-1.0,  1.0, -1.0),
+        Vector3::new(1.0, -1.0, -1.0),
+        Vector3::new(1.0, 1.0, -1.0),
+        Vector3::new(-1.0, 1.0, -1.0),
     ];
     let center = (b.max_bound + b.min_bound) * 0.5;
     let extent = (b.max_bound - b.min_bound) * 0.5;

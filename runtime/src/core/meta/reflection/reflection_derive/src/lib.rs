@@ -1,7 +1,6 @@
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Data};
-
+use syn::Data;
 
 #[proc_macro_derive(ReflectFields)]
 pub fn reflect_fields_macro_derive(input: TokenStream) -> TokenStream {
@@ -16,7 +15,6 @@ pub fn reflect_white_list_fields_macro_derive(input: TokenStream) -> TokenStream
 }
 
 fn impl_reflect_macro(ast: &syn::DeriveInput, all_fields: bool) -> TokenStream {
-
     let name = &ast.ident;
     let Data::Struct(st) = &ast.data else {
         panic!("Reflect can only be derived for structs");
@@ -29,11 +27,11 @@ fn impl_reflect_macro(ast: &syn::DeriveInput, all_fields: bool) -> TokenStream {
             stringify!(#name)
         }
     };
-    let mut method_type_wrapper_register_st_ast = quote!{};
+    let mut method_type_wrapper_register_st_ast = quote! {};
 
     for (_idx, field) in st.fields.iter().enumerate() {
         let meta_attr = field.attrs.iter().find(|attr| attr.path().is_ident("meta"));
-        if ! all_fields && meta_attr.is_none() {
+        if !all_fields && meta_attr.is_none() {
             continue;
         }
         let (field_id, field_type) = (&field.ident, &field.ty);
@@ -84,7 +82,7 @@ fn impl_reflect_macro(ast: &syn::DeriveInput, all_fields: bool) -> TokenStream {
     let struct_type_name_operator_ast = quote! {
         struct #struct_type_st_operator {
 
-        } 
+        }
         impl #struct_type_st_operator {
             #struct_type_st_operator_impl
         }
@@ -93,7 +91,6 @@ fn impl_reflect_macro(ast: &syn::DeriveInput, all_fields: bool) -> TokenStream {
     method_type_wrapper_register_st_ast.extend(quote! {
         reflection::reflection::TypeMetaRegisterInterface::register_to_class_map(stringify!(#name), ());
     });
-
 
     let method_type_wrapper_register_name = format_ident!("type_wrapper_register_{}", name);
     let method_type_wrapper_register_name = ident_to_snake_case(method_type_wrapper_register_name);
@@ -115,15 +112,8 @@ fn impl_reflect_macro(ast: &syn::DeriveInput, all_fields: bool) -> TokenStream {
 }
 
 fn ident_to_upper_case(ident: syn::Ident) -> syn::Ident {
-
-    syn::Ident::new(
-        &ident.to_string().to_uppercase(),
-        ident.span()
-    )
+    syn::Ident::new(&ident.to_string().to_uppercase(), ident.span())
 }
 fn ident_to_snake_case(ident: syn::Ident) -> syn::Ident {
-    syn::Ident::new(
-        &ident.to_string().to_lowercase(),
-        ident.span(),
-    )
+    syn::Ident::new(&ident.to_string().to_lowercase(), ident.span())
 }

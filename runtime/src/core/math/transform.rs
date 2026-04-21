@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::math::{matrix4::Matrix4x4, quaternion::Quaternion, vector3::Vector3};
 
-
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transform {
     m_position: Vector3,
@@ -22,7 +20,6 @@ impl Default for Transform {
 }
 
 impl Transform {
-
     pub fn new(position: Vector3, rotation: Quaternion, scale: Vector3) -> Self {
         Transform {
             m_position: position,

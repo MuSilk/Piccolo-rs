@@ -8,7 +8,7 @@ pub fn meta_register() {
     for register_function in REFLECT_REGISTER_FUNCTION_LIST {
         register_function();
     }
-} 
+}
 
 pub fn meta_unregister() {
     TypeMetaRegisterInterface::unregister_all();
