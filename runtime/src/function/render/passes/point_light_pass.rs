@@ -23,7 +23,7 @@ use linkme::distributed_slice;
 use vulkanalia::prelude::v1_0::*;
 
 pub struct PointLightShadowPassInitInfo<'a> {
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub rhi: &'a VulkanRHI,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
@@ -41,7 +41,7 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 impl PointLightShadowPass {
     pub fn initialize(&mut self, info: &PointLightShadowPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
-        let rhi = info.rhi.borrow();
+        let rhi = info.rhi;
 
         self.setup_attachments(&rhi)?;
         self.setup_render_pass(&rhi)?;
@@ -52,7 +52,7 @@ impl PointLightShadowPass {
     }
 
     pub fn post_initialize(&mut self, info: &PointLightShadowPassInitInfo) -> Result<()> {
-        let rhi = info.rhi.borrow();
+        let rhi = info.rhi;
         self.setup_pipelines(&rhi)?;
         self.setup_descriptor_set(&rhi)?;
         Ok(())

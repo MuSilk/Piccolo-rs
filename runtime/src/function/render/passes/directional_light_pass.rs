@@ -26,7 +26,7 @@ use linkme::distributed_slice;
 use vulkanalia::prelude::v1_0::*;
 
 pub struct DirectionalLightShadowPassInitInfo<'a> {
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub rhi: &'a VulkanRHI,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
@@ -44,7 +44,7 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 impl DirectionalLightShadowPass {
     pub fn initialize(&mut self, info: &DirectionalLightShadowPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
-        let rhi = info.rhi.borrow();
+        let rhi = info.rhi;
 
         self.setup_attachments(&rhi)?;
         self.setup_render_pass(&rhi)?;
@@ -55,7 +55,7 @@ impl DirectionalLightShadowPass {
     }
 
     pub fn post_initialize(&mut self, info: &DirectionalLightShadowPassInitInfo) -> Result<()> {
-        let rhi = info.rhi.borrow();
+        let rhi = info.rhi;
         self.setup_pipelines(&rhi)?;
         self.setup_descriptor_set(&rhi)?;
         Ok(())

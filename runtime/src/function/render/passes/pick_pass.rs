@@ -23,7 +23,7 @@ use vulkanalia::prelude::v1_0::*;
 
 pub struct PickPassInitInfo<'a> {
     pub per_mesh_layout: vk::DescriptorSetLayout,
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub rhi: &'a VulkanRHI,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
@@ -41,7 +41,7 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 impl PickPass {
     pub fn initialize(&mut self, info: &PickPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
-        let rhi = info.rhi.borrow();
+        let rhi = info.rhi;
         self.m_per_mesh_layout = info.per_mesh_layout;
 
         self.setup_attachments(&rhi)?;

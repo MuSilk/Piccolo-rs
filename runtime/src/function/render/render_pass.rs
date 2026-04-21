@@ -1,8 +1,13 @@
-use std::{cell::{LazyCell, RefCell}, rc::{Rc, Weak}};
+use std::{
+    cell::{LazyCell, RefCell},
+    rc::{Rc, Weak},
+};
 
-use vulkanalia::{prelude::v1_0::*};
+use vulkanalia::prelude::v1_0::*;
 
-use crate::function::render::{ interface::vulkan::vulkan_rhi::VulkanRHI, render_common::RenderMeshNode, render_resource::{GlobalRenderResource, RenderResource}};
+use crate::function::render::{
+    render_common::RenderMeshNode, render_resource::GlobalRenderResource,
+};
 
 #[derive(Default)]
 pub struct VisiableNodes {
@@ -12,8 +17,8 @@ pub struct VisiableNodes {
     // p_axis_node: RenderAxisNode,
 }
 
-#[derive(Default,Clone, Copy)]
-pub struct FrameBufferAttachment{
+#[derive(Default, Clone, Copy)]
+pub struct FrameBufferAttachment {
     pub image: vk::Image,
     pub mem: vk::DeviceMemory,
     pub view: vk::ImageView,
@@ -21,36 +26,31 @@ pub struct FrameBufferAttachment{
 }
 
 #[derive(Default)]
-pub struct Framebuffer{
+pub struct Framebuffer {
     pub width: u32,
     pub height: u32,
-    pub framebuffer : vk::Framebuffer,
+    pub framebuffer: vk::Framebuffer,
     pub render_pass: vk::RenderPass,
     pub attachments: Vec<FrameBufferAttachment>,
 }
 
 #[derive(Default)]
-pub struct Descriptor{
+pub struct Descriptor {
     pub layout: vk::DescriptorSetLayout,
     pub descriptor_set: vk::DescriptorSet,
 }
 
 #[derive(Default)]
-pub struct RenderPipelineBase{
+pub struct RenderPipelineBase {
     pub layout: vk::PipelineLayout,
     pub pipeline: vk::Pipeline,
 }
 
-pub static mut M_VISIABLE_NODES: LazyCell<RefCell<VisiableNodes>> = LazyCell::new(||RefCell::new(VisiableNodes::default()));
-
-pub struct RenderPassCommonInfo<'a>{
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
-    pub render_resource: &'a Rc<RefCell<RenderResource>>,
-}
+pub static mut M_VISIABLE_NODES: LazyCell<RefCell<VisiableNodes>> =
+    LazyCell::new(|| RefCell::new(VisiableNodes::default()));
 
 #[derive(Default)]
-pub struct RenderPass{
-
+pub struct RenderPass {
     pub m_global_render_resource: Weak<RefCell<GlobalRenderResource>>,
 
     pub m_descriptor_infos: Vec<Descriptor>,
@@ -58,32 +58,35 @@ pub struct RenderPass{
     pub m_framebuffer: Framebuffer,
 }
 
-impl RenderPass{
-
+impl RenderPass {
     pub fn initialize(&mut self, global_render_resource: &Rc<RefCell<GlobalRenderResource>>) {
-         self.m_global_render_resource = 
-            Rc::downgrade(global_render_resource);
+        self.m_global_render_resource = Rc::downgrade(global_render_resource);
     }
 
-    pub fn create() -> Self{
+    pub fn create() -> Self {
         Self {
             ..Default::default()
         }
     }
-    pub fn get_render_pass(&self) -> &vk::RenderPass{
+    pub fn get_render_pass(&self) -> &vk::RenderPass {
         &self.m_framebuffer.render_pass
     }
-    pub fn get_framebuffer_image_views(&self) -> Vec<vk::ImageView>{
-        self.m_framebuffer.attachments.iter()
-            .map(|attachment| attachment.view).collect::<Vec<_>>()
+    pub fn get_framebuffer_image_views(&self) -> Vec<vk::ImageView> {
+        self.m_framebuffer
+            .attachments
+            .iter()
+            .map(|attachment| attachment.view)
+            .collect::<Vec<_>>()
     }
     pub fn get_descriptor_set_layouts(&self) -> Vec<vk::DescriptorSetLayout> {
-        self.m_descriptor_infos.iter()
-            .map(|descriptor| descriptor.layout).collect::<Vec<_>>()
+        self.m_descriptor_infos
+            .iter()
+            .map(|descriptor| descriptor.layout)
+            .collect::<Vec<_>>()
     }
 
     #[allow(static_mut_refs)]
-    pub fn m_visible_nodes() -> &'static RefCell<VisiableNodes>{
+    pub fn m_visible_nodes() -> &'static RefCell<VisiableNodes> {
         unsafe { &M_VISIABLE_NODES }
     }
-} 
+}
