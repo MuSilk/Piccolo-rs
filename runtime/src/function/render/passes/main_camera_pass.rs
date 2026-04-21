@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::{render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}, render_type::RHISamplerType}, ui::ui2::UiRuntime}, resource::config_manager::ConfigManager, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
+use crate::{core::math::matrix4::Matrix4x4, function::{render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}, render_type::RHISamplerType}, ui::ui2::UiRuntime}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -33,7 +33,6 @@ pub enum MainCameraSubPass {
 
 pub struct MainCameraPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
-    pub config_manager: &'a ConfigManager,
     pub enable_fxaa: bool,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }

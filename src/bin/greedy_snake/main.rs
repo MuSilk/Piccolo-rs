@@ -395,14 +395,12 @@ fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
     let object = scene.spawn();
     let mut ground = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
-    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
-            &config_manager,
             "asset/greedy_snake/ground.json"
         )
         .unwrap();
-    ground.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
+    ground.post_load_resource(object, &asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -425,14 +423,12 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let head = Box::new(SnakeHead::default());
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
-    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
-            &config_manager,
             "asset/greedy_snake/head.json"
         )
         .unwrap();
-    mesh.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
+    mesh.post_load_resource(object, &asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -459,14 +455,12 @@ fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: us
     });
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
-    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
-            &config_manager,
             "asset/greedy_snake/head.json"
         )
         .unwrap();
-    mesh.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
+    mesh.post_load_resource(object, &asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -491,14 +485,12 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let food = Box::new(Food::default());
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
-    let config_manager = engine.config_manager();
     let mesh_res = asset_manager
         .load_asset(
-            &config_manager,
             "asset/greedy_snake/head.json"
         )
         .unwrap();
-    mesh.post_load_resource(object, &asset_manager, &config_manager, &mesh_res);
+    mesh.post_load_resource(object, &asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(

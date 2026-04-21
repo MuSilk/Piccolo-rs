@@ -130,7 +130,7 @@ impl GameScene {
         if self.hotbar_texture_id.is_none() {
             let tex_path = engine
                 .asset_manager()
-                .get_full_path(engine.config_manager(), "asset/minecraft-ai/texture/block.png");
+                .get_full_path("asset/minecraft-ai/texture/block.png");
             if let Ok(texture_id) = ui.load_texture_from_path(Path::new(&tex_path)) {
                 self.hotbar_texture_id = Some(texture_id);
             }
@@ -221,7 +221,6 @@ impl SceneTrait for GameScene {
         let motor_res: MotorComponentRes = engine
             .asset_manager()
             .load_asset(
-                engine.config_manager(),
                 "asset/minecraft-ai/player.motor.json",
             )
             .expect("player motor");

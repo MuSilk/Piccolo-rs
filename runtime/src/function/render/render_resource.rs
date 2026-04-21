@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linkme::distributed_slice;
 use vulkanalia::{prelude::v1_0::*};
 
-use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI, K_MAX_FRAMES_IN_FLIGHT}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI, K_MAX_FRAMES_IN_FLIGHT}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}, resource::{asset_manager::AssetManager}};
 
 #[distributed_slice(vulkan_rhi::VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
 static STORAGE_BUFFER_COUNT_RENDER_RESOURCE: u32 = vulkan_rhi::MAX_MATERIAL_COUNT;
@@ -138,29 +138,28 @@ impl RenderResource {
     pub fn upload_global_render_resource(
         &mut self, 
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         rhi: &VulkanRHI, 
         level_resource_desc: &LevelResourceDesc
     ) {
         self.create_and_map_storage_buffer(rhi);
         
         let skybox_irradiance_map = &level_resource_desc.m_ibl_resource_desc.m_skybox_irradiance_map;
-        let irradiace_pos_x_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_irradiance_map.positive_x_map, 4).unwrap();
-        let irradiace_neg_x_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_irradiance_map.negative_x_map, 4).unwrap();
-        let irradiace_pos_y_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_irradiance_map.positive_y_map, 4).unwrap();
-        let irradiace_neg_y_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_irradiance_map.negative_y_map, 4).unwrap();
-        let irradiace_pos_z_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_irradiance_map.positive_z_map, 4).unwrap();
-        let irradiace_neg_z_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_irradiance_map.negative_z_map, 4).unwrap();
+        let irradiace_pos_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.positive_x_map, 4).unwrap();
+        let irradiace_neg_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.negative_x_map, 4).unwrap();
+        let irradiace_pos_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.positive_y_map, 4).unwrap();
+        let irradiace_neg_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.negative_y_map, 4).unwrap();
+        let irradiace_pos_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.positive_z_map, 4).unwrap();
+        let irradiace_neg_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.negative_z_map, 4).unwrap();
 
         let skybox_specular_map = &level_resource_desc.m_ibl_resource_desc.m_skybox_specular_map;
-        let specular_pos_x_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_specular_map.positive_x_map, 4).unwrap();
-        let specular_neg_x_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_specular_map.negative_x_map, 4).unwrap();
-        let specular_pos_y_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_specular_map.positive_y_map, 4).unwrap();
-        let specular_neg_y_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_specular_map.negative_y_map, 4).unwrap();
-        let specular_pos_z_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_specular_map.positive_z_map, 4).unwrap();
-        let specular_neg_z_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &skybox_specular_map.negative_z_map, 4).unwrap();
+        let specular_pos_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.positive_x_map, 4).unwrap();
+        let specular_neg_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.negative_x_map, 4).unwrap();
+        let specular_pos_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.positive_y_map, 4).unwrap();
+        let specular_neg_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.negative_y_map, 4).unwrap();
+        let specular_pos_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.positive_z_map, 4).unwrap();
+        let specular_neg_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.negative_z_map, 4).unwrap();
 
-        let brdf_map = RenderResourceBase::load_texture_hdr(asset_manager, config_manager, &level_resource_desc.m_ibl_resource_desc.m_brdf_map, 4).unwrap();
+        let brdf_map = RenderResourceBase::load_texture_hdr(asset_manager, &level_resource_desc.m_ibl_resource_desc.m_brdf_map, 4).unwrap();
 
         self.create_ibl_samplers(rhi);
 
@@ -197,7 +196,6 @@ impl RenderResource {
 
         let color_grading_map = RenderResourceBase::load_texture(
             asset_manager,
-            config_manager,
             &level_resource_desc.m_color_grading_resource_desc.m_color_grading_map,
             false
         ).unwrap();

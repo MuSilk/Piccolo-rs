@@ -5,7 +5,7 @@ use log::error;
 use itertools::Itertools;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::data::mesh_data::MeshData}};
+use crate::{core::math::{axis_aligned::AxisAlignedBox, vector2::Vector2, vector3::Vector3}, function::render::render_type::{ImageType, MaterialSourceDesc, MeshSourceDesc, MeshVertexDataDefinition, RenderMaterialData, RenderMeshData, StaticMeshData, TextureData}, resource::{asset_manager::AssetManager, res_type::data::mesh_data::MeshData}};
 
 
 #[derive(Clone, Default)]
@@ -17,11 +17,10 @@ impl RenderResourceBase {
 
     pub fn load_texture_hdr(
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         file: &str, 
         desired_channels: u32
     ) -> Option<TextureData> {
-        let image = image::open(asset_manager.get_full_path(config_manager, file)).ok()?;
+        let image = image::open(asset_manager.get_full_path(file)).ok()?;
         let mut texture = TextureData::default();
         match desired_channels {
             4 => {
@@ -46,11 +45,10 @@ impl RenderResourceBase {
 
     pub fn load_texture(
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         file: &str, 
         is_srgb: bool
     ) -> Option<TextureData> {
-        let image = image::open(asset_manager.get_full_path(config_manager, file)).ok()?;
+        let image = image::open(asset_manager.get_full_path(file)).ok()?;
         let image = image.to_rgba8();
 
         let mut texture = TextureData::default();
@@ -73,7 +71,6 @@ impl RenderResourceBase {
     pub fn load_mesh_data(
         &mut self, 
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         source: &MeshSourceDesc
     ) -> (RenderMeshData, AxisAlignedBox) {
         let mut ret: RenderMeshData = RenderMeshData::default();
@@ -83,7 +80,7 @@ impl RenderResourceBase {
         }
         else if PathBuf::from(&source.m_mesh_file).extension().unwrap() == "json" {
             let mesh_data: MeshData = {
-                asset_manager.load_asset(config_manager, &source.m_mesh_file).unwrap()
+                asset_manager.load_asset(&source.m_mesh_file).unwrap()
             };
 
             let vertices = mesh_data.vertices
@@ -136,15 +133,14 @@ impl RenderResourceBase {
 
     pub fn load_material_data(
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         source: &MaterialSourceDesc
     ) -> RenderMaterialData {
         let mut ret = RenderMaterialData::default();
-        ret.m_base_color_texture = Self::load_texture(asset_manager, config_manager, &source.m_base_color_file, true);
-        ret.m_metallic_roughness_texture = Self::load_texture(asset_manager, config_manager, &source.m_metallic_roughness_file, false);
-        ret.m_normal_texture = Self::load_texture(asset_manager, config_manager, &source.m_normal_file, false);
-        ret.m_occlusion_texture = Self::load_texture(asset_manager, config_manager, &source.m_occlusion_file, false);
-        ret.m_emissive_texture = Self::load_texture(asset_manager, config_manager, &source.m_emissive_file, false);
+        ret.m_base_color_texture = Self::load_texture(asset_manager, &source.m_base_color_file, true);
+        ret.m_metallic_roughness_texture = Self::load_texture(asset_manager, &source.m_metallic_roughness_file, false);
+        ret.m_normal_texture = Self::load_texture(asset_manager, &source.m_normal_file, false);
+        ret.m_occlusion_texture = Self::load_texture(asset_manager, &source.m_occlusion_file, false);
+        ret.m_emissive_texture = Self::load_texture(asset_manager, &source.m_emissive_file, false);
         ret
     }
     

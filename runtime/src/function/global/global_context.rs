@@ -19,7 +19,7 @@ impl RuntimeGlobalContext {
         let config_manager = 
             ConfigManager::default();
         let asset_manager = 
-            AssetManager::new();
+            AssetManager::new(&config_manager);
 
         let mut ctx= RuntimeGlobalContext {
             m_config_manager: config_manager,

@@ -8,30 +8,30 @@ use serde::de::DeserializeOwned;
 use crate::resource::config_manager::ConfigManager;
 
 
-pub struct AssetManager {}
+pub struct AssetManager {
+    m_root_folder: PathBuf,
+}
 
 impl AssetManager {
 
-    pub fn new() -> Self {
+    pub fn new(config_manager: &ConfigManager) -> Self {
         AssetManager {
+            m_root_folder: config_manager.get_root_folder().to_path_buf(),
         }
     }
 
     pub fn get_full_path(
         &self, 
-        config_manager: &ConfigManager,
         relative_path: &str,
     ) -> PathBuf {
-        let root_folder = config_manager.get_root_folder();
-        root_folder.join(relative_path)
+        self.m_root_folder.join(relative_path)
     }
 
     pub fn load_asset<AssetType : DeserializeOwned>(
         &self, 
-        config_manager: &ConfigManager,
         asset_url: &str
     ) -> Result<AssetType> {
-        let asset_path = self.get_full_path(config_manager, asset_url);
+        let asset_path = self.get_full_path(asset_url);
         let reader = std::fs::File::open(asset_path).map(std::io::BufReader::new);
         if let Err(e) = reader {
             error!("Failed to open asset file {}: {}", asset_url, e);
@@ -47,10 +47,9 @@ impl AssetManager {
 
     pub fn save_asset<AssetType : serde::Serialize>(
         &self, asset_url: &str, 
-        config_manager: &ConfigManager,
         asset: AssetType
     ) -> Result<()> {
-        let asset_path = self.get_full_path(config_manager, asset_url);
+        let asset_path = self.get_full_path(asset_url);
         let writer = std::fs::File::create(asset_path).map(std::io::BufWriter::new);
         if let Err(e) = writer {
             error!("Failed to create asset file {}: {}", asset_url, e);

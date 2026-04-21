@@ -33,7 +33,7 @@ impl RenderSystem {
         let asset_manager = create_info.asset_manager;
         let config_manager = create_info.config_manager;
         let global_rendering_res_url = config_manager.get_global_rendering_res_url();
-        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(config_manager, &global_rendering_res_url).unwrap();
+        let global_rendering_res : GlobalRenderingRes = asset_manager.load_asset(&global_rendering_res_url).unwrap();
 
         let swap_context = RenderSwapContext::default();
 
@@ -66,14 +66,13 @@ impl RenderSystem {
         };
 
         let mut render_resource = RenderResource::default();
-        render_resource.upload_global_render_resource(asset_manager, config_manager, &vulkan_rhi.borrow(), &level_resource_desc);
+        render_resource.upload_global_render_resource(asset_manager, &vulkan_rhi.borrow(), &level_resource_desc);
         let render_resource = RefCell::new(render_resource);
 
         let render_pipeline = RenderPipeline::create(&RenderPipelineCreateInfo {
             rhi : &vulkan_rhi,
             render_resource: &render_resource.borrow(),
             enable_fxaa: global_rendering_res.enable_fxaa,
-            config_manager: config_manager,
         }).unwrap();
 
         render_resource.borrow_mut().m_mesh_descriptor_set_layout = 
@@ -103,10 +102,9 @@ impl RenderSystem {
         &self, 
         ui_runtime: &UiRuntime,
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         delta_time: f32
     ) -> Result<()>{
-        self.process_swap_data(asset_manager, config_manager);
+        self.process_swap_data(asset_manager);
         self.m_rhi.borrow_mut().prepare_context();
         self.m_render_resource.borrow_mut().update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
         self.m_render_scene.update_visible_objects(&mut self.m_render_resource.borrow_mut(), &self.m_render_camera.borrow());
@@ -177,7 +175,6 @@ impl RenderSystem {
     fn process_swap_data(
         &self,
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
     ) {
         let swap_data = self.m_swap_context.get_render_swap_data();
         if swap_data.borrow().m_game_object_resource_descs.is_some() {
@@ -207,7 +204,7 @@ impl RenderSystem {
                                 let is_mesh_loaded = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().has_element(&mesh_source);
                                 render_entity.m_mesh_asset_id = self.m_render_scene.get_mesh_asset_id_allocator().borrow_mut().alloc_guid(&mesh_source);
                                 if !is_mesh_loaded {
-                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(asset_manager, config_manager, &mesh_source);
+                                    let (mesh_data, bounding_box) = self.m_render_resource.borrow_mut().load_mesh_data(asset_manager, &mesh_source);
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource.borrow_mut().upload_game_object_render_resource_mesh(&self.m_rhi.borrow(), &render_entity, &mesh_data);
                                     println!("load mesh data");
@@ -274,7 +271,7 @@ impl RenderSystem {
                         render_entity.m_material_asset_id = self.m_render_scene.get_material_asset_id_allocator().borrow_mut().alloc_guid(&material_source);
                         if !is_material_loaded {
                             println!("load material data");
-                            let material_data = RenderResourceBase::load_material_data(asset_manager, config_manager, &material_source);
+                            let material_data = RenderResourceBase::load_material_data(asset_manager, &material_source);
                             self.m_render_resource.borrow_mut().upload_game_object_render_resource_material(&self.m_rhi.borrow(), &render_entity, &material_data);
                         }
 

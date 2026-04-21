@@ -38,12 +38,10 @@ impl WorldManager {
     pub fn tick(
         &mut self, 
         engine: &Engine,
-        asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
         delta_time: f32
     ) {
         if !self.m_is_world_loaded {
-            self.load_world(asset_manager, config_manager).unwrap();
+            self.load_world(engine.asset_manager()).unwrap();
         }
         if let Some(scene) = self.m_current_scene.as_ref() {
             let mut scene = scene.borrow_mut();
@@ -57,10 +55,9 @@ impl WorldManager {
     fn load_world(
         &mut self,
         asset_manager: &AssetManager,
-        config_manager: &ConfigManager,
     ) -> Result<()> {
         info!("Loading world: {}", self.m_current_world_url);
-        let world_res: WorldRes = asset_manager.load_asset(config_manager, &self.m_current_world_url)?;
+        let world_res: WorldRes = asset_manager.load_asset(&self.m_current_world_url)?;
         self.m_current_world_resource = world_res;
         self.m_is_world_loaded = true;
         info!("World load succeed!");

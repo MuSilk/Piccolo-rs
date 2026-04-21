@@ -770,7 +770,6 @@ impl VoxelWorld {
         mesh_component.post_load_resource(
             object_id,
             engine.asset_manager(),
-            engine.config_manager(),
             &self.mesh_res,
         );
         mesh_component.m_raw_meshes.resize(1, GameObjectPartDesc::default());
@@ -802,7 +801,7 @@ impl VoxelWorld {
     pub fn new_box(engine: &Engine, scene: &mut Scene) -> Box<Self> {
         let mesh_res = engine
             .asset_manager()
-            .load_asset::<BlockMeshJson>(engine.config_manager(), "asset/minecraft/block.json")
+            .load_asset::<BlockMeshJson>("asset/minecraft/block.json")
             .expect("asset/minecraft/block.json")
             .m_mesh_res;
         let mut world = Self {

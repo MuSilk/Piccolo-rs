@@ -99,7 +99,6 @@ impl Engine {
         self.m_runtime_context.render_system().borrow().tick(
             &self.m_runtime_context.ui_runtime().borrow(),
             &self.m_runtime_context.asset_manager(),
-            &self.m_runtime_context.config_manager(),
             delta_time
         )?;
         Ok(())
@@ -120,8 +119,6 @@ impl Engine {
 
         self.m_runtime_context.world_manager().borrow_mut().tick(
             &self,
-            &self.m_runtime_context.asset_manager(),
-            &self.m_runtime_context.config_manager(),
             delta_time
         );
         self.m_runtime_context.input_system().borrow_mut().tick(
