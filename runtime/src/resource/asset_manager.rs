@@ -7,30 +7,22 @@ use serde::de::DeserializeOwned;
 
 use crate::resource::config_manager::ConfigManager;
 
-
 pub struct AssetManager {
     m_root_folder: PathBuf,
 }
 
 impl AssetManager {
-
     pub fn new(config_manager: &ConfigManager) -> Self {
         AssetManager {
             m_root_folder: config_manager.get_root_folder().to_path_buf(),
         }
     }
 
-    pub fn get_full_path(
-        &self, 
-        relative_path: &str,
-    ) -> PathBuf {
+    pub fn get_full_path(&self, relative_path: &str) -> PathBuf {
         self.m_root_folder.join(relative_path)
     }
 
-    pub fn load_asset<AssetType : DeserializeOwned>(
-        &self, 
-        asset_url: &str
-    ) -> Result<AssetType> {
+    pub fn load_asset<AssetType: DeserializeOwned>(&self, asset_url: &str) -> Result<AssetType> {
         let asset_path = self.get_full_path(asset_url);
         let reader = std::fs::File::open(asset_path).map(std::io::BufReader::new);
         if let Err(e) = reader {
@@ -45,9 +37,10 @@ impl AssetManager {
         Ok(asset_json.unwrap())
     }
 
-    pub fn save_asset<AssetType : serde::Serialize>(
-        &self, asset_url: &str, 
-        asset: AssetType
+    pub fn save_asset<AssetType: serde::Serialize>(
+        &self,
+        asset_url: &str,
+        asset: AssetType,
     ) -> Result<()> {
         let asset_path = self.get_full_path(asset_url);
         let writer = std::fs::File::create(asset_path).map(std::io::BufWriter::new);

@@ -1,119 +1,133 @@
-use std::{any::Any};
+use std::any::Any;
 
-use vulkanalia::{prelude::v1_0::*};
+use vulkanalia::prelude::v1_0::*;
 
-use crate::function::render::render_type::{RHIAccessFlags, RHIAttachmentDescriptionFlags, RHIAttachmentLoadOp, RHIAttachmentStoreOp, RHIBlendFactor, RHIBlendOp, RHIColorComponentFlags, RHICompareOp, RHICullModeFlags, RHIDependencyFlags, RHIDescriptorSetLayoutCreateFlags, RHIDescriptorType, RHIDeviceSize, RHIDynamicState, RHIFormat, RHIFramebufferCreateFlags, RHIFrontFace, RHIImageLayout, RHILogicOp, RHIPipelineBindPoint, RHIPipelineColorBlendStateCreateFlags, RHIPipelineCreateFlags, RHIPipelineDepthStencilStateCreateFlags, RHIPipelineDynamicStateCreateFlags, RHIPipelineInputAssemblyStateCreateFlags, RHIPipelineLayoutCreateFlags, RHIPipelineMultisampleStateCreateFlags, RHIPipelineRasterizationStateCreateFlags, RHIPipelineShaderStageCreateFlags, RHIPipelineStageFlags, RHIPipelineVertexInputStateCreateFlags, RHIPipelineViewportStateCreateFlags, RHIPolygonMode, RHIPrimitiveTopology, RHIRenderPassCreateFlags, RHISampleCountFlags, RHISampleMask, RHIShaderStageFlags, RHIStencilOp, RHISubpassDescriptionFlags, RHIVertexInputRate};
+use crate::function::render::render_type::{
+    RHIAccessFlags, RHIAttachmentDescriptionFlags, RHIAttachmentLoadOp, RHIAttachmentStoreOp,
+    RHIBlendFactor, RHIBlendOp, RHIColorComponentFlags, RHICompareOp, RHICullModeFlags,
+    RHIDependencyFlags, RHIDescriptorSetLayoutCreateFlags, RHIDescriptorType, RHIDeviceSize,
+    RHIDynamicState, RHIFormat, RHIFramebufferCreateFlags, RHIFrontFace, RHIImageLayout,
+    RHILogicOp, RHIPipelineBindPoint, RHIPipelineColorBlendStateCreateFlags,
+    RHIPipelineCreateFlags, RHIPipelineDepthStencilStateCreateFlags,
+    RHIPipelineDynamicStateCreateFlags, RHIPipelineInputAssemblyStateCreateFlags,
+    RHIPipelineLayoutCreateFlags, RHIPipelineMultisampleStateCreateFlags,
+    RHIPipelineRasterizationStateCreateFlags, RHIPipelineShaderStageCreateFlags,
+    RHIPipelineStageFlags, RHIPipelineVertexInputStateCreateFlags,
+    RHIPipelineViewportStateCreateFlags, RHIPolygonMode, RHIPrimitiveTopology,
+    RHIRenderPassCreateFlags, RHISampleCountFlags, RHISampleMask, RHIShaderStageFlags,
+    RHIStencilOp, RHISubpassDescriptionFlags, RHIVertexInputRate,
+};
 
-pub trait RHIBuffer: Any { }
+pub trait RHIBuffer: Any {}
 impl dyn RHIBuffer {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIBufferView: Any { }
+pub trait RHIBufferView: Any {}
 impl dyn RHIBufferView {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHICommandBuffer: Any { }
+pub trait RHICommandBuffer: Any {}
 impl dyn RHICommandBuffer {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHICommandPool: Any { }
+pub trait RHICommandPool: Any {}
 impl dyn RHICommandPool {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIDescriptorPool: Any { }
+pub trait RHIDescriptorPool: Any {}
 impl dyn RHIDescriptorPool {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIDescriptorSet: Any { }
+pub trait RHIDescriptorSet: Any {}
 impl dyn RHIDescriptorSet {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
-pub trait  RHIDescriptorSetLayout: Any { }
+pub trait RHIDescriptorSetLayout: Any {}
 impl dyn RHIDescriptorSetLayout {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIDevice { }
-pub trait  RHIDeviceMemory: Any { }
+pub trait RHIDevice {}
+pub trait RHIDeviceMemory: Any {}
 impl dyn RHIDeviceMemory {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIEvent { }
-pub trait  RHIFence { }
-pub trait  RHIFramebuffer: Any { }
+pub trait RHIEvent {}
+pub trait RHIFence {}
+pub trait RHIFramebuffer: Any {}
 impl dyn RHIFramebuffer {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIImage: Any { }
+pub trait RHIImage: Any {}
 impl dyn RHIImage {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIImageView:Any { }
+pub trait RHIImageView: Any {}
 impl dyn RHIImageView {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIInstance { }
-pub trait  RHIQueue: Any { }
+pub trait RHIInstance {}
+pub trait RHIQueue: Any {}
 impl dyn RHIQueue {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIPhysicalDevice { }
-pub trait  RHIPipeline: Any { }
+pub trait RHIPhysicalDevice {}
+pub trait RHIPipeline: Any {}
 impl dyn RHIPipeline {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIPipelineCache { }
-pub trait  RHIPipelineLayout: Any { }
+pub trait RHIPipelineCache {}
+pub trait RHIPipelineLayout: Any {}
 impl dyn RHIPipelineLayout {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIRenderPass: Any { }
+pub trait RHIRenderPass: Any {}
 impl dyn RHIRenderPass {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHISampler: Any { }
+pub trait RHISampler: Any {}
 impl dyn RHISampler {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHISemaphore: Any { }
+pub trait RHISemaphore: Any {}
 impl dyn RHISemaphore {
     pub fn as_any(&self) -> &dyn Any {
         self
     }
 }
-pub trait  RHIShader: Any { }
+pub trait RHIShader: Any {}
 impl dyn RHIShader {
     pub fn as_any(&self) -> &dyn Any {
         self
@@ -139,19 +153,19 @@ pub struct RHIAttachmentReference {
     pub layout: RHIImageLayout,
 }
 
-pub struct RHIDescriptorBufferInfo<'a>{
+pub struct RHIDescriptorBufferInfo<'a> {
     pub buffer: &'a Box<dyn RHIBuffer>,
     pub offset: RHIDeviceSize,
     pub range: RHIDeviceSize,
 }
 
-pub struct RHIDescriptorImageInfo<'a>{
+pub struct RHIDescriptorImageInfo<'a> {
     pub sampler: &'a Box<dyn RHISampler>,
     pub image_view: &'a Box<dyn RHIImageView>,
     pub image_layout: RHIImageLayout,
 }
 
-pub struct RHIDescriptorSetLayoutBinding<'a>{
+pub struct RHIDescriptorSetLayoutBinding<'a> {
     pub binding: u32,
     pub descriptor_type: RHIDescriptorType,
     pub descriptor_count: u32,
@@ -159,17 +173,17 @@ pub struct RHIDescriptorSetLayoutBinding<'a>{
     pub p_immutable_samplers: Option<&'a Box<dyn RHISampler>>,
 }
 
-pub struct RHIDescriptorSetAllocateInfo<'a>{
+pub struct RHIDescriptorSetAllocateInfo<'a> {
     pub descriptor_pool: &'a Box<dyn RHIDescriptorPool>,
     pub set_layouts: &'a [&'a Box<dyn RHIDescriptorSetLayout>],
 }
 
-pub struct RHIDescriptorSetLayoutCreateInfo<'a>{
+pub struct RHIDescriptorSetLayoutCreateInfo<'a> {
     pub flags: RHIDescriptorSetLayoutCreateFlags,
     pub bindings: &'a [RHIDescriptorSetLayoutBinding<'a>],
 }
 
-pub struct RHIFramebufferCreateInfo<'a>{
+pub struct RHIFramebufferCreateInfo<'a> {
     pub flags: RHIFramebufferCreateFlags,
     pub render_pass: &'a Box<dyn RHIRenderPass>,
     pub attachments: &'a [&'a Box<dyn RHIImageView>],
@@ -240,7 +254,7 @@ pub struct RHIPipelineInputAssemblyStateCreateInfo {
     pub primitive_restart_enable: bool,
 }
 
-pub struct RHIPipelineLayoutCreateInfo<'a>{
+pub struct RHIPipelineLayoutCreateInfo<'a> {
     pub flags: RHIPipelineLayoutCreateFlags,
     pub set_layouts: &'a [&'a Box<dyn RHIDescriptorSetLayout>],
     pub push_constant_ranges: &'a [RHIPushConstantRange],
@@ -282,8 +296,8 @@ pub struct RHIPipelineRasterizationStateCreateInfo {
     pub line_width: f32,
 }
 
-pub struct RHIPipelineShaderStageCreateInfo<'a>{
-    pub flags : RHIPipelineShaderStageCreateFlags,
+pub struct RHIPipelineShaderStageCreateInfo<'a> {
+    pub flags: RHIPipelineShaderStageCreateFlags,
     pub stage: RHIShaderStageFlags,
     pub module: &'a Box<dyn RHIShader>,
     pub name: &'a str,
@@ -296,7 +310,7 @@ pub struct RHIPushConstantRange {
     pub size: u32,
 }
 
-pub struct RHIRenderPassCreateInfo<'a>{
+pub struct RHIRenderPassCreateInfo<'a> {
     pub flags: RHIRenderPassCreateFlags,
     pub attachments: &'a [RHIAttachmentDescription],
     pub subpasses: &'a [RHISubpassDescription<'a>],
@@ -345,7 +359,7 @@ pub struct RHISubpassDescription<'a> {
     pub preserve_attachments: &'a [u32],
 }
 
-pub struct RHIWriteDescriptorSet<'a>{
+pub struct RHIWriteDescriptorSet<'a> {
     pub dst_set: &'a Box<dyn RHIDescriptorSet>,
     pub dst_binding: u32,
     pub dst_array_element: u32,
@@ -382,8 +396,8 @@ pub struct RHIExtent2D {
 
 #[derive(Default)]
 pub struct RHIOffset2D {
-    pub x:i32,
-    pub y:i32,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[derive(Default)]
@@ -392,21 +406,21 @@ pub struct RHIRect2D {
     pub extent: RHIExtent2D,
 }
 
-pub struct RHIRenderPassBeginInfo<'a>{
+pub struct RHIRenderPassBeginInfo<'a> {
     pub render_pass: &'a dyn RHIRenderPass,
     pub framebuffer: &'a dyn RHIFramebuffer,
     pub render_area: RHIRect2D,
     pub clear_values: &'a [RHIClearValue],
 }
 
-pub struct RHIVertexInputAttributeDescription{
+pub struct RHIVertexInputAttributeDescription {
     pub location: u32,
     pub binding: u32,
     pub format: RHIFormat,
     pub offset: u32,
 }
 
-pub struct RHIVertexInputBindingDescription{
+pub struct RHIVertexInputBindingDescription {
     pub binding: u32,
     pub stride: u32,
     pub input_rate: RHIVertexInputRate,
@@ -434,13 +448,13 @@ impl QueueFamilyIndices {
     }
 }
 
-pub struct SwapChainSupportDetails { 
+pub struct SwapChainSupportDetails {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>,
 }
 
-pub struct RHISwapChainDesc<'a>{
+pub struct RHISwapChainDesc<'a> {
     pub extent: vk::Extent2D,
     pub image_format: vk::Format,
     pub viewport: &'a vk::Viewport,
@@ -448,7 +462,7 @@ pub struct RHISwapChainDesc<'a>{
     pub image_views: &'a [vk::ImageView],
 }
 
-pub struct RHIDepthImageDesc<'a>{
+pub struct RHIDepthImageDesc<'a> {
     pub image: &'a vk::Image,
     pub image_view: &'a vk::ImageView,
     pub format: vk::Format,

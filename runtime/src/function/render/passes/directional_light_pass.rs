@@ -1,23 +1,41 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc};
 
-use crate::{core::math::matrix4::Matrix4x4, function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshDirectionalLightShadowPerdrawcallStorageBufferObject, MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject, MeshDirectionalLightShadowPerframeStorageBufferObject, S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}}, shader::generated::shader::{MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT}};
+use crate::{
+    core::math::matrix4::Matrix4x4,
+    function::render::{
+        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI},
+        render_common::{
+            MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT,
+            MeshDirectionalLightShadowPerdrawcallStorageBufferObject,
+            MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject,
+            MeshDirectionalLightShadowPerframeStorageBufferObject,
+            S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
+        },
+        render_helper::round_up,
+        render_mesh::MeshVertex,
+        render_pass::{RenderPass, RenderPipelineBase},
+        render_resource::{GlobalRenderResource, RenderResource},
+    },
+    shader::generated::shader::{
+        MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT,
+    },
+};
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*};
+use vulkanalia::prelude::v1_0::*;
 
 pub struct DirectionalLightShadowPassInitInfo<'a> {
     pub rhi: &'a Rc<RefCell<VulkanRHI>>,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
-
 #[derive(Default)]
-pub struct DirectionalLightShadowPass{
+pub struct DirectionalLightShadowPass {
     pub m_render_pass: RenderPass,
     m_per_mesh_layout: vk::DescriptorSetLayout,
-    m_mesh_directional_light_shadow_perframe_storage_buffer_object 
-        :MeshDirectionalLightShadowPerframeStorageBufferObject,
+    m_mesh_directional_light_shadow_perframe_storage_buffer_object:
+        MeshDirectionalLightShadowPerframeStorageBufferObject,
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC)]
@@ -44,8 +62,9 @@ impl DirectionalLightShadowPass {
     }
 
     pub fn prepare_pass_data(&mut self, render_resource: &RenderResource) {
-        self.m_mesh_directional_light_shadow_perframe_storage_buffer_object = 
-            render_resource.m_mesh_directional_light_shadow_perframe_storage_buffer_object.clone();
+        self.m_mesh_directional_light_shadow_perframe_storage_buffer_object = render_resource
+            .m_mesh_directional_light_shadow_perframe_storage_buffer_object
+            .clone();
     }
 
     pub fn draw(&self, rhi: &VulkanRHI) {
@@ -59,7 +78,10 @@ impl DirectionalLightShadowPass {
 
 impl DirectionalLightShadowPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_framebuffer.attachments.resize_with(2, Default::default);
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .resize_with(2, Default::default);
 
         self.m_render_pass.m_framebuffer.attachments[0].format = vk::Format::R32_SFLOAT;
         (
@@ -73,14 +95,17 @@ impl DirectionalLightShadowPass {
             vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::ImageCreateFlags::empty(),
-            1, 1
+            1,
+            1,
         )?;
 
         self.m_render_pass.m_framebuffer.attachments[0].view = rhi.create_image_view(
             self.m_render_pass.m_framebuffer.attachments[0].image,
             self.m_render_pass.m_framebuffer.attachments[0].format,
             vk::ImageAspectFlags::COLOR,
-            vk::ImageViewType::_2D, 1, 1
+            vk::ImageViewType::_2D,
+            1,
+            1,
         )?;
 
         self.m_render_pass.m_framebuffer.attachments[1].format = rhi.get_depth_image_info().format;
@@ -92,19 +117,22 @@ impl DirectionalLightShadowPass {
             S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
             self.m_render_pass.m_framebuffer.attachments[1].format,
             vk::ImageTiling::OPTIMAL,
-            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT,
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
+                | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::ImageCreateFlags::empty(),
-            1, 1
+            1,
+            1,
         )?;
 
         self.m_render_pass.m_framebuffer.attachments[1].view = rhi.create_image_view(
             self.m_render_pass.m_framebuffer.attachments[1].image,
             self.m_render_pass.m_framebuffer.attachments[1].format,
             vk::ImageAspectFlags::DEPTH,
-            vk::ImageViewType::_2D, 1, 1
+            vk::ImageViewType::_2D,
+            1,
+            1,
         )?;
-
 
         Ok(())
     }
@@ -132,33 +160,27 @@ impl DirectionalLightShadowPass {
                 .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                 .build(),
         ];
-        let color_attachment_refs = [
-            vk::AttachmentReference::builder()
-                .attachment(0)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build(),
-        ];
+        let color_attachment_refs = [vk::AttachmentReference::builder()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
         let depth_attachment_ref = vk::AttachmentReference::builder()
             .attachment(1)
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .build();
-        let subpasses = [
-            vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_refs)
-                .depth_stencil_attachment(&depth_attachment_ref)
-                .build(),
-        ];
-        let dependencies = [
-            vk::SubpassDependency::builder()
-                .src_subpass(0)
-                .dst_subpass(vk::SUBPASS_EXTERNAL)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-                .dst_stage_mask(vk::PipelineStageFlags::BOTTOM_OF_PIPE)
-                .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::empty())
-                .build(),
-        ];
+        let subpasses = [vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .depth_stencil_attachment(&depth_attachment_ref)
+            .build()];
+        let dependencies = [vk::SubpassDependency::builder()
+            .src_subpass(0)
+            .dst_subpass(vk::SUBPASS_EXTERNAL)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_stage_mask(vk::PipelineStageFlags::BOTTOM_OF_PIPE)
+            .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+            .dst_access_mask(vk::AccessFlags::empty())
+            .build()];
 
         let create_info = vk::RenderPassCreateInfo::builder()
             .attachments(&attachements)
@@ -171,7 +193,6 @@ impl DirectionalLightShadowPass {
     }
 
     fn setup_framebuffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
-
         let attachments = [
             self.m_render_pass.m_framebuffer.attachments[0].view,
             self.m_render_pass.m_framebuffer.attachments[1].view,
@@ -185,13 +206,16 @@ impl DirectionalLightShadowPass {
             .layers(1)
             .build();
 
-        self.m_render_pass.m_framebuffer.framebuffer = rhi.create_framebuffer(&framebuffer_create_info)?;
+        self.m_render_pass.m_framebuffer.framebuffer =
+            rhi.create_framebuffer(&framebuffer_create_info)?;
 
         Ok(())
     }
 
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_descriptor_infos.resize_with(1, Default::default);
+        self.m_render_pass
+            .m_descriptor_infos
+            .resize_with(1, Default::default);
         let layout_bindings = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
@@ -213,17 +237,19 @@ impl DirectionalLightShadowPass {
                 .build(),
         ];
 
-        let layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&layout_bindings);
+        let layout_create_info =
+            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&layout_bindings);
 
-        self.m_render_pass.m_descriptor_infos[0].layout = rhi.create_descriptor_set_layout(&layout_create_info)?;
+        self.m_render_pass.m_descriptor_infos[0].layout =
+            rhi.create_descriptor_set_layout(&layout_create_info)?;
 
         Ok(())
     }
 
     fn setup_pipelines(&mut self, rhi: &VulkanRHI) -> Result<()> {
-
-        self.m_render_pass.m_render_pipeline.resize_with(1, Default::default);
+        self.m_render_pass
+            .m_render_pipeline
+            .resize_with(1, Default::default);
 
         let vert_shader_module = rhi.create_shader_module(&MESH_DIRECTIONAL_LIGHT_SHADOW_VERT)?;
         let frag_shader_module = rhi.create_shader_module(&MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG)?;
@@ -258,9 +284,9 @@ impl DirectionalLightShadowPass {
 
         let scissors = [vk::Rect2D::builder()
             .offset(vk::Offset2D { x: 0, y: 0 })
-            .extent(vk::Extent2D { 
-                width: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION, 
-                height: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION 
+            .extent(vk::Extent2D {
+                width: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
+                height: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
             })];
 
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
@@ -280,18 +306,17 @@ impl DirectionalLightShadowPass {
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::_1);
 
-        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS)
-            .stencil_test_enable(false);
+        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+            vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS)
+                .stencil_test_enable(false);
 
-        let attachments = [
-            vk::PipelineColorBlendAttachmentState::builder()
-                .color_write_mask(vk::ColorComponentFlags::all())
-                .blend_enable(false)
-                .build(),
-        ];
+        let attachments = [vk::PipelineColorBlendAttachmentState::builder()
+            .color_write_mask(vk::ColorComponentFlags::all())
+            .blend_enable(false)
+            .build()];
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
             .logic_op(vk::LogicOp::COPY)
@@ -300,10 +325,9 @@ impl DirectionalLightShadowPass {
 
         let set_layouts = &[
             self.m_render_pass.m_descriptor_infos[0].layout,
-            self.m_per_mesh_layout, 
+            self.m_per_mesh_layout,
         ];
-        let layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(set_layouts);
+        let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
         let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -327,7 +351,7 @@ impl DirectionalLightShadowPass {
         rhi.destroy_shader_module(vert_shader_module);
         rhi.destroy_shader_module(frag_shader_module);
 
-        self.m_render_pass.m_render_pipeline[0] = RenderPipelineBase{
+        self.m_render_pass.m_render_pipeline[0] = RenderPipelineBase {
             layout: pipeline_layout,
             pipeline,
         };
@@ -339,33 +363,54 @@ impl DirectionalLightShadowPass {
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
             .set_layouts(&set_layouts);
-        
-        self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+        self.m_render_pass.m_descriptor_infos[0].descriptor_set =
+            rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let perframe_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u64)
-                .build()
-        ];
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
 
-        let perdrawcall_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>() as u64)
-                .build()
-        ];
-        
-        let perdrawcall_vertex_blending_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject>() as u64)
-            ];
+        let perframe_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(
+                std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u64,
+            )
+            .build()];
+
+        let perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(
+                std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>()
+                    as u64,
+            )
+            .build()];
+
+        let perdrawcall_vertex_blending_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(std::mem::size_of::<
+                MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject,
+            >() as u64)];
 
         let write_info = [
             vk::WriteDescriptorSet::builder()
@@ -397,8 +442,8 @@ impl DirectionalLightShadowPass {
         let command_buffer = rhi.get_current_command_buffer();
 
         let mut clear_values: [vk::ClearValue; 2] = [Default::default(); 2];
-        clear_values[0].color.float32 = [1.0,0.0,0.0,0.0];
-        clear_values[1].depth_stencil = vk::ClearDepthStencilValue{
+        clear_values[0].color.float32 = [1.0, 0.0, 0.0, 0.0];
+        clear_values[1].depth_stencil = vk::ClearDepthStencilValue {
             depth: 1.0,
             stencil: 0,
         };
@@ -406,36 +451,59 @@ impl DirectionalLightShadowPass {
         let begin_info = vk::RenderPassBeginInfo::builder()
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
             .framebuffer(self.m_render_pass.m_framebuffer.framebuffer)
-            .render_area(vk::Rect2D::builder()
-                .offset(vk::Offset2D{x: 0, y: 0})
-                .extent(vk::Extent2D{
-                    width: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION, 
-                    height: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION
-                })
-                .build())
+            .render_area(
+                vk::Rect2D::builder()
+                    .offset(vk::Offset2D { x: 0, y: 0 })
+                    .extent(vk::Extent2D {
+                        width: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
+                        height: S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
+                    })
+                    .build(),
+            )
             .clear_values(&clear_values);
 
         rhi.cmd_begin_render_pass(command_buffer, &begin_info, vk::SubpassContents::INLINE);
-        rhi.push_event(command_buffer, "Directional Light Shadow\0", [1.0;4]);
+        rhi.push_event(command_buffer, "Directional Light Shadow\0", [1.0; 4]);
 
         let pipeline = &self.m_render_pass.m_render_pipeline[0];
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
-
-        let perframe_dynamic_offset = round_up(
-            render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
-            render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.pipeline,
         );
 
-        render_resource.borrow_mut()
-            ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                perframe_dynamic_offset + std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u32;
-        unsafe{
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._min_storage_buffer_offset_alignment,
+        );
+
+        render_resource
+            .borrow_mut()
+            ._storage_buffer
+            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = perframe_dynamic_offset
+            + std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u32;
+        unsafe {
             std::ptr::copy_nonoverlapping(
-                &self.m_mesh_directional_light_shadow_perframe_storage_buffer_object as *const _ as *const c_void,
-                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
-                std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>()
+                &self.m_mesh_directional_light_shadow_perframe_storage_buffer_object as *const _
+                    as *const c_void,
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer_pointer
+                    .add(perframe_dynamic_offset as usize),
+                std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>(),
             );
         }
 
@@ -444,82 +512,115 @@ impl DirectionalLightShadowPass {
         }
 
         let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
-        let visiable_nodes = m_visible_nodes.p_directional_light_visible_mesh_nodes.upgrade().unwrap();
+        let visiable_nodes = m_visible_nodes
+            .p_directional_light_visible_mesh_nodes
+            .upgrade()
+            .unwrap();
         let visiable_nodes = visiable_nodes.borrow();
-        
-        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_,Vec<_>>> = HashMap::new();
+
+        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 
         for node in visiable_nodes.iter() {
-            let mesh_instanced = 
-                main_camera_mesh_drawcall_batch.entry(node.ref_material.as_ptr()).or_default();
+            let mesh_instanced = main_camera_mesh_drawcall_batch
+                .entry(node.ref_material.as_ptr())
+                .or_default();
             let mesh_nodes = mesh_instanced.entry(node.ref_mesh.as_ptr()).or_default();
-            
+
             mesh_nodes.push(MeshNode {
-                model_matrix : &node.model_matrix
+                model_matrix: &node.model_matrix,
             });
         }
 
         for (_material, mesh_instanced) in &main_camera_mesh_drawcall_batch {
-
             for (mesh, mesh_nodes) in mesh_instanced {
-                let ref_mesh = unsafe{&**mesh};
+                let ref_mesh = unsafe { &**mesh };
 
                 rhi.cmd_bind_descriptor_sets(
-                    command_buffer, 
-                    vk::PipelineBindPoint::GRAPHICS, 
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
                     self.m_render_pass.m_render_pipeline[0].layout,
-                    1, 
-                    &[ref_mesh.mesh_vertex_blending_descriptor_set], 
+                    1,
+                    &[ref_mesh.mesh_vertex_blending_descriptor_set],
                     &[],
                 );
 
-                let buffers = [
-                    ref_mesh.mesh_vertex_position_buffer,
-                ];
-            
+                let buffers = [ref_mesh.mesh_vertex_position_buffer];
+
                 rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0, 0, 0]);
-                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
+                rhi.cmd_bind_index_buffer(
+                    command_buffer,
+                    ref_mesh.mesh_index_buffer,
+                    0,
+                    ref_mesh.mesh_index_type,
+                );
 
                 let instance_count = mesh_nodes.len();
-                let max_drawcall_instance =  MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
+                let max_drawcall_instance = MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
                 let drawcall_count = instance_count.div_ceil(max_drawcall_instance);
 
-                for index in 0..drawcall_count { 
-                    let current_count = max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
+                for index in 0..drawcall_count {
+                    let current_count =
+                        max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
 
-                    let mut object = MeshDirectionalLightShadowPerdrawcallStorageBufferObject::default();
+                    let mut object =
+                        MeshDirectionalLightShadowPerdrawcallStorageBufferObject::default();
 
-                    for i in 0..current_count { 
-                        object.mesh_instances[i].model_matrix = mesh_nodes[index * max_drawcall_instance + i].model_matrix.clone();
+                    for i in 0..current_count {
+                        object.mesh_instances[i].model_matrix = mesh_nodes
+                            [index * max_drawcall_instance + i]
+                            .model_matrix
+                            .clone();
                     }
 
                     let perdrawcall_dynamic_offset = round_up(
-                        render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-                        render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._min_storage_buffer_offset_alignment,
                     );
-                    render_resource.borrow_mut()
-                        ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                            perdrawcall_dynamic_offset + std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>() as u32;
+                    render_resource
+                        .borrow_mut()
+                        ._storage_buffer
+                        ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+                        perdrawcall_dynamic_offset
+                            + std::mem::size_of::<
+                                MeshDirectionalLightShadowPerdrawcallStorageBufferObject,
+                            >() as u32;
 
-                    unsafe{
+                    unsafe {
                         std::ptr::copy_nonoverlapping(
                             &object as *const _ as *const c_void,
-                            render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
-                            std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>()
+                            render_resource
+                                .borrow()
+                                ._storage_buffer
+                                ._global_upload_ringbuffer_pointer
+                                .add(perdrawcall_dynamic_offset as usize),
+                            std::mem::size_of::<
+                                MeshDirectionalLightShadowPerdrawcallStorageBufferObject,
+                            >(),
                         );
                     }
 
                     rhi.cmd_bind_descriptor_sets(
-                        command_buffer, 
-                        vk::PipelineBindPoint::GRAPHICS, 
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
                         self.m_render_pass.m_render_pipeline[0].layout,
                         0,
-                        &[
-                            self.m_render_pass.m_descriptor_infos[0].descriptor_set,
-                        ],
+                        &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
                         &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
                     );
-                    rhi.cmd_draw_indexed(command_buffer, ref_mesh.mesh_index_count, current_count as u32, 0, 0, 0);
+                    rhi.cmd_draw_indexed(
+                        command_buffer,
+                        ref_mesh.mesh_index_count,
+                        current_count as u32,
+                        0,
+                        0,
+                        0,
+                    );
                 }
             }
         }

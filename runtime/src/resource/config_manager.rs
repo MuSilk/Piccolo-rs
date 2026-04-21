@@ -1,5 +1,8 @@
-use std::{fs::File, io::{BufRead, BufReader}, path::{Path, PathBuf}};
-
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::{Path, PathBuf},
+};
 
 #[derive(Default)]
 pub struct ConfigManager {
@@ -26,7 +29,7 @@ impl ConfigManager {
             match seperate_pos {
                 Some(pos) => {
                     let key = &line[0..pos];
-                    let value = &line[pos+1..line.len()];
+                    let value = &line[pos + 1..line.len()];
                     match key {
                         "BinaryRootFolder" => {
                             self.m_root_folder = config_file_path.parent().unwrap().join(value);

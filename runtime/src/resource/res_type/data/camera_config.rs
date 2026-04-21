@@ -4,7 +4,7 @@ use crate::core::math::{vector2::Vector2, vector3::Vector3};
 pub struct CameraPose {
     pub position: Vector3,
     pub target: Vector3,
-    pub up: Vector3
+    pub up: Vector3,
 }
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]

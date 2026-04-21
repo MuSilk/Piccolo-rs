@@ -15,6 +15,4 @@ pub struct MeshComponentRes {
 }
 
 #[typetag::serde]
-impl Resource for MeshComponentRes {
-
-}
+impl Resource for MeshComponentRes {}

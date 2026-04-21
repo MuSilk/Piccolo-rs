@@ -9,16 +9,12 @@ use runtime::function::input::game_command_system::GameCommand;
 use runtime::{
     app::App,
     core::math::{quaternion::Quaternion, transform::Transform, vector3::Vector3},
-    function::{
-        framework::{
-            component::{
-                camera_component::CameraComponent,
-                component::{ComponentTrait},
-                mesh::mesh_component::MeshComponent,
-                transform_component::TransformComponent,
-            },
-            scene::scene::SceneTrait,
+    function::framework::{
+        component::{
+            camera_component::CameraComponent, component::ComponentTrait,
+            mesh::mesh_component::MeshComponent, transform_component::TransformComponent,
         },
+        scene::scene::SceneTrait,
     },
 };
 
@@ -41,7 +37,11 @@ impl GridPos {
     }
 
     fn to_world(self) -> Vector3 {
-        Vector3::new(self.x as f32 * CELL_SIZE, self.y as f32 * CELL_SIZE, SNAKE_Z)
+        Vector3::new(
+            self.x as f32 * CELL_SIZE,
+            self.y as f32 * CELL_SIZE,
+            SNAKE_Z,
+        )
     }
 }
 
@@ -123,7 +123,10 @@ impl Scene {
     fn new() -> Self {
         let mut scene = EngineScene::new();
         scene.set_url("greedy_snake");
-        Self { scene, demo_click_count: 0 }
+        Self {
+            scene,
+            demo_click_count: 0,
+        }
     }
 }
 
@@ -149,9 +152,11 @@ impl SceneTrait for Scene {
         let render_system = engine.render_system();
         let render_system = render_system.borrow();
 
-        self.scene.query_mut::<CameraComponent>().for_each(|mut camera| {
-            camera.tick_free_camera(&input_system, &render_system, delta_time);
-        });
+        self.scene
+            .query_mut::<CameraComponent>()
+            .for_each(|mut camera| {
+                camera.tick_free_camera(&input_system, &render_system, delta_time);
+            });
         self.scene.tick_transform_components(engine);
         self.scene.tick_mesh_components(&render_system);
     }
@@ -183,8 +188,7 @@ fn setup(scene: &mut Scene, engine: &Engine) {
 }
 
 fn process_input(scene: &mut Scene, engine: &Engine) {
-    let input_system = 
-        engine.input_system().borrow();
+    let input_system = engine.input_system().borrow();
     let command = input_system.get_game_command();
 
     let wanted = if command.contains(GameCommand::forward) {
@@ -236,12 +240,7 @@ fn update(scene: &mut Scene, engine: &Engine, delta_time: f32) {
 fn render_ui(scene: &mut Scene, engine: &Engine) {
     let mut ui_runtime = engine.ui_runtime().borrow_mut();
     let viewport = ui_runtime.get_viewport();
-    let resp = ui_runtime.button(
-        "demo_btn", 
-        "CLICK", 
-        [40.0, 40.0], 
-        [180.0, 48.0]
-    );
+    let resp = ui_runtime.button("demo_btn", "CLICK", [40.0, 40.0], [180.0, 48.0]);
     if resp.clicked {
         scene.demo_click_count = scene.demo_click_count.saturating_add(1);
     }
@@ -253,21 +252,11 @@ fn render_ui(scene: &mut Scene, engine: &Engine) {
         [0.0, 0.0, viewport[0], viewport[1]],
     );
 
-    let resp = ui_runtime.button(
-        "down_btn", 
-        "down_btn", 
-        [40.0, 150.0], 
-        [180.0, 48.0]
-    );
+    let resp = ui_runtime.button("down_btn", "down_btn", [40.0, 150.0], [180.0, 48.0]);
     if resp.clicked {
         println!("down_btn clicked");
     }
-    let resp = ui_runtime.button(
-        "up_btn", 
-        "up_btn", 
-        [60.0, 150.0], 
-        [180.0, 48.0]
-    );
+    let resp = ui_runtime.button("up_btn", "up_btn", [60.0, 150.0], [180.0, 48.0]);
     if resp.clicked {
         println!("up_btn clicked");
     }
@@ -340,7 +329,11 @@ fn sync_entity_transforms(scene: &mut Scene) {
         head_transform.set_position(cells[0].to_world());
     }
 
-    if let Some((_, mut food_transform)) = scene.scene.query_pair_mut::<Food, TransformComponent>().next() {
+    if let Some((_, mut food_transform)) = scene
+        .scene
+        .query_pair_mut::<Food, TransformComponent>()
+        .next()
+    {
         food_transform.set_position(food_cell.to_world());
     }
 
@@ -384,11 +377,22 @@ fn spawn_camera(scene: &mut EngineScene) {
     let object = scene.spawn();
     let mut camera = Box::new(CameraComponent::new_free_camera());
     camera.look_at(
-        Vector3::new((GRID_SIZE as f32 * CELL_SIZE) / 2.0, -GRID_SIZE as f32 * CELL_SIZE * 0.5, 10.0),
-        &Vector3::new((GRID_SIZE as f32 * CELL_SIZE) / 2.0, GRID_SIZE as f32 * CELL_SIZE * 0.5, 0.0),
+        Vector3::new(
+            (GRID_SIZE as f32 * CELL_SIZE) / 2.0,
+            -GRID_SIZE as f32 * CELL_SIZE * 0.5,
+            10.0,
+        ),
+        &Vector3::new(
+            (GRID_SIZE as f32 * CELL_SIZE) / 2.0,
+            GRID_SIZE as f32 * CELL_SIZE * 0.5,
+            0.0,
+        ),
         &Vector3::UNIT_Z,
     );
-    scene.create_object(object, vec![RefCell::new(camera as Box<dyn ComponentTrait>)]);
+    scene.create_object(
+        object,
+        vec![RefCell::new(camera as Box<dyn ComponentTrait>)],
+    );
 }
 
 fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
@@ -396,9 +400,7 @@ fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
     let mut ground = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
-        .load_asset(
-            "asset/greedy_snake/ground.json"
-        )
+        .load_asset("asset/greedy_snake/ground.json")
         .unwrap();
     ground.post_load_resource(object, &asset_manager, &mesh_res);
 
@@ -424,9 +426,7 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
-        .load_asset(
-            "asset/greedy_snake/head.json"
-        )
+        .load_asset("asset/greedy_snake/head.json")
         .unwrap();
     mesh.post_load_resource(object, &asset_manager, &mesh_res);
 
@@ -450,15 +450,11 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
 
 fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: usize) -> GObjectID {
     let object = scene.spawn();
-    let segment = Box::new(SnakeSegment {
-        pool_index,
-    });
+    let segment = Box::new(SnakeSegment { pool_index });
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
-        .load_asset(
-            "asset/greedy_snake/head.json"
-        )
+        .load_asset("asset/greedy_snake/head.json")
         .unwrap();
     mesh.post_load_resource(object, &asset_manager, &mesh_res);
 
@@ -486,9 +482,7 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
-        .load_asset(
-            "asset/greedy_snake/head.json"
-        )
+        .load_asset("asset/greedy_snake/head.json")
         .unwrap();
     mesh.post_load_resource(object, &asset_manager, &mesh_res);
 
@@ -515,10 +509,8 @@ struct SnakeSegment {
     pool_index: usize,
 }
 
-
 #[derive(Default, ComponentTrait)]
 struct Food {}
-
 
 #[derive(Default, ComponentTrait)]
 struct SnakeHead {}

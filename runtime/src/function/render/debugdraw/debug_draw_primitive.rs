@@ -1,6 +1,8 @@
-use vulkanalia::{prelude::v1_0::*};
+use vulkanalia::prelude::v1_0::*;
 
-use crate::core::math::{quaternion::Quaternion, vector2::Vector2, vector3::Vector3, vector4::Vector4};
+use crate::core::math::{
+    quaternion::Quaternion, vector2::Vector2, vector3::Vector3, vector4::Vector4,
+};
 
 pub const K_DEBUG_DRAW_INFINITY_LIFE_TIME: f32 = -2.0;
 pub const K_DEBUG_DRAW_ONE_FRAME: f32 = 0.0;
@@ -53,7 +55,11 @@ impl Default for DebugDrawVertex {
 
 impl DebugDrawVertex {
     pub const fn new(pos: Vector3, color: Vector4, texcoord: Vector2) -> Self {
-        Self { pos, color, texcoord }
+        Self {
+            pos,
+            color,
+            texcoord,
+        }
     }
 
     pub fn get_binding_descriptions() -> vk::VertexInputBindingDescription {
@@ -112,12 +118,14 @@ impl DebugDrawPrimitive {
     pub fn is_time_out(&mut self, delta_time: f32) -> bool {
         match self.m_time_type {
             DebugDrawTimeType::Infinity => false,
-            DebugDrawTimeType::OneFrame => if !self.m_rendered {
-                self.m_rendered = true;
-                false
-            } else {
-                true
-            },
+            DebugDrawTimeType::OneFrame => {
+                if !self.m_rendered {
+                    self.m_rendered = true;
+                    false
+                } else {
+                    true
+                }
+            }
             DebugDrawTimeType::Common => {
                 self.m_life_time -= delta_time;
                 self.m_life_time <= 0.0
@@ -125,7 +133,7 @@ impl DebugDrawPrimitive {
         }
     }
 
-    pub fn set_time(&mut self,in_life_time: f32) {
+    pub fn set_time(&mut self, in_life_time: f32) {
         if (in_life_time - K_DEBUG_DRAW_INFINITY_LIFE_TIME).abs() < f32::EPSILON {
             self.m_time_type = DebugDrawTimeType::Infinity;
             self.m_life_time = 0.0;
@@ -164,16 +172,16 @@ pub struct DebugDrawQuad {
 }
 
 #[derive(Clone, Default)]
-pub struct DebugDrawBox { 
+pub struct DebugDrawBox {
     pub m_base: DebugDrawPrimitive,
     pub m_center_point: Vector3,
     pub m_half_extent: Vector3,
     pub m_color: Vector4,
-    pub m_rotate: Quaternion
+    pub m_rotate: Quaternion,
 }
 
 #[derive(Clone, Default)]
-pub struct DebugDrawCylinder { 
+pub struct DebugDrawCylinder {
     pub m_base: DebugDrawPrimitive,
     pub m_center: Vector3,
     pub m_rotate: Quaternion,
@@ -183,7 +191,7 @@ pub struct DebugDrawCylinder {
 }
 
 #[derive(Clone, Default)]
-pub struct DebugDrawSphere { 
+pub struct DebugDrawSphere {
     pub m_base: DebugDrawPrimitive,
     pub m_center: Vector3,
     pub m_radius: f32,
@@ -191,7 +199,7 @@ pub struct DebugDrawSphere {
 }
 
 #[derive(Clone, Default)]
-pub struct DebugDrawCapsule { 
+pub struct DebugDrawCapsule {
     pub m_base: DebugDrawPrimitive,
     pub m_center: Vector3,
     pub m_rotate: Quaternion,

@@ -1,9 +1,17 @@
-use std::{cell::RefCell, rc::{Rc, Weak}};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
 use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::{function::render::{debugdraw::debug_draw_primitive::DebugDrawVertex, interface::vulkan::vulkan_rhi::VulkanRHI}, shader::generated::shader::{DEBUGDRAW_FRAG, DEBUGDRAW_VERT}};
+use crate::{
+    function::render::{
+        debugdraw::debug_draw_primitive::DebugDrawVertex, interface::vulkan::vulkan_rhi::VulkanRHI,
+    },
+    shader::generated::shader::{DEBUGDRAW_FRAG, DEBUGDRAW_VERT},
+};
 
 struct DebugDrawFramebufferAttachment {
     image: vk::Image,
@@ -13,7 +21,7 @@ struct DebugDrawFramebufferAttachment {
 }
 
 #[derive(Default)]
-pub struct DebugDrawFramebuffer{
+pub struct DebugDrawFramebuffer {
     width: u32,
     height: u32,
     pub render_pass: vk::RenderPass,
@@ -63,7 +71,11 @@ pub struct DebugDrawPipeline {
 }
 
 impl DebugDrawPipeline {
-    pub fn create(pipeline_type: DebugDrawPipelineType, rhi: &Rc<RefCell<VulkanRHI>>, descriptor_set_layout: vk::DescriptorSetLayout) -> Result<Self> {
+    pub fn create(
+        pipeline_type: DebugDrawPipelineType,
+        rhi: &Rc<RefCell<VulkanRHI>>,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> Result<Self> {
         let m_rhi = Rc::downgrade(rhi);
         let rhi = rhi.borrow();
         let swapchain_info = rhi.get_swapchain_info();
@@ -71,10 +83,10 @@ impl DebugDrawPipeline {
         let render_pass = setup_render_pass(&rhi)?;
         let framebuffers = setup_framebuffer(&rhi, render_pass)?;
         let pipeline = setup_pipelines(&rhi, render_pass, descriptor_set_layout, pipeline_type)?;
-        Ok(Self{
-            m_pipeline_type : pipeline_type,
+        Ok(Self {
+            m_pipeline_type: pipeline_type,
             m_render_pipelines: vec![pipeline],
-            m_framebuffer: DebugDrawFramebuffer{
+            m_framebuffer: DebugDrawFramebuffer {
                 width: swapchain_info.extent.width,
                 height: swapchain_info.extent.height,
                 render_pass,
@@ -85,8 +97,8 @@ impl DebugDrawPipeline {
         })
     }
 
-    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) -> Result<()>{
-        for framebuffer in self.m_framebuffer.framebuffers.drain(..){
+    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        for framebuffer in self.m_framebuffer.framebuffers.drain(..) {
             rhi.destroy_framebuffer(framebuffer);
         }
         self.m_framebuffer.framebuffers = setup_framebuffer(&rhi, self.m_framebuffer.render_pass)?;
@@ -96,7 +108,10 @@ impl DebugDrawPipeline {
     pub fn destroy(&self) {
         let rhi = self.m_rhi.upgrade().unwrap();
         let rhi = rhi.borrow();
-        self.m_framebuffer.framebuffers.iter().for_each(|f| rhi.destroy_framebuffer(*f));
+        self.m_framebuffer
+            .framebuffers
+            .iter()
+            .for_each(|f| rhi.destroy_framebuffer(*f));
         rhi.destroy_pipeline(self.m_render_pipelines[0].pipeline);
         rhi.destroy_pipeline_layout(self.m_render_pipelines[0].layout);
         rhi.destroy_render_pass(self.m_framebuffer.render_pass);
@@ -111,9 +126,7 @@ impl DebugDrawPipeline {
     }
 }
 
-fn setup_attachments() {
-
-}
+fn setup_attachments() {}
 
 fn setup_render_pass(rhi: &VulkanRHI) -> Result<vk::RenderPass> {
     let color_attachment = vk::AttachmentDescription::builder()
@@ -153,11 +166,15 @@ fn setup_render_pass(rhi: &VulkanRHI) -> Result<vk::RenderPass> {
     let dependency = vk::SubpassDependency::builder()
         .src_subpass(vk::SUBPASS_EXTERNAL)
         .dst_subpass(0)
-        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+        .src_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
         .src_access_mask(vk::AccessFlags::empty())
-        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+        .dst_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
         .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
 
     let attachments = &[color_attachment, depth_stencil_attachment];
@@ -171,10 +188,11 @@ fn setup_render_pass(rhi: &VulkanRHI) -> Result<vk::RenderPass> {
     Ok(rhi.create_render_pass(&info)?)
 }
 
-fn setup_framebuffer(rhi: &VulkanRHI, render_pass : vk::RenderPass) -> Result<Vec<vk::Framebuffer>> {
+fn setup_framebuffer(rhi: &VulkanRHI, render_pass: vk::RenderPass) -> Result<Vec<vk::Framebuffer>> {
     let swapchain_info = rhi.get_swapchain_info();
     let depth_image_info = rhi.get_depth_image_info();
-    let framebuffers =  swapchain_info.image_views
+    let framebuffers = swapchain_info
+        .image_views
         .iter()
         .map(|i| {
             let attachments = &[*i, *depth_image_info.image_view];
@@ -191,8 +209,12 @@ fn setup_framebuffer(rhi: &VulkanRHI, render_pass : vk::RenderPass) -> Result<Ve
     Ok(framebuffers)
 }
 
-fn setup_pipelines(rhi: &VulkanRHI, render_pass : vk::RenderPass, set_layout: vk::DescriptorSetLayout, pipeline_type: DebugDrawPipelineType)-> Result<DebugDrawPipelineBase> {
-
+fn setup_pipelines(
+    rhi: &VulkanRHI,
+    render_pass: vk::RenderPass,
+    set_layout: vk::DescriptorSetLayout,
+    pipeline_type: DebugDrawPipelineType,
+) -> Result<DebugDrawPipelineBase> {
     let vert_shader_module = rhi.create_shader_module(&DEBUGDRAW_VERT)?;
     let frag_shader_module = rhi.create_shader_module(&DEBUGDRAW_FRAG)?;
 
@@ -215,13 +237,11 @@ fn setup_pipelines(rhi: &VulkanRHI, render_pass : vk::RenderPass, set_layout: vk
     let topology = match pipeline_type {
         DebugDrawPipelineType::Point | DebugDrawPipelineType::PointNoDepthTest => {
             vk::PrimitiveTopology::POINT_LIST
-        },
+        }
         DebugDrawPipelineType::Line | DebugDrawPipelineType::LineNoDepthTest => {
             vk::PrimitiveTopology::LINE_LIST
-        },
-        _ => {
-            vk::PrimitiveTopology::TRIANGLE_LIST
         }
+        _ => vk::PrimitiveTopology::TRIANGLE_LIST,
     };
 
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
@@ -248,7 +268,9 @@ fn setup_pipelines(rhi: &VulkanRHI, render_pass : vk::RenderPass, set_layout: vk
         .rasterization_samples(vk::SampleCountFlags::_1);
 
     let depth_test_enable = match pipeline_type {
-        DebugDrawPipelineType::PointNoDepthTest | DebugDrawPipelineType::LineNoDepthTest | DebugDrawPipelineType::TriangleNoDepthTest => false,
+        DebugDrawPipelineType::PointNoDepthTest
+        | DebugDrawPipelineType::LineNoDepthTest
+        | DebugDrawPipelineType::TriangleNoDepthTest => false,
         _ => true,
     };
 
@@ -273,8 +295,7 @@ fn setup_pipelines(rhi: &VulkanRHI, render_pass : vk::RenderPass, set_layout: vk
         .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
     let set_layouts = &[set_layout];
-    let layout_info = vk::PipelineLayoutCreateInfo::builder()
-        .set_layouts(set_layouts);
+    let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
     let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -299,5 +320,8 @@ fn setup_pipelines(rhi: &VulkanRHI, render_pass : vk::RenderPass, set_layout: vk
     rhi.destroy_shader_module(vert_shader_module);
     rhi.destroy_shader_module(frag_shader_module);
 
-    Ok(DebugDrawPipelineBase { layout: pipeline_layout, pipeline })
+    Ok(DebugDrawPipelineBase {
+        layout: pipeline_layout,
+        pipeline,
+    })
 }

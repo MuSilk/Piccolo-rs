@@ -1,5 +1,11 @@
+use crate::function::render::interface::rhi_struct::{
+    RHIBuffer, RHIBufferView, RHICommandBuffer, RHICommandPool, RHIDescriptorPool,
+    RHIDescriptorSet, RHIDescriptorSetLayout, RHIDevice, RHIDeviceMemory, RHIEvent, RHIFence,
+    RHIFramebuffer, RHIImage, RHIImageView, RHIInstance, RHIPhysicalDevice, RHIPipeline,
+    RHIPipelineCache, RHIPipelineLayout, RHIQueue, RHIRenderPass, RHISampler, RHISemaphore,
+    RHIShader,
+};
 use vulkanalia::prelude::v1_0::*;
-use crate::function::render::interface::rhi_struct::{RHIBuffer, RHIBufferView, RHICommandBuffer, RHICommandPool, RHIDescriptorPool, RHIDescriptorSet, RHIDescriptorSetLayout, RHIDevice, RHIDeviceMemory, RHIEvent, RHIFence, RHIFramebuffer, RHIImage, RHIImageView, RHIInstance, RHIPhysicalDevice, RHIPipeline, RHIPipelineCache, RHIPipelineLayout, RHIQueue, RHIRenderPass, RHISampler, RHISemaphore, RHIShader};
 
 macro_rules! impl_vulkan_rhi_wrapper {
     ($struct_name:ident, $trait_name:ident, $field_type:ty) => {
@@ -31,7 +37,11 @@ impl_vulkan_rhi_wrapper!(VulkanCommandBuffer, RHICommandBuffer, vk::CommandBuffe
 impl_vulkan_rhi_wrapper!(VulkanCommandPool, RHICommandPool, vk::CommandPool);
 impl_vulkan_rhi_wrapper!(VulkanDescriptorPool, RHIDescriptorPool, vk::DescriptorPool);
 impl_vulkan_rhi_wrapper!(VulkanDescriptorSet, RHIDescriptorSet, vk::DescriptorSet);
-impl_vulkan_rhi_wrapper!(VulkanDescriptorSetLayout, RHIDescriptorSetLayout, vk::DescriptorSetLayout);
+impl_vulkan_rhi_wrapper!(
+    VulkanDescriptorSetLayout,
+    RHIDescriptorSetLayout,
+    vk::DescriptorSetLayout
+);
 impl_vulkan_rhi_wrapper!(VulkanDevice, RHIDevice, vk::Device);
 impl_vulkan_rhi_wrapper!(VulkanDeviceMemory, RHIDeviceMemory, vk::DeviceMemory);
 impl_vulkan_rhi_wrapper!(VulkanEvent, RHIEvent, vk::Event);
@@ -49,4 +59,3 @@ impl_vulkan_rhi_wrapper!(VulkanRenderPass, RHIRenderPass, vk::RenderPass);
 impl_vulkan_rhi_wrapper!(VulkanSampler, RHISampler, vk::Sampler);
 impl_vulkan_rhi_wrapper!(VulkanSemaphore, RHISemaphore, vk::Semaphore);
 impl_vulkan_rhi_wrapper!(VulkanShader, RHIShader, vk::ShaderModule);
-

@@ -27,7 +27,7 @@ impl Default for FirstPersonCameraParameter {
 
 #[derive(Clone)]
 pub struct ThirdPersonCameraParameter {
-    pub m_fov: f32, 
+    pub m_fov: f32,
     pub m_horizontal_offset: f32,
     pub m_vertical_offset: f32,
     pub m_cursor_pitch: Quaternion,
@@ -48,7 +48,7 @@ impl Default for ThirdPersonCameraParameter {
 
 #[derive(Clone)]
 pub struct FreeCameraParameter {
-    pub m_fov: f32, 
+    pub m_fov: f32,
     pub m_speed: f32,
 }
 
@@ -70,7 +70,7 @@ impl CameraComponentRes {
     pub fn get_fov(&self) -> f32 {
         match &self.m_parameter {
             CameraParameter::FirstPerson(param) => param.m_fov,
-            CameraParameter::ThirdPerson(param) => param.m_fov, 
+            CameraParameter::ThirdPerson(param) => param.m_fov,
             CameraParameter::Free(param) => param.m_fov,
         }
     }

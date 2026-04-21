@@ -1,10 +1,12 @@
-use anyhow::Result;
-use std::path::Path;
 use crate::{
-    function::render::font_atlas::{get_ascii_character_texture_rect, rasterize_ascii_coverage, ASCII_BITMAP_H, ASCII_BITMAP_W},
+    function::render::font_atlas::{
+        ASCII_BITMAP_H, ASCII_BITMAP_W, get_ascii_character_texture_rect, rasterize_ascii_coverage,
+    },
     resource::config_manager::ConfigManager,
 };
+use anyhow::Result;
 use bitflags::bitflags;
+use std::path::Path;
 
 #[derive(Clone, Debug, Default)]
 pub struct UiInputSnapshot {
@@ -125,10 +127,7 @@ impl UiRuntime {
         Ok(texture_id)
     }
 
-    pub fn load_font_texture(
-        &mut self,
-        config_manager: &ConfigManager,
-    ) -> Result<u32> {
+    pub fn load_font_texture(&mut self, config_manager: &ConfigManager) -> Result<u32> {
         let font_path = config_manager.get_editor_font_path().to_path_buf();
         let image_data = rasterize_ascii_coverage(font_path.as_path())?;
         let mut rgba = vec![0_u8; image_data.len() * 4];
@@ -264,15 +263,13 @@ impl UiRuntime {
     }
 
     pub fn push_colored_rect(
-        &mut self, pos: [f32; 2], size: [f32; 2], color: [u8; 4], clip_rect: [f32; 4]
+        &mut self,
+        pos: [f32; 2],
+        size: [f32; 2],
+        color: [u8; 4],
+        clip_rect: [f32; 4],
     ) {
-        push_colored_rect(
-            &mut self.draw_list,
-            pos,
-            size,
-            color,
-            clip_rect,
-        );
+        push_colored_rect(&mut self.draw_list, pos, size, color, clip_rect);
     }
 
     pub fn push_textured_rect(
@@ -296,16 +293,14 @@ impl UiRuntime {
     }
 
     pub fn push_text_ascii(
-        &mut self, text: &str, pos: [f32; 2], glyph_size: [f32; 2], color: [u8; 4], clip_rect: [f32; 4]
+        &mut self,
+        text: &str,
+        pos: [f32; 2],
+        glyph_size: [f32; 2],
+        color: [u8; 4],
+        clip_rect: [f32; 4],
     ) {
-        push_text_ascii(
-            &mut self.draw_list,
-            text,
-            pos,
-            glyph_size,
-            color,
-            clip_rect,
-        )
+        push_text_ascii(&mut self.draw_list, text, pos, glyph_size, color, clip_rect)
     }
 
     pub fn button(
@@ -374,7 +369,12 @@ impl UiRuntime {
             size,
             body_pos: [pos[0] + 4.0, pos[1] + header_h + 4.0],
             body_size: [size[0] - 8.0, (size[1] - header_h - 8.0).max(0.0)],
-            clip_rect: [pos[0], pos[1] + header_h, pos[0] + size[0], pos[1] + size[1]],
+            clip_rect: [
+                pos[0],
+                pos[1] + header_h,
+                pos[0] + size[0],
+                pos[1] + size[1],
+            ],
         }
     }
 
@@ -502,7 +502,10 @@ impl UiRuntime {
             return false;
         }
         let width = self.current_menu_popup_size[0] - 12.0;
-        let pos = [self.current_menu_popup_pos[0] + 6.0, self.current_menu_item_cursor_y];
+        let pos = [
+            self.current_menu_popup_pos[0] + 6.0,
+            self.current_menu_item_cursor_y,
+        ];
         let clicked = self
             .button(
                 &format!(
@@ -607,10 +610,26 @@ fn push_textured_rect(
     // Colored rects can still use a fixed white pixel UV.
     // Texture-capable widgets should provide their own UVs and texture_id.
     draw_list.vertices.extend_from_slice(&[
-        UiVertex { pos: [x, y], uv: [u0, v0], col: color },
-        UiVertex { pos: [x + w, y], uv: [u1, v0], col: color },
-        UiVertex { pos: [x + w, y + h], uv: [u1, v1], col: color },
-        UiVertex { pos: [x, y + h], uv: [u0, v1], col: color },
+        UiVertex {
+            pos: [x, y],
+            uv: [u0, v0],
+            col: color,
+        },
+        UiVertex {
+            pos: [x + w, y],
+            uv: [u1, v0],
+            col: color,
+        },
+        UiVertex {
+            pos: [x + w, y + h],
+            uv: [u1, v1],
+            col: color,
+        },
+        UiVertex {
+            pos: [x, y + h],
+            uv: [u0, v1],
+            col: color,
+        },
     ]);
     draw_list
         .indices
@@ -636,7 +655,13 @@ fn push_rect_border(
         return;
     }
     // top
-    push_colored_rect(draw_list, [pos[0], pos[1]], [size[0], thickness], color, clip_rect);
+    push_colored_rect(
+        draw_list,
+        [pos[0], pos[1]],
+        [size[0], thickness],
+        color,
+        clip_rect,
+    );
     // bottom
     push_colored_rect(
         draw_list,
@@ -646,7 +671,13 @@ fn push_rect_border(
         clip_rect,
     );
     // left
-    push_colored_rect(draw_list, [pos[0], pos[1]], [thickness, size[1]], color, clip_rect);
+    push_colored_rect(
+        draw_list,
+        [pos[0], pos[1]],
+        [thickness, size[1]],
+        color,
+        clip_rect,
+    );
     // right
     push_colored_rect(
         draw_list,

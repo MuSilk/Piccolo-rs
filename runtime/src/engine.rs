@@ -1,9 +1,18 @@
-use std::{cell::RefCell, path::Path, rc::{Rc}, time::Instant};
+use std::{cell::RefCell, path::Path, rc::Rc, time::Instant};
 
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
-use crate::{function::{framework::world::world_manager::WorldManager, global::global_context::RuntimeGlobalContext, input::{game_command_system::GameCommandInputSystem, input_system::InputSystem}, render::{render_system::RenderSystem, window_system::WindowSystem}, ui::ui2::UiRuntime}, resource::{asset_manager::AssetManager, config_manager::ConfigManager}};
+use crate::{
+    function::{
+        framework::world::world_manager::WorldManager,
+        global::global_context::RuntimeGlobalContext,
+        input::{game_command_system::GameCommandInputSystem, input_system::InputSystem},
+        render::{render_system::RenderSystem, window_system::WindowSystem},
+        ui::ui2::UiRuntime,
+    },
+    resource::{asset_manager::AssetManager, config_manager::ConfigManager},
+};
 
 const S_FPS_ALPHA: f32 = 1.0 / 100.0;
 
@@ -28,7 +37,6 @@ struct EngineState {
 }
 
 impl Engine {
-
     pub fn new(config_file_path: &Path) -> Self {
         Engine {
             m_runtime_context: RuntimeGlobalContext::new(config_file_path),
@@ -39,25 +47,31 @@ impl Engine {
                 m_fps: 0,
                 m_is_editor_mode: false,
             }),
-            systems: Default::default() 
+            systems: Default::default(),
         }
     }
 
     pub fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.m_runtime_context.resumed_instance(event_loop);
     }
-    pub fn initialize(engine: &Engine){
+    pub fn initialize(engine: &Engine) {
         engine.m_state.borrow_mut().m_last_tick_time_point = Instant::now();
-        engine.systems.borrow_mut().iter_mut().for_each(|s| s.initialize(&engine));
+        engine
+            .systems
+            .borrow_mut()
+            .iter_mut()
+            .for_each(|s| s.initialize(&engine));
     }
 
-    pub fn shutdown_engine(&self){
+    pub fn shutdown_engine(&self) {
         self.m_runtime_context.shutdown_systems();
     }
 
     pub fn calculate_delta_time(&self) -> f32 {
         let now = Instant::now();
-        let delta_time = now.duration_since(self.m_state.borrow().m_last_tick_time_point).as_secs_f32();
+        let delta_time = now
+            .duration_since(self.m_state.borrow().m_last_tick_time_point)
+            .as_secs_f32();
         self.m_state.borrow_mut().m_last_tick_time_point = now;
         delta_time
     }
@@ -91,15 +105,20 @@ impl Engine {
 }
 
 impl Engine {
-    fn renderer_tick(&self, delta_time: f32) -> Result<()>{
-        let window_size = self.m_runtime_context.window_system().borrow().get_window_size();
-        self.m_runtime_context.render_system().borrow().update_engine_content_viewport(
-            0.0, 0.0, window_size.0 as f32,  window_size.1 as f32
-        );
+    fn renderer_tick(&self, delta_time: f32) -> Result<()> {
+        let window_size = self
+            .m_runtime_context
+            .window_system()
+            .borrow()
+            .get_window_size();
+        self.m_runtime_context
+            .render_system()
+            .borrow()
+            .update_engine_content_viewport(0.0, 0.0, window_size.0 as f32, window_size.1 as f32);
         self.m_runtime_context.render_system().borrow().tick(
             &self.m_runtime_context.ui_runtime().borrow(),
             &self.m_runtime_context.asset_manager(),
-            delta_time
+            delta_time,
         )?;
         Ok(())
     }
@@ -108,23 +127,29 @@ impl Engine {
         let render_system = self.m_runtime_context.render_system().borrow();
         let rhi = render_system.get_rhi().borrow();
         let swapchain_info = rhi.get_swapchain_info();
-        let viewport = [swapchain_info.extent.width as f32, swapchain_info.extent.height as f32];
+        let viewport = [
+            swapchain_info.extent.width as f32,
+            swapchain_info.extent.height as f32,
+        ];
         {
             let mut ui_runtime = self.m_runtime_context.ui_runtime().borrow_mut();
             ui_runtime.set_viewport(viewport);
             ui_runtime.new_frame();
         }
 
-        self.systems.borrow_mut().iter_mut().for_each(|s|s.tick(self, delta_time));
+        self.systems
+            .borrow_mut()
+            .iter_mut()
+            .for_each(|s| s.tick(self, delta_time));
 
-        self.m_runtime_context.world_manager().borrow_mut().tick(
-            &self,
-            delta_time
-        );
-        self.m_runtime_context.input_system().borrow_mut().tick(
-            self,
-            delta_time
-        );
+        self.m_runtime_context
+            .world_manager()
+            .borrow_mut()
+            .tick(&self, delta_time);
+        self.m_runtime_context
+            .input_system()
+            .borrow_mut()
+            .tick(self, delta_time);
     }
     fn calculate_fps(&self, delta_time: f32) {
         self.m_state.borrow_mut().calculate_fps(delta_time);
@@ -161,8 +186,9 @@ impl EngineState {
 
         if self.m_frame_count == 1 {
             self.m_average_duration = delta_time;
-        } else{
-            self.m_average_duration = self.m_average_duration * (1.0 - S_FPS_ALPHA) + delta_time * S_FPS_ALPHA;
+        } else {
+            self.m_average_duration =
+                self.m_average_duration * (1.0 - S_FPS_ALPHA) + delta_time * S_FPS_ALPHA;
         }
         self.m_fps = (1.0 / self.m_average_duration) as u32;
     }

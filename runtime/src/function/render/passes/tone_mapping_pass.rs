@@ -2,11 +2,23 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
+use vulkanalia::{
+    prelude::v1_0::*,
+    vk::{VertexInputAttributeDescription, VertexInputBindingDescription},
+};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG}};
+use crate::{
+    function::render::{
+        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI},
+        passes::main_camera_pass::MainCameraSubPass,
+        render_pass::{Descriptor, RenderPass, RenderPipelineBase},
+        render_resource::GlobalRenderResource,
+        render_type::RHISamplerType,
+    },
+    shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG},
+};
 
-pub struct ToneMappingInitInfo<'a>{
+pub struct ToneMappingInitInfo<'a> {
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
@@ -29,16 +41,20 @@ impl ToneMappingPass {
         Ok(())
     }
     pub fn draw(&self, rhi: &VulkanRHI) {
-        let color = [1.0;4];
+        let color = [1.0; 4];
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "Tone Map\0", color);
         let info = rhi.get_swapchain_info();
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            self.m_render_pass.m_render_pipeline[0].pipeline,
+        );
         rhi.cmd_set_viewport(command_buffer, 0, std::slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, std::slice::from_ref(info.scissor));
         rhi.cmd_bind_descriptor_sets(
             command_buffer,
-            vk::PipelineBindPoint::GRAPHICS, 
+            vk::PipelineBindPoint::GRAPHICS,
             self.m_render_pass.m_render_pipeline[0].layout,
             0,
             &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
@@ -47,23 +63,23 @@ impl ToneMappingPass {
         rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
         rhi.pop_event(command_buffer);
     }
-    pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, input_attachment: vk::ImageView) -> Result<()> {
-        let post_process_per_frame_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
-                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-                .image_view(input_attachment)
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .build()
-        ];
+    pub fn update_after_framebuffer_recreate(
+        &mut self,
+        rhi: &VulkanRHI,
+        input_attachment: vk::ImageView,
+    ) -> Result<()> {
+        let post_process_per_frame_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+            .image_view(input_attachment)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build()];
 
-        let post_process_descriptor_writes_info = [
-            vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&post_process_per_frame_input_attachment_info)
-                .build(),
-        ];
+        let post_process_descriptor_writes_info = [vk::WriteDescriptorSet::builder()
+            .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+            .image_info(&post_process_per_frame_input_attachment_info)
+            .build()];
         rhi.update_descriptor_sets(&post_process_descriptor_writes_info)?;
         Ok(())
     }
@@ -75,14 +91,12 @@ static INPUT_ATTACHMENT_COUNT: u32 = 1;
 impl ToneMappingPass {
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.m_render_pass.m_descriptor_infos.clear();
-        let post_process_global_layout_in_color = [
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(0)
-                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                .build(),
-        ];
+        let post_process_global_layout_in_color = [vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+            .build()];
         let post_process_global_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(&post_process_global_layout_in_color);
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
@@ -147,8 +161,7 @@ impl ToneMappingPass {
             .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
         let set_layouts = &[self.m_render_pass.m_descriptor_infos[0].layout];
-        let layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(set_layouts);
+        let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
         let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -172,21 +185,25 @@ impl ToneMappingPass {
         rhi.destroy_shader_module(vert_shader_module);
         rhi.destroy_shader_module(frag_shader_module);
 
-        self.m_render_pass.m_render_pipeline.push(RenderPipelineBase{
-            layout: pipeline_layout,
-            pipeline,
-        });
+        self.m_render_pass
+            .m_render_pipeline
+            .push(RenderPipelineBase {
+                layout: pipeline_layout,
+                pipeline,
+            });
 
         Ok(())
     }
 
     fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
-        let post_process_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(&set_layouts);
+        let post_process_global_descriptor_set_alloc_info =
+            vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&set_layouts);
 
-        self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
+        self.m_render_pass.m_descriptor_infos[0].descriptor_set =
+            rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
         Ok(())
     }
 }

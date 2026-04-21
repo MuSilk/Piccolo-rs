@@ -1,8 +1,15 @@
-use std::{cell::RefCell, collections::HashMap, rc::{Rc}};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use crate::{
+    engine::Engine,
+    function::framework::scene::scene::SceneTrait,
+    resource::{
+        asset_manager::AssetManager, config_manager::ConfigManager,
+        res_type::common::world::WorldRes,
+    },
+};
 use anyhow::Result;
 use log::info;
-use crate::{engine::Engine, function::framework::scene::scene::SceneTrait, resource::{asset_manager::AssetManager, config_manager::ConfigManager, res_type::common::world::WorldRes}};
 
 #[derive(Default)]
 pub struct WorldManager {
@@ -15,16 +22,14 @@ pub struct WorldManager {
 }
 
 impl WorldManager {
-    pub fn initialize(
-        &mut self,
-        config_manager: &ConfigManager,
-    ) {
+    pub fn initialize(&mut self, config_manager: &ConfigManager) {
         self.m_is_world_loaded = false;
         self.m_current_world_url = config_manager.get_default_world_url().to_string();
     }
 
     pub fn add_scene<T: SceneTrait + 'static>(&mut self, scene: T) {
-        self.m_scenes.insert(scene.get_url(), Rc::new(RefCell::new(scene)));
+        self.m_scenes
+            .insert(scene.get_url(), Rc::new(RefCell::new(scene)));
     }
 
     pub fn set_default_scene(&mut self, scene_name: &str) {
@@ -35,11 +40,7 @@ impl WorldManager {
         &self.m_current_scene
     }
 
-    pub fn tick(
-        &mut self, 
-        engine: &Engine,
-        delta_time: f32
-    ) {
+    pub fn tick(&mut self, engine: &Engine, delta_time: f32) {
         if !self.m_is_world_loaded {
             self.load_world(engine.asset_manager()).unwrap();
         }
@@ -52,10 +53,7 @@ impl WorldManager {
         }
     }
 
-    fn load_world(
-        &mut self,
-        asset_manager: &AssetManager,
-    ) -> Result<()> {
+    fn load_world(&mut self, asset_manager: &AssetManager) -> Result<()> {
         info!("Loading world: {}", self.m_current_world_url);
         let world_res: WorldRes = asset_manager.load_asset(&self.m_current_world_url)?;
         self.m_current_world_resource = world_res;

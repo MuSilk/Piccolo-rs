@@ -2,11 +2,23 @@ use std::{cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*, vk::{VertexInputAttributeDescription, VertexInputBindingDescription}};
+use vulkanalia::{
+    prelude::v1_0::*,
+    vk::{VertexInputAttributeDescription, VertexInputBindingDescription},
+};
 
-use crate::{function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT}};
+use crate::{
+    function::render::{
+        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI},
+        passes::main_camera_pass::MainCameraSubPass,
+        render_pass::{Descriptor, RenderPass, RenderPipelineBase},
+        render_resource::GlobalRenderResource,
+        render_type::RHISamplerType,
+    },
+    shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT},
+};
 
-pub struct CombineUIPassInitInfo<'a>{
+pub struct CombineUIPassInitInfo<'a> {
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
@@ -26,20 +38,28 @@ impl CombineUIPass {
         self.setup_descriptor_layout(info.rhi)?;
         self.setup_pipelines(info.rhi)?;
         self.setup_descriptor_set(info.rhi)?;
-        self.update_after_framebuffer_recreate(info.rhi, info.scene_input_attachment, info.ui_input_attachment)?;
+        self.update_after_framebuffer_recreate(
+            info.rhi,
+            info.scene_input_attachment,
+            info.ui_input_attachment,
+        )?;
         Ok(())
     }
     pub fn draw(&self, rhi: &VulkanRHI) {
-        let color = [1.0;4];
+        let color = [1.0; 4];
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "Combine UI\0", color);
         let info = rhi.get_swapchain_info();
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            self.m_render_pass.m_render_pipeline[0].pipeline,
+        );
         rhi.cmd_set_viewport(command_buffer, 0, std::slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, std::slice::from_ref(info.scissor));
         rhi.cmd_bind_descriptor_sets(
             command_buffer,
-            vk::PipelineBindPoint::GRAPHICS, 
+            vk::PipelineBindPoint::GRAPHICS,
             self.m_render_pass.m_render_pipeline[0].layout,
             0,
             &[self.m_render_pass.m_descriptor_infos[0].descriptor_set],
@@ -48,21 +68,22 @@ impl CombineUIPass {
         rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
         rhi.pop_event(command_buffer);
     }
-    pub fn update_after_framebuffer_recreate(&mut self, rhi: &VulkanRHI, scene_input_attachment: vk::ImageView, ui_input_attachment: vk::ImageView) -> Result<()> {
-        let per_frame_scene_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
-                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-                .image_view(scene_input_attachment)
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .build()
-        ];
-        let per_frame_ui_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
-                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-                .image_view(ui_input_attachment)
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .build()
-        ];
+    pub fn update_after_framebuffer_recreate(
+        &mut self,
+        rhi: &VulkanRHI,
+        scene_input_attachment: vk::ImageView,
+        ui_input_attachment: vk::ImageView,
+    ) -> Result<()> {
+        let per_frame_scene_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+            .image_view(scene_input_attachment)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build()];
+        let per_frame_ui_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+            .image_view(ui_input_attachment)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .build()];
 
         let post_process_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
@@ -154,11 +175,12 @@ impl CombineUIPass {
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::_1);
 
-        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS)
-            .stencil_test_enable(false);
+        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+            vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS)
+                .stencil_test_enable(false);
 
         let attachment = vk::PipelineColorBlendAttachmentState::builder()
             .color_write_mask(vk::ColorComponentFlags::all())
@@ -175,8 +197,7 @@ impl CombineUIPass {
             .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
         let set_layouts = &[self.m_render_pass.m_descriptor_infos[0].layout];
-        let layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(set_layouts);
+        let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
         let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -201,21 +222,25 @@ impl CombineUIPass {
         rhi.destroy_shader_module(vert_shader_module);
         rhi.destroy_shader_module(frag_shader_module);
 
-        self.m_render_pass.m_render_pipeline.push(RenderPipelineBase{
-            layout: pipeline_layout,
-            pipeline,
-        });
+        self.m_render_pass
+            .m_render_pipeline
+            .push(RenderPipelineBase {
+                layout: pipeline_layout,
+                pipeline,
+            });
 
         Ok(())
     }
 
     fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
-        let post_process_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(&set_layouts);
+        let post_process_global_descriptor_set_alloc_info =
+            vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&set_layouts);
 
-        self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
+        self.m_render_pass.m_descriptor_infos[0].descriptor_set =
+            rhi.allocate_descriptor_sets(&post_process_global_descriptor_set_alloc_info)?[0];
         Ok(())
     }
 }

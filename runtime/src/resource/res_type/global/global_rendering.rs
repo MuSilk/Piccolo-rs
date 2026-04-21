@@ -1,6 +1,5 @@
 use crate::{core::math::vector3::Vector3, resource::res_type::data::camera_config::CameraConfig};
 
-
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SkyBoxIrradianceMap {
     pub negative_x_map: String,
@@ -10,7 +9,6 @@ pub struct SkyBoxIrradianceMap {
     pub negative_z_map: String,
     pub positive_z_map: String,
 }
-
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SkyBoxSpecularMap {
@@ -25,7 +23,7 @@ pub struct SkyBoxSpecularMap {
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct DirectionalLight {
     pub direction: Vector3,
-    pub color: Vector3
+    pub color: Vector3,
 }
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]

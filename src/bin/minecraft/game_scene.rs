@@ -3,24 +3,23 @@
 use std::{cell::RefCell, path::Path, rc::Rc};
 use std::{fs, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
 use runtime::{
     core::math::{transform::Transform, vector3::Vector3},
     engine::Engine,
-    function::{
-        framework::{
-            component::{
-                camera_component::CameraComponent, character_component::CharacterComponent,
-                component::ComponentTrait, transform_component::TransformComponent,
-            },
-            resource::component::motor::MotorComponentRes,
-            scene::scene::SceneTrait,
+    function::framework::{
+        component::{
+            camera_component::CameraComponent, character_component::CharacterComponent,
+            component::ComponentTrait, transform_component::TransformComponent,
         },
+        resource::component::motor::MotorComponentRes,
+        scene::scene::SceneTrait,
     },
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    minecraft_motor_component::MinecraftMotorComponent, player_controller::AiPlayerController,
+    minecraft_motor_component::MinecraftMotorComponent,
+    player_controller::AiPlayerController,
     voxel_world::{VoxelKind, VoxelOverrideRecord, VoxelWorld},
 };
 
@@ -165,9 +164,19 @@ impl GameScene {
             };
             ui.push_colored_rect([x, y0], [slot_size, slot_size], [36, 40, 52, 220], clip);
             ui.push_colored_rect([x, y0], [slot_size, 2.0], border_col, clip);
-            ui.push_colored_rect([x, y0 + slot_size - 2.0], [slot_size, 2.0], border_col, clip);
+            ui.push_colored_rect(
+                [x, y0 + slot_size - 2.0],
+                [slot_size, 2.0],
+                border_col,
+                clip,
+            );
             ui.push_colored_rect([x, y0], [2.0, slot_size], border_col, clip);
-            ui.push_colored_rect([x + slot_size - 2.0, y0], [2.0, slot_size], border_col, clip);
+            ui.push_colored_rect(
+                [x + slot_size - 2.0, y0],
+                [2.0, slot_size],
+                border_col,
+                clip,
+            );
             ui.push_textured_rect(
                 [x + 6.0, y0 + 6.0],
                 [slot_size - 12.0, slot_size - 12.0],
@@ -220,9 +229,7 @@ impl SceneTrait for GameScene {
         let mut motor = Box::new(MinecraftMotorComponent::new(controller));
         let motor_res: MotorComponentRes = engine
             .asset_manager()
-            .load_asset(
-                "asset/minecraft-ai/player.motor.json",
-            )
+            .load_asset("asset/minecraft-ai/player.motor.json")
             .expect("player motor");
         motor.post_load_resources(&motor_res);
         motor.align_spawn(spawn);
@@ -253,7 +260,6 @@ impl SceneTrait for GameScene {
         }
         let _ = fs::write(path, text);
     }
-    
 
     fn tick(&mut self, engine: &Engine, delta_time: f32) {
         if !self.is_loaded() {
@@ -306,15 +312,14 @@ impl SceneTrait for GameScene {
                 .map(|(cam, ch)| (cam.m_position, cam.m_forward, ch.get_position()));
 
             let mut world_changed = false;
-            if let (Some(world_rc), Some((origin, forward, feet))) = (self.world.as_ref(), cam_snap) {
+            if let (Some(world_rc), Some((origin, forward, feet))) = (self.world.as_ref(), cam_snap)
+            {
                 let mut world = world_rc.borrow_mut();
                 if mouse_left {
                     self.dig_repeat_accum += delta_time;
                     while self.dig_repeat_accum >= DIG_COOLDOWN {
                         self.dig_repeat_accum -= DIG_COOLDOWN;
-                        if let Some((x, y, z)) =
-                            world.raycast_first_solid(origin, forward, REACH)
-                        {
+                        if let Some((x, y, z)) = world.raycast_first_solid(origin, forward, REACH) {
                             world.set_voxel(x, y, z, VoxelKind::Air);
                             world_changed = true;
                         }
@@ -326,9 +331,7 @@ impl SceneTrait for GameScene {
                     self.place_repeat_accum += delta_time;
                     while self.place_repeat_accum >= PLACE_COOLDOWN {
                         self.place_repeat_accum -= PLACE_COOLDOWN;
-                        if let Some((x, y, z)) =
-                            world.raycast_place_cell(origin, forward, REACH)
-                        {
+                        if let Some((x, y, z)) = world.raycast_place_cell(origin, forward, REACH) {
                             if world.voxel_at(x, y, z) == VoxelKind::Air
                                 && !player_aabb_overlaps_cell(feet, x, y, z)
                             {

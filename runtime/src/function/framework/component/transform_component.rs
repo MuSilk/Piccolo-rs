@@ -1,7 +1,11 @@
 use runtime_derive::ComponentTrait;
 
-use crate::{core::math::{matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3}, engine::Engine};
-
+use crate::{
+    core::math::{
+        matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3,
+    },
+    engine::Engine,
+};
 
 #[derive(Clone, Debug, ComponentTrait)]
 pub struct TransformComponent {
@@ -12,7 +16,7 @@ pub struct TransformComponent {
     m_is_dirty: bool,
 }
 
-impl Default for  TransformComponent {
+impl Default for TransformComponent {
     fn default() -> Self {
         Self {
             m_transform: Transform::default(),

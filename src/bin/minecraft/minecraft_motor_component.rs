@@ -7,12 +7,14 @@
 use runtime::{
     core::math::{quaternion::Quaternion, vector3::Vector3},
     function::{
-        framework::{component::{
-            component::ComponentTrait,
-            motor_component::Controller,
-            transform_component::TransformComponent,
-        }, resource::component::motor::MotorComponentRes},
-        input::{game_command_system::{GameCommand, GameCommandInputSystem}},
+        framework::{
+            component::{
+                component::ComponentTrait, motor_component::Controller,
+                transform_component::TransformComponent,
+            },
+            resource::component::motor::MotorComponentRes,
+        },
+        input::game_command_system::{GameCommand, GameCommandInputSystem},
     },
 };
 
@@ -120,18 +122,10 @@ impl MinecraftMotorComponent {
         }
 
         if self.m_is_landing {
-            let wish_vel = Vector3::new(
-                wish_dir.x * target_speed,
-                wish_dir.y * target_speed,
-                0.0,
-            );
+            let wish_vel = Vector3::new(wish_dir.x * target_speed, wish_dir.y * target_speed, 0.0);
             if has_move_input {
-                self.m_horizontal_vel = accel_toward_xy(
-                    self.m_horizontal_vel,
-                    wish_vel,
-                    GROUND_ACCEL,
-                    dt,
-                );
+                self.m_horizontal_vel =
+                    accel_toward_xy(self.m_horizontal_vel, wish_vel, GROUND_ACCEL, dt);
             } else {
                 self.m_horizontal_vel =
                     apply_ground_friction_xy(self.m_horizontal_vel, GROUND_FRICTION, dt);

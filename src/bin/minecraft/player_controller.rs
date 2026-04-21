@@ -27,10 +27,7 @@ impl AiPlayerController {
 impl Controller for AiPlayerController {
     fn r#move(&self, current_position: &Vector3, displacement: &Vector3) -> Vector3 {
         let try_full = *current_position + *displacement;
-        let probe = AxisAlignedBox::new(
-            try_full + self.half_extent,
-            self.half_extent,
-        );
+        let probe = AxisAlignedBox::new(try_full + self.half_extent, self.half_extent);
         if self.world.borrow().collect_block_hits(&probe).is_empty() {
             return try_full;
         }

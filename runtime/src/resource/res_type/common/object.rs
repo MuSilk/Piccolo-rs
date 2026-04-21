@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::function::framework::{resource::resource::Resource};
+use crate::function::framework::resource::resource::Resource;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ObjectInstanceRes {

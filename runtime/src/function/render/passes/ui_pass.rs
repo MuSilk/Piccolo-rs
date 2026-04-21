@@ -1,11 +1,25 @@
-use std::{cell::RefCell, mem::offset_of, rc::Rc};
 use anyhow::Result;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*};
+use std::{cell::RefCell, mem::offset_of, rc::Rc};
+use vulkanalia::prelude::v1_0::*;
 
-use crate::{function::{render::{interface::vulkan::vulkan_rhi::{K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI}, passes::main_camera_pass::MainCameraSubPass, render_pass::{Descriptor, RenderPass, RenderPipelineBase}, render_resource::GlobalRenderResource, render_type::RHISamplerType}, ui::ui2::{UiDrawCmd, UiRuntime, UiVertex}}, shader::generated::shader::{UI_FRAG, UI_VERT}};
+use crate::{
+    function::{
+        render::{
+            interface::vulkan::vulkan_rhi::{
+                K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI,
+            },
+            passes::main_camera_pass::MainCameraSubPass,
+            render_pass::{Descriptor, RenderPass, RenderPipelineBase},
+            render_resource::GlobalRenderResource,
+            render_type::RHISamplerType,
+        },
+        ui::ui2::{UiDrawCmd, UiRuntime, UiVertex},
+    },
+    shader::generated::shader::{UI_FRAG, UI_VERT},
+};
 
-pub struct UIPassInitInfo<'a>{
+pub struct UIPassInitInfo<'a> {
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
@@ -37,9 +51,9 @@ impl UIPass {
         self.update_after_framebuffer_recreate(info.rhi)?;
         Ok(())
     }
-    
+
     pub fn draw(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime) {
-        let color = [1.0;4];
+        let color = [1.0; 4];
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "UI\0", color);
 
@@ -47,20 +61,19 @@ impl UIPass {
 
         rhi.pop_event(command_buffer);
     }
-    
+
     pub fn update_after_framebuffer_recreate(&mut self, _rhi: &VulkanRHI) -> Result<()> {
         Ok(())
     }
 
-    fn render_ui_draw_list(
-        &self,
-        rhi: &VulkanRHI,
-        ui_runtime: &UiRuntime,
-    ) -> Result<()> {
+    fn render_ui_draw_list(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime) -> Result<()> {
         self.sync_texture_resources(rhi, ui_runtime)?;
         let (_frame, draw_list) = ui_runtime.build_frame(1.0 / 60.0);
 
-        if draw_list.vertices.is_empty() || draw_list.indices.is_empty() || draw_list.commands.is_empty() {
+        if draw_list.vertices.is_empty()
+            || draw_list.indices.is_empty()
+            || draw_list.commands.is_empty()
+        {
             return Ok(());
         }
 
@@ -70,8 +83,18 @@ impl UIPass {
         data.update_vertex_buffer(rhi, vertex_size)?;
         data.update_index_buffer(rhi, index_size)?;
 
-        let vertex_ptr = rhi.map_memory(data.vertex_buffer_memory, 0, vertex_size as u64, vk::MemoryMapFlags::empty())?;
-        let index_ptr = rhi.map_memory(data.index_buffer_memory, 0, index_size as u64, vk::MemoryMapFlags::empty())?;
+        let vertex_ptr = rhi.map_memory(
+            data.vertex_buffer_memory,
+            0,
+            vertex_size as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
+        let index_ptr = rhi.map_memory(
+            data.index_buffer_memory,
+            0,
+            index_size as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
 
         unsafe {
             std::ptr::copy_nonoverlapping(
@@ -97,7 +120,11 @@ impl UIPass {
             return Ok(());
         }
 
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            self.m_render_pass.m_render_pipeline[0].pipeline,
+        );
         rhi.cmd_bind_vertex_buffers(command_buffer, 0, &[data.vertex_buffer], &[0]);
         rhi.cmd_bind_index_buffer(command_buffer, data.index_buffer, 0, vk::IndexType::UINT32);
         let viewport = vk::Viewport {
@@ -120,7 +147,7 @@ impl UIPass {
                     transform.as_ptr() as *const u8,
                     transform.len() * std::mem::size_of::<f32>(),
                 )
-            }
+            },
         );
 
         for cmd in draw_list.commands.iter() {
@@ -177,16 +204,14 @@ static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 4096;
 impl UIPass {
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.m_render_pass.m_descriptor_infos.clear();
-        let text_texture_binding = [
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                .build(),
-        ];
-        let text_texture_binding_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&text_texture_binding);
+        let text_texture_binding = [vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+            .build()];
+        let text_texture_binding_layout_create_info =
+            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&text_texture_binding);
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
             layout: rhi.create_descriptor_set_layout(&text_texture_binding_layout_create_info)?,
             descriptor_set: Default::default(),
@@ -258,12 +283,10 @@ impl UIPass {
             .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
         let set_layouts = &[self.m_render_pass.m_descriptor_infos[0].layout];
-        let push_constant_ranges = [
-            vk::PushConstantRange::builder()
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .offset(0)
-                .size(4 * std::mem::size_of::<f32>() as u32)
-        ];
+        let push_constant_ranges = [vk::PushConstantRange::builder()
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .offset(0)
+            .size(4 * std::mem::size_of::<f32>() as u32)];
         let layout_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(set_layouts)
             .push_constant_ranges(&push_constant_ranges);
@@ -290,10 +313,12 @@ impl UIPass {
         rhi.destroy_shader_module(vert_shader_module);
         rhi.destroy_shader_module(frag_shader_module);
 
-        self.m_render_pass.m_render_pipeline.push(RenderPipelineBase{
-            layout: pipeline_layout,
-            pipeline,
-        });
+        self.m_render_pass
+            .m_render_pipeline
+            .push(RenderPipelineBase {
+                layout: pipeline_layout,
+                pipeline,
+            });
 
         Ok(())
     }
@@ -358,7 +383,12 @@ impl UIPass {
     }
 
     fn destroy_texture_resources(&self, rhi: &VulkanRHI) {
-        for resource in self.texture_resources.borrow_mut().iter_mut().filter_map(Option::take) {
+        for resource in self
+            .texture_resources
+            .borrow_mut()
+            .iter_mut()
+            .filter_map(Option::take)
+        {
             if resource.view != vk::ImageView::null() {
                 rhi.destroy_image_view(resource.view);
             }
@@ -395,17 +425,16 @@ impl RendererData {
                 vk::MemoryPropertyFlags::DEVICE_LOCAL | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
             self.vertex_buffer_size = data_size;
-            
         }
         Ok(())
     }
 
-    fn update_index_buffer(&mut self, rhi: &VulkanRHI, data_size: usize) -> Result<()> { 
+    fn update_index_buffer(&mut self, rhi: &VulkanRHI, data_size: usize) -> Result<()> {
         if data_size > self.index_buffer_size {
             let data_size = data_size.next_power_of_two();
             rhi.destroy_buffer(self.index_buffer);
             rhi.free_memory(self.index_buffer_memory);
-            (self.index_buffer, self.index_buffer_memory)= rhi.create_buffer(
+            (self.index_buffer, self.index_buffer_memory) = rhi.create_buffer(
                 data_size as u64,
                 vk::BufferUsageFlags::INDEX_BUFFER,
                 vk::MemoryPropertyFlags::DEVICE_LOCAL | vk::MemoryPropertyFlags::HOST_COHERENT,
@@ -425,17 +454,15 @@ struct ImguiDrawVertex {
 }
 
 impl ImguiDrawVertex {
-    pub fn get_binding_descriptions() -> [vk::VertexInputBindingDescription; 1]{
-        [
-            vk::VertexInputBindingDescription::builder()
+    pub fn get_binding_descriptions() -> [vk::VertexInputBindingDescription; 1] {
+        [vk::VertexInputBindingDescription::builder()
             .binding(0)
             .stride(size_of::<ImguiDrawVertex>() as u32)
             .input_rate(vk::VertexInputRate::VERTEX)
-            .build()
-        ]
+            .build()]
     }
 
-    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3]{
+    pub fn get_attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
         [
             vk::VertexInputAttributeDescription::builder()
                 .binding(0)

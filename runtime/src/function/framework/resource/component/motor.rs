@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::function::framework::resource::resource::Resource;
 
-
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct MotorComponentRes {
     pub move_speed: f32,
@@ -14,6 +13,4 @@ pub struct MotorComponentRes {
 }
 
 #[typetag::serde]
-impl Resource for MotorComponentRes {
-
-}
+impl Resource for MotorComponentRes {}

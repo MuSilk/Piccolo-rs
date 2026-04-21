@@ -1,10 +1,25 @@
 use std::{cell::RefCell, os::raw::c_void, rc::Rc};
 
-use crate::{core::math::vector2::Vector2, function::render::{interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI}, render_common::{MeshInefficientPickPerdrawcallStorageBufferObject, MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}}, shader::generated::shader::{MESH_INEFFICIENT_PICK_FRAG, MESH_INEFFICIENT_PICK_VERT}};
+use crate::{
+    core::math::vector2::Vector2,
+    function::render::{
+        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI},
+        render_common::{
+            MeshInefficientPickPerdrawcallStorageBufferObject,
+            MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject,
+            MeshInefficientPickPerframeStorageBufferObject,
+        },
+        render_helper::round_up,
+        render_mesh::MeshVertex,
+        render_pass::{RenderPass, RenderPipelineBase},
+        render_resource::{GlobalRenderResource, RenderResource},
+    },
+    shader::generated::shader::{MESH_INEFFICIENT_PICK_FRAG, MESH_INEFFICIENT_PICK_VERT},
+};
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*};
+use vulkanalia::prelude::v1_0::*;
 
 pub struct PickPassInitInfo<'a> {
     pub per_mesh_layout: vk::DescriptorSetLayout,
@@ -12,12 +27,12 @@ pub struct PickPassInitInfo<'a> {
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
-
 #[derive(Default)]
-pub struct PickPass{
+pub struct PickPass {
     pub m_render_pass: RenderPass,
     m_per_mesh_layout: vk::DescriptorSetLayout,
-    m_mesh_inefficient_pick_perframe_storage_buffer_object: MeshInefficientPickPerframeStorageBufferObject,
+    m_mesh_inefficient_pick_perframe_storage_buffer_object:
+        MeshInefficientPickPerframeStorageBufferObject,
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC)]
@@ -39,20 +54,29 @@ impl PickPass {
         Ok(())
     }
 
-    pub fn prepare_pass_data(&mut self,rhi: &VulkanRHI, render_resource: &RenderResource) {
+    pub fn prepare_pass_data(&mut self, rhi: &VulkanRHI, render_resource: &RenderResource) {
         let swapchain_info = rhi.get_swapchain_info();
-        self.m_mesh_inefficient_pick_perframe_storage_buffer_object.rt_width = swapchain_info.extent.width;
-        self.m_mesh_inefficient_pick_perframe_storage_buffer_object.rt_height = swapchain_info.extent.height;
-        self.m_mesh_inefficient_pick_perframe_storage_buffer_object.proj_view_matrix =
-            render_resource.m_mesh_inefficient_pick_perframe_storage_buffer_object.proj_view_matrix.clone();
+        self.m_mesh_inefficient_pick_perframe_storage_buffer_object
+            .rt_width = swapchain_info.extent.width;
+        self.m_mesh_inefficient_pick_perframe_storage_buffer_object
+            .rt_height = swapchain_info.extent.height;
+        self.m_mesh_inefficient_pick_perframe_storage_buffer_object
+            .proj_view_matrix = render_resource
+            .m_mesh_inefficient_pick_perframe_storage_buffer_object
+            .proj_view_matrix
+            .clone();
     }
 
     pub fn recreate_framebuffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_framebuffer.attachments.iter().for_each(|attachment| {
-            rhi.destroy_image(attachment.image);
-            rhi.destroy_image_view(attachment.view);
-            rhi.free_memory(attachment.mem);
-        });
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .iter()
+            .for_each(|attachment| {
+                rhi.destroy_image(attachment.image);
+                rhi.destroy_image_view(attachment.view);
+                rhi.free_memory(attachment.mem);
+            });
         rhi.destroy_framebuffer(self.m_render_pass.m_framebuffer.framebuffer);
 
         self.setup_attachments(rhi)?;
@@ -64,9 +88,13 @@ impl PickPass {
         let picked_pixel_index = {
             let rhi = rhi.borrow();
             let swapchain_info = rhi.get_swapchain_info();
-            let pixel_x = (picked_uv.x * swapchain_info.viewport.width +  swapchain_info.viewport.x) as i32;
-            let pixel_y = (picked_uv.y * swapchain_info.viewport.height + swapchain_info.viewport.y) as i32;
-            if pixel_x >= swapchain_info.extent.width as i32 || pixel_y >= swapchain_info.extent.height as i32 {
+            let pixel_x =
+                (picked_uv.x * swapchain_info.viewport.width + swapchain_info.viewport.x) as i32;
+            let pixel_y =
+                (picked_uv.y * swapchain_info.viewport.height + swapchain_info.viewport.y) as i32;
+            if pixel_x >= swapchain_info.extent.width as i32
+                || pixel_y >= swapchain_info.extent.height as i32
+            {
                 return 0;
             }
             swapchain_info.extent.width as i32 * pixel_y + pixel_x as i32
@@ -75,7 +103,11 @@ impl PickPass {
             rhi.borrow_mut().prepare_context();
         }
         {
-            let resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+            let resource = self
+                .m_render_pass
+                .m_global_render_resource
+                .upgrade()
+                .unwrap();
             let mut resource = resource.borrow_mut();
             let current_frame_index = rhi.borrow().get_current_frame_index();
             resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
@@ -100,24 +132,25 @@ impl PickPass {
                 .src_queue_family_index(rhi.get_queue_family_indices().graphics_family.unwrap())
                 .dst_queue_family_index(rhi.get_queue_family_indices().graphics_family.unwrap())
                 .image(self.m_render_pass.m_framebuffer.attachments[0].image)
-                .subresource_range(vk::ImageSubresourceRange::builder()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .base_mip_level(0)
-                    .level_count(1)
-                    .base_array_layer(0)
-                    .layer_count(1)
-                    .build()
+                .subresource_range(
+                    vk::ImageSubresourceRange::builder()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .base_mip_level(0)
+                        .level_count(1)
+                        .base_array_layer(0)
+                        .layer_count(1)
+                        .build(),
                 )
                 .build();
-            
+
             rhi.cmd_pipeline_barrier(
-                rhi.get_current_command_buffer(), 
-                vk::PipelineStageFlags::ALL_COMMANDS, 
-                vk::PipelineStageFlags::ALL_COMMANDS, 
-                vk::DependencyFlags::empty(), 
-                &[], 
-                &[], 
-                &[transfer_to_render_barrier]
+                rhi.get_current_command_buffer(),
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::PipelineStageFlags::ALL_COMMANDS,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[transfer_to_render_barrier],
             );
 
             let swapchain_info = rhi.get_swapchain_info();
@@ -125,7 +158,7 @@ impl PickPass {
             rhi.cmd_set_viewport(command_buffer, 0, &[*swapchain_info.viewport]);
             rhi.cmd_set_scissor(command_buffer, 0, &[*swapchain_info.scissor]);
 
-            let mut  clear_values = [vk::ClearValue::default(); 2];
+            let mut clear_values = [vk::ClearValue::default(); 2];
             clear_values[0].color.uint32 = [0, 0, 0, 0];
             clear_values[1].depth_stencil.depth = 1.0;
             clear_values[1].depth_stencil.stencil = 0;
@@ -133,10 +166,11 @@ impl PickPass {
             let begin_info = vk::RenderPassBeginInfo::builder()
                 .render_pass(self.m_render_pass.m_framebuffer.render_pass)
                 .framebuffer(self.m_render_pass.m_framebuffer.framebuffer)
-                .render_area(vk::Rect2D::builder()
-                    .offset(vk::Offset2D { x: 0, y: 0 })
-                    .extent(swapchain_info.extent)
-                    .build()
+                .render_area(
+                    vk::Rect2D::builder()
+                        .offset(vk::Offset2D { x: 0, y: 0 })
+                        .extent(swapchain_info.extent)
+                        .build(),
                 )
                 .clear_values(&clear_values)
                 .build();
@@ -144,85 +178,142 @@ impl PickPass {
             rhi.cmd_begin_render_pass(command_buffer, &begin_info, vk::SubpassContents::INLINE);
 
             rhi.push_event(command_buffer, "Mesh Inefficient Pick\0", [1.0; 4]);
-            rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, self.m_render_pass.m_render_pipeline[0].pipeline);
-            
-            rhi.cmd_set_viewport(command_buffer, 0, &[*swapchain_info.viewport]);
-            rhi.cmd_set_scissor(command_buffer, 0, &[*swapchain_info.scissor]);
-            
-            let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
-
-            let perframe_dynamic_offset = round_up(
-                render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
-                render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+            rhi.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.m_render_pass.m_render_pipeline[0].pipeline,
             );
 
-            render_resource.borrow_mut()
-                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                    perframe_dynamic_offset + std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>() as u32;
-            unsafe{
+            rhi.cmd_set_viewport(command_buffer, 0, &[*swapchain_info.viewport]);
+            rhi.cmd_set_scissor(command_buffer, 0, &[*swapchain_info.scissor]);
+
+            let render_resource = self
+                .m_render_pass
+                .m_global_render_resource
+                .upgrade()
+                .unwrap();
+
+            let perframe_dynamic_offset = round_up(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._min_storage_buffer_offset_alignment,
+            );
+
+            render_resource
+                .borrow_mut()
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+                perframe_dynamic_offset
+                    + std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>() as u32;
+            unsafe {
                 std::ptr::copy_nonoverlapping(
-                    &self.m_mesh_inefficient_pick_perframe_storage_buffer_object as *const _ as *const c_void,
-                    render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
-                    std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>()
+                    &self.m_mesh_inefficient_pick_perframe_storage_buffer_object as *const _
+                        as *const c_void,
+                    render_resource
+                        .borrow()
+                        ._storage_buffer
+                        ._global_upload_ringbuffer_pointer
+                        .add(perframe_dynamic_offset as usize),
+                    std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>(),
                 );
             }
 
             let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
 
-            for render_mesh_node in m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap().borrow().iter() {
+            for render_mesh_node in m_visible_nodes
+                .p_main_camera_visible_mesh_nodes
+                .upgrade()
+                .unwrap()
+                .borrow()
+                .iter()
+            {
                 let mut object = MeshInefficientPickPerdrawcallStorageBufferObject::default();
                 object.model_matrix[0] = *render_mesh_node.model_matrix;
                 object.node_ids[0] = render_mesh_node.node_id;
                 object.enable_vertex_blending[0] = 0;
 
                 let perdrawcall_dynamic_offset = round_up(
-                    render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-                    render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+                    render_resource
+                        .borrow()
+                        ._storage_buffer
+                        ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+                    render_resource
+                        .borrow()
+                        ._storage_buffer
+                        ._min_storage_buffer_offset_alignment,
                 );
-                render_resource.borrow_mut()
-                    ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                        perdrawcall_dynamic_offset + std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>() as u32;
+                render_resource
+                    .borrow_mut()
+                    ._storage_buffer
+                    ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+                    perdrawcall_dynamic_offset
+                        + std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>()
+                            as u32;
 
-                unsafe{
+                unsafe {
                     std::ptr::copy_nonoverlapping(
                         &object as *const _ as *const c_void,
-                        render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
-                        std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>()
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._global_upload_ringbuffer_pointer
+                            .add(perdrawcall_dynamic_offset as usize),
+                        std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>(),
                     );
                 }
 
                 rhi.cmd_bind_descriptor_sets(
-                    command_buffer, 
-                    vk::PipelineBindPoint::GRAPHICS, 
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
                     self.m_render_pass.m_render_pipeline[0].layout,
                     0,
                     &[
                         self.m_render_pass.m_descriptor_infos[0].descriptor_set,
-                        render_mesh_node.ref_mesh.upgrade().unwrap().mesh_vertex_blending_descriptor_set,
+                        render_mesh_node
+                            .ref_mesh
+                            .upgrade()
+                            .unwrap()
+                            .mesh_vertex_blending_descriptor_set,
                     ],
                     &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
                 );
 
-                let buffers = [
-                    render_mesh_node.ref_mesh.upgrade().unwrap().mesh_vertex_position_buffer,
-                ];
+                let buffers = [render_mesh_node
+                    .ref_mesh
+                    .upgrade()
+                    .unwrap()
+                    .mesh_vertex_position_buffer];
 
                 let ref_mesh = render_mesh_node.ref_mesh.upgrade().unwrap();
-                
+
                 rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0]);
-                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
+                rhi.cmd_bind_index_buffer(
+                    command_buffer,
+                    ref_mesh.mesh_index_buffer,
+                    0,
+                    ref_mesh.mesh_index_type,
+                );
                 rhi.cmd_draw_indexed(
-                    command_buffer, 
-                    render_mesh_node.ref_mesh.upgrade().unwrap().mesh_index_count, 
-                    1, 
-                    0, 
-                    0, 
-                    0
+                    command_buffer,
+                    render_mesh_node
+                        .ref_mesh
+                        .upgrade()
+                        .unwrap()
+                        .mesh_index_count,
+                    1,
+                    0,
+                    0,
+                    0,
                 );
             }
 
-            //todo: render 
-            
+            //todo: render
+
             rhi.pop_event(command_buffer);
             rhi.cmd_end_render_pass(command_buffer);
         }
@@ -240,12 +331,13 @@ impl PickPass {
                 .buffer_offset(0)
                 .buffer_row_length(0)
                 .buffer_image_height(0)
-                .image_subresource(vk::ImageSubresourceLayers::builder()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .mip_level(0)
-                    .base_array_layer(0)
-                    .layer_count(1)
-                    .build()
+                .image_subresource(
+                    vk::ImageSubresourceLayers::builder()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .mip_level(0)
+                        .base_array_layer(0)
+                        .layer_count(1)
+                        .build(),
                 )
                 .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
                 .image_extent(vk::Extent3D {
@@ -255,12 +347,15 @@ impl PickPass {
                 })
                 .build();
 
-            let buffer_size = rhi.get_swapchain_info().extent.width * swapchain_info.extent.height * 4;
-            let (staging_buffer, staging_buffer_mem) = rhi.create_buffer(
-                buffer_size as u64,
-                vk::BufferUsageFlags::TRANSFER_DST,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            ).unwrap();
+            let buffer_size =
+                rhi.get_swapchain_info().extent.width * swapchain_info.extent.height * 4;
+            let (staging_buffer, staging_buffer_mem) = rhi
+                .create_buffer(
+                    buffer_size as u64,
+                    vk::BufferUsageFlags::TRANSFER_DST,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                )
+                .unwrap();
 
             let copy_to_buffer_barrier = vk::ImageMemoryBarrier::builder()
                 .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
@@ -270,13 +365,14 @@ impl PickPass {
                 .src_queue_family_index(rhi.get_queue_family_indices().graphics_family.unwrap())
                 .dst_queue_family_index(rhi.get_queue_family_indices().graphics_family.unwrap())
                 .image(self.m_render_pass.m_framebuffer.attachments[0].image)
-                .subresource_range(vk::ImageSubresourceRange::builder()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .base_mip_level(0)
-                    .level_count(1)
-                    .base_array_layer(0)
-                    .layer_count(1)
-                    .build()
+                .subresource_range(
+                    vk::ImageSubresourceRange::builder()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .base_mip_level(0)
+                        .level_count(1)
+                        .base_array_layer(0)
+                        .layer_count(1)
+                        .build(),
                 )
                 .build();
 
@@ -291,24 +387,25 @@ impl PickPass {
             );
 
             rhi.cmd_copy_image_to_buffer(
-                command_buffer, 
-                self.m_render_pass.m_framebuffer.attachments[0].image, 
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL, 
-                staging_buffer, 
-                &[region]
+                command_buffer,
+                self.m_render_pass.m_framebuffer.attachments[0].image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                staging_buffer,
+                &[region],
             );
 
             rhi.end_single_time_commands(command_buffer).unwrap();
 
-            let data = rhi.map_memory(
-                staging_buffer_mem, 
-                0, 
-                buffer_size as u64, 
-                vk::MemoryMapFlags::empty()).unwrap() as *const u32;
-            
-            let node_id = unsafe {
-                *data.add(picked_pixel_index as usize)
-            };
+            let data = rhi
+                .map_memory(
+                    staging_buffer_mem,
+                    0,
+                    buffer_size as u64,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap() as *const u32;
+
+            let node_id = unsafe { *data.add(picked_pixel_index as usize) };
             rhi.unmap_memory(staging_buffer_mem);
             rhi.destroy_buffer(staging_buffer);
             rhi.free_memory(staging_buffer_mem);
@@ -320,10 +417,12 @@ impl PickPass {
 
 impl PickPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
-
         let swapchain_info = rhi.get_swapchain_info();
 
-        self.m_render_pass.m_framebuffer.attachments.resize_with(2, Default::default);
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .resize_with(2, Default::default);
 
         self.m_render_pass.m_framebuffer.attachments[0].format = vk::Format::R32_UINT;
         (
@@ -337,14 +436,17 @@ impl PickPass {
             vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
             vk::ImageCreateFlags::empty(),
-            1, 1
+            1,
+            1,
         )?;
 
         self.m_render_pass.m_framebuffer.attachments[0].view = rhi.create_image_view(
             self.m_render_pass.m_framebuffer.attachments[0].image,
             self.m_render_pass.m_framebuffer.attachments[0].format,
             vk::ImageAspectFlags::COLOR,
-            vk::ImageViewType::_2D, 1, 1
+            vk::ImageViewType::_2D,
+            1,
+            1,
         )?;
 
         Ok(())
@@ -373,23 +475,19 @@ impl PickPass {
                 .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                 .build(),
         ];
-        let color_attachment_refs = [
-            vk::AttachmentReference::builder()
-                .attachment(0)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build(),
-        ];
+        let color_attachment_refs = [vk::AttachmentReference::builder()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
         let depth_attachment_ref = vk::AttachmentReference::builder()
             .attachment(1)
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .build();
-        let subpasses = [
-            vk::SubpassDescription::builder()
-                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-                .color_attachments(&color_attachment_refs)
-                .depth_stencil_attachment(&depth_attachment_ref)
-                .build(),
-        ];
+        let subpasses = [vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachment_refs)
+            .depth_stencil_attachment(&depth_attachment_ref)
+            .build()];
         let dependencies: [vk::SubpassDependency; 0] = [];
 
         let create_info = vk::RenderPassCreateInfo::builder()
@@ -403,10 +501,9 @@ impl PickPass {
     }
 
     fn setup_framebuffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
-
         let attachments = [
             self.m_render_pass.m_framebuffer.attachments[0].view,
-            *rhi.get_depth_image_info().image_view
+            *rhi.get_depth_image_info().image_view,
         ];
 
         let framebuffer_create_info = vk::FramebufferCreateInfo::builder()
@@ -417,13 +514,16 @@ impl PickPass {
             .layers(1)
             .build();
 
-        self.m_render_pass.m_framebuffer.framebuffer = rhi.create_framebuffer(&framebuffer_create_info)?;
+        self.m_render_pass.m_framebuffer.framebuffer =
+            rhi.create_framebuffer(&framebuffer_create_info)?;
 
         Ok(())
     }
 
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_descriptor_infos.resize_with(1, Default::default);
+        self.m_render_pass
+            .m_descriptor_infos
+            .resize_with(1, Default::default);
         let layout_bindings = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
@@ -445,17 +545,19 @@ impl PickPass {
                 .build(),
         ];
 
-        let layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&layout_bindings);
+        let layout_create_info =
+            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&layout_bindings);
 
-        self.m_render_pass.m_descriptor_infos[0].layout = rhi.create_descriptor_set_layout(&layout_create_info)?;
+        self.m_render_pass.m_descriptor_infos[0].layout =
+            rhi.create_descriptor_set_layout(&layout_create_info)?;
 
         Ok(())
     }
 
     fn setup_pipelines(&mut self, rhi: &VulkanRHI) -> Result<()> {
-
-        self.m_render_pass.m_render_pipeline.resize_with(1, Default::default);
+        self.m_render_pass
+            .m_render_pipeline
+            .resize_with(1, Default::default);
 
         let vert_shader_module = rhi.create_shader_module(&MESH_INEFFICIENT_PICK_VERT)?;
         let frag_shader_module = rhi.create_shader_module(&MESH_INEFFICIENT_PICK_FRAG)?;
@@ -497,21 +599,20 @@ impl PickPass {
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::_1);
 
-        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(true)
-            .depth_write_enable(true)
-            .depth_compare_op(vk::CompareOp::LESS)
-            .stencil_test_enable(false);
+        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+            vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS)
+                .stencil_test_enable(false);
 
         let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
             .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
-        let attachments = [
-            vk::PipelineColorBlendAttachmentState::builder()
-                .color_write_mask(vk::ColorComponentFlags::all())
-                .blend_enable(false)
-                .build(),
-        ];
+        let attachments = [vk::PipelineColorBlendAttachmentState::builder()
+            .color_write_mask(vk::ColorComponentFlags::all())
+            .blend_enable(false)
+            .build()];
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
             .logic_op(vk::LogicOp::COPY)
@@ -520,10 +621,9 @@ impl PickPass {
 
         let set_layouts = &[
             self.m_render_pass.m_descriptor_infos[0].layout,
-            self.m_per_mesh_layout, 
+            self.m_per_mesh_layout,
         ];
-        let layout_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(set_layouts);
+        let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
         let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -548,7 +648,7 @@ impl PickPass {
         rhi.destroy_shader_module(vert_shader_module);
         rhi.destroy_shader_module(frag_shader_module);
 
-        self.m_render_pass.m_render_pipeline[0] = RenderPipelineBase{
+        self.m_render_pass.m_render_pipeline[0] = RenderPipelineBase {
             layout: pipeline_layout,
             pipeline,
         };
@@ -560,34 +660,50 @@ impl PickPass {
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
             .set_layouts(&set_layouts);
-        
-        self.m_render_pass.m_descriptor_infos[0].descriptor_set = rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+        self.m_render_pass.m_descriptor_infos[0].descriptor_set =
+            rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let perframe_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>() as u64)
-                .build()
-        ];
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
 
-        let perdrawcall_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>() as u64)
-                .build()
-        ];
-        
-        let perdrawcall_vertex_blending_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject>() as u64)
-                .build()
-        ];
+        let perframe_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>() as u64)
+            .build()];
+
+        let perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>() as u64)
+            .build()];
+
+        let perdrawcall_vertex_blending_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(std::mem::size_of::<
+                MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject,
+            >() as u64)
+            .build()];
 
         let write_info = [
             vk::WriteDescriptorSet::builder()

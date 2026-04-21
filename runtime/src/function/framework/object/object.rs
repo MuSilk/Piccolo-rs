@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{function::framework::{object::object_id_allocator::GObjectID}};
+use crate::function::framework::object::object_id_allocator::GObjectID;
 
 pub struct GObject {
     m_id: GObjectID,
@@ -9,7 +9,6 @@ pub struct GObject {
 }
 
 impl GObject {
-
     pub fn new(id: GObjectID) -> Rc<RefCell<GObject>> {
         Rc::new(RefCell::new(GObject {
             m_id: id,
@@ -17,7 +16,7 @@ impl GObject {
             m_definition_url: String::new(),
         }))
     }
-    
+
     pub fn get_id(&self) -> GObjectID {
         self.m_id
     }

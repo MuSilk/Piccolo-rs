@@ -1,16 +1,24 @@
 use runtime_derive::ComponentTrait;
 
-use crate::{core::math::{quaternion::Quaternion, vector3::Vector3}, function::{framework::{component::transform_component::TransformComponent, resource::component::motor::MotorComponentRes}, input::{game_command_system::{GameCommand, GameCommandInputSystem}}}};
+use crate::{
+    core::math::{quaternion::Quaternion, vector3::Vector3},
+    function::{
+        framework::{
+            component::transform_component::TransformComponent,
+            resource::component::motor::MotorComponentRes,
+        },
+        input::game_command_system::{GameCommand, GameCommandInputSystem},
+    },
+};
 
-pub trait Controller{
+pub trait Controller {
     fn r#move(&self, current_position: &Vector3, displacement: &Vector3) -> Vector3;
 }
 
 #[derive(ComponentTrait)]
 pub struct MotorComponent {
-
     m_motor_res: MotorComponentRes,
-    
+
     m_move_speed_ratio: f32,
     m_vertical_move_speed: f32,
     m_jump_horizontal_speed_ratio: f32,
@@ -27,12 +35,10 @@ pub struct MotorComponent {
 }
 
 impl MotorComponent {
-
     pub fn new<T: 'static + Controller>(controller: Box<T>) -> Self {
         Self {
-
             m_motor_res: MotorComponentRes::default(),
-            
+
             m_move_speed_ratio: 0.0,
             m_vertical_move_speed: 0.0,
             m_jump_horizontal_speed_ratio: 0.0,
@@ -61,10 +67,10 @@ impl MotorComponent {
     }
 
     pub fn tick(
-        &mut self, 
+        &mut self,
         input_system: &GameCommandInputSystem,
-        delta_time: f32, 
-        transform: &mut TransformComponent
+        delta_time: f32,
+        transform: &mut TransformComponent,
     ) {
         let command = input_system.get_game_command();
 
@@ -83,47 +89,57 @@ impl MotorComponent {
 
 impl MotorComponent {
     fn calculate_desired_horizontal_move_speed(&mut self, delta_time: f32, command: &GameCommand) {
-        let has_move_command = 
-            command.intersects(GameCommand::forward | GameCommand::backward | GameCommand::left | GameCommand::right) &&
-            !command.contains(GameCommand::free_camera);
+        let has_move_command = command.intersects(
+            GameCommand::forward | GameCommand::backward | GameCommand::left | GameCommand::right,
+        ) && !command.contains(GameCommand::free_camera);
         let has_sprint_command = command.contains(GameCommand::sprint);
 
         let (is_acceleration, min_speed_ratio, max_speed_ratio, final_acceleration) =
-            if has_move_command && self.m_move_speed_ratio >= self.m_motor_res.max_move_speed_ratio {
+            if has_move_command && self.m_move_speed_ratio >= self.m_motor_res.max_move_speed_ratio
+            {
                 (
                     has_sprint_command,
-                    self.m_motor_res.max_move_speed_ratio, 
+                    self.m_motor_res.max_move_speed_ratio,
                     self.m_motor_res.max_sprint_speed_ratio,
-                    self.m_motor_res.sprint_acceleration
+                    self.m_motor_res.sprint_acceleration,
                 )
-            }
-            else if has_move_command{
-                (true, 0.0, self.m_motor_res.max_move_speed_ratio, self.m_motor_res.move_acceleration)
-            }
-            else{
-                (false, 0.0, self.m_motor_res.max_sprint_speed_ratio, self.m_motor_res.move_acceleration)
+            } else if has_move_command {
+                (
+                    true,
+                    0.0,
+                    self.m_motor_res.max_move_speed_ratio,
+                    self.m_motor_res.move_acceleration,
+                )
+            } else {
+                (
+                    false,
+                    0.0,
+                    self.m_motor_res.max_sprint_speed_ratio,
+                    self.m_motor_res.move_acceleration,
+                )
             };
-        self.m_move_speed_ratio += if is_acceleration {1.0} else {-1.0} * final_acceleration * delta_time;
-        self.m_move_speed_ratio = self.m_move_speed_ratio.clamp(min_speed_ratio, max_speed_ratio);
+        self.m_move_speed_ratio +=
+            if is_acceleration { 1.0 } else { -1.0 } * final_acceleration * delta_time;
+        self.m_move_speed_ratio = self
+            .m_move_speed_ratio
+            .clamp(min_speed_ratio, max_speed_ratio);
     }
 
     fn calculate_desired_vertical_move_speed(&mut self, delta_time: f32, command: &GameCommand) {
         if self.m_motor_res.jump_height == 0.0 {
             return;
         }
-        let gravity = 9.8;//todo: configable gravity
+        let gravity = 9.8; //todo: configable gravity
 
         if self.m_is_landing {
             if command.contains(GameCommand::jump) {
                 self.m_is_landing = false;
                 self.m_vertical_move_speed = (self.m_motor_res.jump_height * 2.0 * gravity).sqrt();
-                self.m_jump_horizontal_speed_ratio = self.m_move_speed_ratio; 
-            }
-            else{
+                self.m_jump_horizontal_speed_ratio = self.m_move_speed_ratio;
+            } else {
                 self.m_vertical_move_speed = -gravity * delta_time;
             }
-        }
-        else{
+        } else {
             self.m_vertical_move_speed -= gravity * delta_time;
         }
     }
@@ -152,7 +168,8 @@ impl MotorComponent {
         if command.contains(GameCommand::right) {
             self.m_desired_horizontal_move_direction -= left_dir;
         }
-        self.m_desired_horizontal_move_direction = self.m_desired_horizontal_move_direction.normalize();
+        self.m_desired_horizontal_move_direction =
+            self.m_desired_horizontal_move_direction.normalize();
     }
 
     fn calculate_desired_displacement(&mut self, delta_time: f32) {
@@ -161,26 +178,28 @@ impl MotorComponent {
         } else {
             self.m_jump_horizontal_speed_ratio
         };
-        self.m_desired_displacement = 
-            self.m_desired_horizontal_move_direction * self.m_motor_res.move_speed * horizontal_speed_ratio * delta_time +
-            Vector3::UNIT_Z * self.m_vertical_move_speed * delta_time;
+        self.m_desired_displacement = self.m_desired_horizontal_move_direction
+            * self.m_motor_res.move_speed
+            * horizontal_speed_ratio
+            * delta_time
+            + Vector3::UNIT_Z * self.m_vertical_move_speed * delta_time;
     }
 
     fn calculate_target_position(&mut self, position: &Vector3) {
-        let mut final_position = self.m_controller.r#move(position, &self.m_desired_displacement);
+        let mut final_position = self
+            .m_controller
+            .r#move(position, &self.m_desired_displacement);
         // character always above z-plane
 
         if self.m_is_landing {
             if final_position.z != position.z {
                 self.m_is_landing = false;
             }
-        }
-        else{
+        } else {
             if final_position.z + self.m_desired_displacement.z <= 0.0 {
                 final_position.z = 0.0;
                 self.m_is_landing = true;
-            }
-            else if final_position.z == position.z {
+            } else if final_position.z == position.z {
                 self.m_is_landing = true;
             }
         }

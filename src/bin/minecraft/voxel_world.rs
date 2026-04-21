@@ -4,15 +4,23 @@
 //!
 //! 区块切换时网格合并 `build_world_mesh` 计算量大；在后台线程构建、主线程每帧取回结果，避免逻辑帧长时间卡住。
 
-use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
-use serde::{Deserialize, Serialize};
 use runtime::{
-    core::math::{axis_aligned::AxisAlignedBox, matrix4::Matrix4x4, transform::Transform, vector3::Vector3},
+    core::math::{
+        axis_aligned::AxisAlignedBox, matrix4::Matrix4x4, transform::Transform, vector3::Vector3,
+    },
     engine::Engine,
     function::{
         framework::{
-            component::{component::ComponentTrait, mesh::mesh_component::MeshComponent, transform_component::TransformComponent},
+            component::{
+                component::ComponentTrait, mesh::mesh_component::MeshComponent,
+                transform_component::TransformComponent,
+            },
             object::object_id_allocator::GObjectID,
             resource::component::mesh::MeshComponentRes,
             scene::scene::Scene,
@@ -21,8 +29,9 @@ use runtime::{
             render_object::{GameObjectDynamicMeshDesc, GameObjectMeshDesc, GameObjectPartDesc},
             render_type::MeshVertexDataDefinition,
         },
-    }
+    },
 };
+use serde::{Deserialize, Serialize};
 
 /// 与 `block.json` 结构一致，避免注册与 `minecraft::BlockRes` 相同的 typetag 类型。
 #[derive(Deserialize)]
@@ -60,9 +69,7 @@ fn world_chunk_coords(wx: i32, wy: i32) -> (i32, i32) {
 
 /// 格点伪随机 \([0,1)\)，无三角函数，地形在大尺度上不再呈简单周期。
 fn lattice_noise01(ix: i32, iy: i32) -> f32 {
-    let mut n = (ix as u32)
-        .wrapping_mul(0x9E37_79B1)
-        ^ (iy as u32).wrapping_mul(0x85EB_CA6B);
+    let mut n = (ix as u32).wrapping_mul(0x9E37_79B1) ^ (iy as u32).wrapping_mul(0x85EB_CA6B);
     n = n.wrapping_mul(n | 1);
     n ^= n >> 16;
     n = n.wrapping_mul(0x7FEB_352D);
@@ -172,7 +179,11 @@ fn is_cave_air(wx: i32, wy: i32, wz: i32, top: i32) -> bool {
 
     // 两层 3D 噪声叠加形成连通洞穴（频率略降低，让洞更大、更容易观察到）。
     let n1 = value_noise_3d(x * CAVE_FREQ_1_XY, y * CAVE_FREQ_1_XY, z * CAVE_FREQ_1_Z);
-    let n2 = value_noise_3d(x * CAVE_FREQ_2_XY + 37.0, y * CAVE_FREQ_2_XY - 11.0, z * CAVE_FREQ_2_Z + 5.0);
+    let n2 = value_noise_3d(
+        x * CAVE_FREQ_2_XY + 37.0,
+        y * CAVE_FREQ_2_XY - 11.0,
+        z * CAVE_FREQ_2_Z + 5.0,
+    );
     let cave = n1 * 0.72 + n2 * 0.28;
 
     // 地表以下较深处：正常洞穴密度。
@@ -237,7 +248,10 @@ fn tree_voxel(wx: i32, wy: i32, wz: i32) -> VoxelKind {
             let dx = (wx - ax).abs();
             let dy = (wy - ay).abs();
             let dz = (wz - crown_cz).abs();
-            let in_crown = dx <= 2 && dy <= 2 && dz <= 2 && (dx + dy + dz <= 4 || (dx <= 1 && dy <= 1 && dz <= 2));
+            let in_crown = dx <= 2
+                && dy <= 2
+                && dz <= 2
+                && (dx + dy + dz <= 4 || (dx <= 1 && dy <= 1 && dz <= 2));
             if in_crown && !(wx == ax && wy == ay && wz <= trunk_top + 1) {
                 return VoxelKind::Leaves;
             }
@@ -767,13 +781,12 @@ impl VoxelWorld {
         let mesh = Rc::new(RefCell::new(build_chunk_mesh(cx, cy, &self.overrides)));
         let object_id = scene.spawn();
         let mut mesh_component = Box::new(MeshComponent::default());
-        mesh_component.post_load_resource(
-            object_id,
-            engine.asset_manager(),
-            &self.mesh_res,
-        );
-        mesh_component.m_raw_meshes.resize(1, GameObjectPartDesc::default());
-        mesh_component.m_raw_meshes[0].m_mesh_desc = GameObjectMeshDesc::DynamicMesh(Rc::clone(&mesh));
+        mesh_component.post_load_resource(object_id, engine.asset_manager(), &self.mesh_res);
+        mesh_component
+            .m_raw_meshes
+            .resize(1, GameObjectPartDesc::default());
+        mesh_component.m_raw_meshes[0].m_mesh_desc =
+            GameObjectMeshDesc::DynamicMesh(Rc::clone(&mesh));
 
         let mut transform = Box::new(TransformComponent::default());
         transform.post_load_resource(Transform::new(
@@ -789,7 +802,8 @@ impl VoxelWorld {
                 RefCell::new(transform),
             ],
         );
-        self.loaded_chunks.insert((cx, cy), ChunkRenderEntry { object_id, mesh });
+        self.loaded_chunks
+            .insert((cx, cy), ChunkRenderEntry { object_id, mesh });
     }
 
     fn rebuild_loaded_chunk(&mut self, cx: i32, cy: i32) {
@@ -942,7 +956,12 @@ impl VoxelWorld {
     ///
     /// **仅区块中心变化**时走后台线程，避免边跑图边算大图卡逻辑帧。体素编辑后的网格刷新请用
     /// [`Self::flush_voxel_mesh_sync`]，不要依赖本函数的 `mesh_rebuild_queued` 分支（已移除）。
-    pub fn update_streaming(&mut self, engine: &Engine, scene: &mut Scene, player_position: &Vector3) {
+    pub fn update_streaming(
+        &mut self,
+        engine: &Engine,
+        scene: &mut Scene,
+        player_position: &Vector3,
+    ) {
         let wx = player_position.x.floor() as i32;
         let wy = player_position.y.floor() as i32;
         let (cx, cy) = world_chunk_coords(wx, wy);

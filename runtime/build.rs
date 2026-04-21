@@ -6,9 +6,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:warning= start compiling GLSL shaders...");
 
     let project_dir = env::var("CARGO_MANIFEST_DIR")?;
-    let shader_dir = Path::new(&project_dir).join("src").join("shader").join("glsl");
-    let spv_dir = Path::new(&project_dir).join("src").join("shader").join("generated").join("spv");
-    let shader_rs_path = Path::new(&project_dir).join("src").join("shader").join("generated").join("shader.rs");
+    let shader_dir = Path::new(&project_dir)
+        .join("src")
+        .join("shader")
+        .join("glsl");
+    let spv_dir = Path::new(&project_dir)
+        .join("src")
+        .join("shader")
+        .join("generated")
+        .join("spv");
+    let shader_rs_path = Path::new(&project_dir)
+        .join("src")
+        .join("shader")
+        .join("generated")
+        .join("shader.rs");
 
     if fs::exists(&spv_dir)? {
         fs::remove_dir_all(&spv_dir)?;
@@ -24,7 +35,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match path.extension().and_then(|s| s.to_str()) {
             Some("vert") | Some("frag") | Some("geom") => {
                 println!("cargo:warning= compiling shader: {:?}", path);
-                let generated_file_name = path.file_name().unwrap().to_str().unwrap().to_owned() + ".spv";
+                let generated_file_name =
+                    path.file_name().unwrap().to_str().unwrap().to_owned() + ".spv";
                 let result = Command::new(GLSLC_PATH)
                     .arg(&path)
                     .arg("-o")
@@ -38,12 +50,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 shader_module_lines.push(format!(
                     "pub static {}: &[u8] = include_bytes!(r\"{}\");",
-                    path.file_name().unwrap().to_str().unwrap().to_uppercase().replace('.', "_"),
+                    path.file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_uppercase()
+                        .replace('.', "_"),
                     spv_dir.join(&generated_file_name).display()
                 ));
 
                 println!("cargo:rerun-if-changed={}", path.display());
-            },
+            }
             _ => {}
         }
     }

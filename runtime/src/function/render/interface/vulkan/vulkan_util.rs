@@ -1,21 +1,24 @@
 use std::ptr::copy_nonoverlapping;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use vulkanalia::{bytecode::Bytecode, prelude::v1_0::*};
 
 use crate::function::render::interface::vulkan::vulkan_rhi::VulkanRHI;
 
 pub fn find_memory_type(
     instance: &Instance,
-    physical_device: vk::PhysicalDevice, 
-    type_filter: u32, 
-    properties_flag: vk::MemoryPropertyFlags
-) -> Result<u32>{
-    let physical_device_memory_properties = unsafe {
-        instance.get_physical_device_memory_properties(physical_device)
-    };
+    physical_device: vk::PhysicalDevice,
+    type_filter: u32,
+    properties_flag: vk::MemoryPropertyFlags,
+) -> Result<u32> {
+    let physical_device_memory_properties =
+        unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
-    for (i, memory_type) in physical_device_memory_properties.memory_types.iter().enumerate() {
+    for (i, memory_type) in physical_device_memory_properties
+        .memory_types
+        .iter()
+        .enumerate()
+    {
         if (type_filter & (1 << i) != 0) && memory_type.property_flags.contains(properties_flag) {
             return Ok(i as u32);
         }
@@ -39,10 +42,10 @@ pub fn create_buffer(
     physical_device: vk::PhysicalDevice,
     size: vk::DeviceSize,
     usage: vk::BufferUsageFlags,
-    properties: vk::MemoryPropertyFlags
+    properties: vk::MemoryPropertyFlags,
 ) -> Result<(vk::Buffer, vk::DeviceMemory)> {
     let buffer_info = vk::BufferCreateInfo::builder()
-        .size(size) 
+        .size(size)
         .usage(usage)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
@@ -51,9 +54,12 @@ pub fn create_buffer(
         let requirements = device.get_buffer_memory_requirements(buffer);
         let info = vk::MemoryAllocateInfo::builder()
             .allocation_size(requirements.size)
-            .memory_type_index(
-                find_memory_type(instance, physical_device, requirements.memory_type_bits, properties)?
-            );
+            .memory_type_index(find_memory_type(
+                instance,
+                physical_device,
+                requirements.memory_type_bits,
+                properties,
+            )?);
 
         let buffer_memory = device.allocate_memory(&info, None)?;
         device.bind_buffer_memory(buffer, buffer_memory, 0)?;
@@ -68,9 +74,8 @@ pub fn copy_buffer(
     dst_buffer: vk::Buffer,
     src_offset: vk::DeviceSize,
     dst_offset: vk::DeviceSize,
-    size: vk::DeviceSize
+    size: vk::DeviceSize,
 ) -> Result<()> {
-
     let command_buffer = rhi.begin_single_time_commands()?;
 
     let copy_region = vk::BufferCopy::builder()
@@ -79,7 +84,12 @@ pub fn copy_buffer(
         .dst_offset(dst_offset);
 
     unsafe {
-        device.cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &[copy_region.build()]);
+        device.cmd_copy_buffer(
+            command_buffer,
+            src_buffer,
+            dst_buffer,
+            &[copy_region.build()],
+        );
     }
 
     rhi.end_single_time_commands(command_buffer)?;
@@ -94,7 +104,7 @@ fn copy_buffer_to_image(
     width: u32,
     height: u32,
     layout_count: u32,
-) -> Result<()> { 
+) -> Result<()> {
     let command_buffer = rhi.begin_single_time_commands()?;
 
     let subresource = vk::ImageSubresourceLayers::builder()
@@ -109,7 +119,11 @@ fn copy_buffer_to_image(
         .buffer_image_height(0)
         .image_subresource(subresource)
         .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-        .image_extent(vk::Extent3D { width, height, depth: 1 });
+        .image_extent(vk::Extent3D {
+            width,
+            height,
+            depth: 1,
+        });
 
     unsafe {
         rhi.m_device.cmd_copy_buffer_to_image(
@@ -134,45 +148,46 @@ fn transition_image_layout(
     mip_levels: u32,
     aspect_mask_bits: vk::ImageAspectFlags,
 ) -> Result<()> {
-
-    let (
-        src_access_mask,
-        dst_access_mask,
-        src_stage_mask,
-        dst_stage_mask,
-    ) = match (old_layout, new_layout) {
-        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
-            vk::AccessFlags::empty(),
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::PipelineStageFlags::TRANSFER,
-        ),
-        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::FRAGMENT_SHADER,
-        ),
-        (vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
-            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-            vk::AccessFlags::TRANSFER_READ,
-            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-            vk::PipelineStageFlags::TRANSFER,
-        ),
-        (vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
-            vk::AccessFlags::TRANSFER_READ,
-            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
-        ),
-        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::AccessFlags::TRANSFER_READ,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::TRANSFER,
-        ),
-        _ => return Err(anyhow!("Unsupported image layout transition!")),
-    };
+    let (src_access_mask, dst_access_mask, src_stage_mask, dst_stage_mask) =
+        match (old_layout, new_layout) {
+            (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (
+                vk::AccessFlags::empty(),
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+            ),
+            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::AccessFlags::SHADER_READ,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+            ),
+            (
+                vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            ) => (
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                vk::AccessFlags::TRANSFER_READ,
+                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                vk::PipelineStageFlags::TRANSFER,
+            ),
+            (
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ) => (
+                vk::AccessFlags::TRANSFER_READ,
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            ),
+            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL) => (
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::AccessFlags::TRANSFER_READ,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TRANSFER,
+            ),
+            _ => return Err(anyhow!("Unsupported image layout transition!")),
+        };
 
     let command_buffer = rhi.begin_single_time_commands()?;
 
@@ -216,16 +231,18 @@ fn generate_mipmaps(
     width: u32,
     height: u32,
     layers: u32,
-    mip_levels: u32
+    mip_levels: u32,
 ) -> Result<()> {
-
     unsafe {
-        if !rhi.m_instance
+        if !rhi
+            .m_instance
             .get_physical_device_format_properties(rhi.m_data.m_physical_device, format)
             .optimal_tiling_features
             .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR)
         {
-            return Err(anyhow!("Texture image format does not support linear blitting!"));
+            return Err(anyhow!(
+                "Texture image format does not support linear blitting!"
+            ));
         }
     }
 
@@ -247,11 +264,11 @@ fn generate_mipmaps(
     let mut mip_height = height;
 
     for i in 1..mip_levels {
-        barrier.subresource_range.base_mip_level = i-1;
-        barrier.old_layout=vk::ImageLayout::TRANSFER_DST_OPTIMAL;
-        barrier.new_layout=vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
-        barrier.src_access_mask=vk::AccessFlags::TRANSFER_WRITE;
-        barrier.dst_access_mask=vk::AccessFlags::TRANSFER_READ;
+        barrier.subresource_range.base_mip_level = i - 1;
+        barrier.old_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
+        barrier.new_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+        barrier.dst_access_mask = vk::AccessFlags::TRANSFER_READ;
         unsafe {
             rhi.m_device.cmd_pipeline_barrier(
                 command_buffer,
@@ -266,7 +283,7 @@ fn generate_mipmaps(
 
         let src_subresource = vk::ImageSubresourceLayers::builder()
             .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .mip_level(i-1)
+            .mip_level(i - 1)
             .base_array_layer(0)
             .layer_count(layers);
 
@@ -297,10 +314,13 @@ fn generate_mipmaps(
             .dst_subresource(dst_subresource);
         unsafe {
             rhi.m_device.cmd_blit_image(
-                command_buffer, 
-                image, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, 
-                image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
-                &[blit],vk::Filter::LINEAR
+                command_buffer,
+                image,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[blit],
+                vk::Filter::LINEAR,
             );
         }
 
@@ -321,12 +341,12 @@ fn generate_mipmaps(
             );
         }
 
-        if mip_width>1{
-            mip_width/=2;
+        if mip_width > 1 {
+            mip_width /= 2;
         }
-        if mip_height>1{
-            mip_height/=2;
-        }   
+        if mip_height > 1 {
+            mip_height /= 2;
+        }
     }
 
     barrier.subresource_range.base_mip_level = mip_levels - 1;
@@ -353,19 +373,18 @@ fn generate_mipmaps(
 }
 
 pub fn create_cube_map(
-    rhi: &VulkanRHI, 
-    width: u32, 
-    height: u32, 
-    pixels: &[&[u8]; 6], 
-    format: vk::Format, 
-    mip_levels: u32
+    rhi: &VulkanRHI,
+    width: u32,
+    height: u32,
+    pixels: &[&[u8]; 6],
+    format: vk::Format,
+    mip_levels: u32,
 ) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
-
     let device = &rhi.m_device;
     let instance = &rhi.m_instance;
     let physical_device = rhi.m_data.m_physical_device;
 
-    let cube_byte_size = pixels.iter().map(|p|p.len()).sum::<usize>();
+    let cube_byte_size = pixels.iter().map(|p| p.len()).sum::<usize>();
 
     let image_create_info = vk::ImageCreateInfo::builder()
         .flags(vk::ImageCreateFlags::CUBE_COMPATIBLE)
@@ -380,61 +399,72 @@ pub fn create_cube_map(
         .format(format)
         .tiling(vk::ImageTiling::OPTIMAL)
         .initial_layout(vk::ImageLayout::UNDEFINED)
-        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC)
+        .usage(
+            vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+        )
         .samples(vk::SampleCountFlags::_1)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
-    
+
     unsafe {
         let image = device.create_image(&image_create_info, None)?;
         let requirements = device.get_image_memory_requirements(image);
         let info = vk::MemoryAllocateInfo::builder()
             .allocation_size(requirements.size)
-            .memory_type_index(
-                find_memory_type(instance, physical_device, requirements.memory_type_bits, vk::MemoryPropertyFlags::DEVICE_LOCAL)?
-            );
+            .memory_type_index(find_memory_type(
+                instance,
+                physical_device,
+                requirements.memory_type_bits,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            )?);
 
         let image_memory = device.allocate_memory(&info, None)?;
         device.bind_image_memory(image, image_memory, 0)?;
 
         let (staging_buffer, staging_buffer_memory) = create_buffer(
-            instance, device, physical_device, cube_byte_size as u64,
+            instance,
+            device,
+            physical_device,
+            cube_byte_size as u64,
             vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
 
-        let data = device.map_memory(staging_buffer_memory, 0, cube_byte_size as u64, vk::MemoryMapFlags::empty())?;
+        let data = device.map_memory(
+            staging_buffer_memory,
+            0,
+            cube_byte_size as u64,
+            vk::MemoryMapFlags::empty(),
+        )?;
         let mut offset = 0;
-        pixels.iter().for_each(| pixels| {
+        pixels.iter().for_each(|pixels| {
             copy_nonoverlapping(pixels.as_ptr().cast(), data.add(offset), pixels.len());
             offset += pixels.len();
         });
         device.unmap_memory(staging_buffer_memory);
         transition_image_layout(
-            rhi, image, 
-            vk::ImageLayout::UNDEFINED, 
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
-            6, 
+            rhi,
+            image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            6,
             mip_levels,
             vk::ImageAspectFlags::COLOR,
         )?;
-        copy_buffer_to_image(
-            rhi, 
-            staging_buffer, 
-            image, 
-            width, 
-            height,
-            6
-        )?;
+        copy_buffer_to_image(rhi, staging_buffer, image, width, height, 6)?;
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
 
         generate_mipmaps(rhi, image, format, width, height, 6, mip_levels)?;
         let image_view = create_image_view(
-            device, image, format, 
+            device,
+            image,
+            format,
             vk::ImageAspectFlags::COLOR,
-            vk::ImageViewType::CUBE, 
-            6, 
-            mip_levels
+            vk::ImageViewType::CUBE,
+            6,
+            mip_levels,
         )?;
         Ok((image, image_memory, image_view))
     }
@@ -446,33 +476,44 @@ pub fn create_texture_image(
     height: u32,
     pixels: &[u8],
     format: vk::Format,
-    mip_levels: u32
+    mip_levels: u32,
 ) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
-
     let physical_device = rhi.m_data.m_physical_device;
     let size = pixels.len() as u64;
     let (staging_buffer, staging_buffer_memory) = create_buffer(
-        &rhi.m_instance, &rhi.m_device, physical_device, size,
+        &rhi.m_instance,
+        &rhi.m_device,
+        physical_device,
+        size,
         vk::BufferUsageFlags::TRANSFER_SRC,
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
     unsafe {
-        let memory = rhi.m_device.map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
+        let memory =
+            rhi.m_device
+                .map_memory(staging_buffer_memory, 0, size, vk::MemoryMapFlags::empty())?;
         copy_nonoverlapping(pixels.as_ptr().cast(), memory, pixels.len());
         rhi.m_device.unmap_memory(staging_buffer_memory);
     }
 
-    let mip_levels = if mip_levels > 0 { 
-        mip_levels 
-    } else { 
-        ((width.max(height) as f32).log2().floor() as u32) + 1 
+    let mip_levels = if mip_levels > 0 {
+        mip_levels
+    } else {
+        ((width.max(height) as f32).log2().floor() as u32) + 1
     };
 
     let (texture_image, texture_image_memory) = create_image(
-        &rhi.m_instance, &rhi.m_device, physical_device, width, height, format,
+        &rhi.m_instance,
+        &rhi.m_device,
+        physical_device,
+        width,
+        height,
+        format,
         vk::ImageTiling::OPTIMAL,
-        vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC,
+        vk::ImageUsageFlags::SAMPLED
+            | vk::ImageUsageFlags::TRANSFER_DST
+            | vk::ImageUsageFlags::TRANSFER_SRC,
         vk::MemoryPropertyFlags::DEVICE_LOCAL,
         vk::ImageCreateFlags::empty(),
         1,
@@ -480,10 +521,11 @@ pub fn create_texture_image(
     )?;
 
     transition_image_layout(
-        rhi, texture_image, 
-        vk::ImageLayout::UNDEFINED, 
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL, 
-        1, 
+        rhi,
+        texture_image,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        1,
         mip_levels,
         vk::ImageAspectFlags::COLOR,
     )?;
@@ -498,18 +540,18 @@ pub fn create_texture_image(
     generate_mipmaps(rhi, texture_image, format, width, height, 1, mip_levels)?;
 
     let image_view = create_image_view(
-        &rhi.m_device, 
-        texture_image, 
-        format, 
-        vk::ImageAspectFlags::COLOR, 
-        vk::ImageViewType::_2D, 
+        &rhi.m_device,
+        texture_image,
+        format,
+        vk::ImageAspectFlags::COLOR,
+        vk::ImageViewType::_2D,
         1,
-        mip_levels
+        mip_levels,
     )?;
 
     Ok((texture_image, texture_image_memory, image_view))
 }
-    
+
 pub fn create_image(
     instance: &Instance,
     device: &Device,
@@ -526,7 +568,11 @@ pub fn create_image(
 ) -> Result<(vk::Image, vk::DeviceMemory)> {
     let info = vk::ImageCreateInfo::builder()
         .image_type(vk::ImageType::_2D)
-        .extent(vk::Extent3D { width: image_width, height: image_height, depth: 1 })
+        .extent(vk::Extent3D {
+            width: image_width,
+            height: image_height,
+            depth: 1,
+        })
         .mip_levels(mip_levels)
         .array_layers(array_layers)
         .format(format)
@@ -542,9 +588,12 @@ pub fn create_image(
         let requirements = device.get_image_memory_requirements(image);
         let info = vk::MemoryAllocateInfo::builder()
             .allocation_size(requirements.size)
-            .memory_type_index(
-                find_memory_type(instance, physical_device, requirements.memory_type_bits, memory_property_flags)?
-            );
+            .memory_type_index(find_memory_type(
+                instance,
+                physical_device,
+                requirements.memory_type_bits,
+                memory_property_flags,
+            )?);
 
         let image_memory = device.allocate_memory(&info, None)?;
         device.bind_image_memory(image, image_memory, 0)?;
@@ -553,15 +602,14 @@ pub fn create_image(
 }
 
 pub fn create_image_view(
-    device: &Device, 
-    image: vk::Image, 
+    device: &Device,
+    image: vk::Image,
     format: vk::Format,
     image_aspect_flags: vk::ImageAspectFlags,
     view_type: vk::ImageViewType,
     layout_count: u32,
-    mip_levels: u32
-) -> Result<vk::ImageView>{
-    
+    mip_levels: u32,
+) -> Result<vk::ImageView> {
     let subresource_range = vk::ImageSubresourceRange::builder()
         .aspect_mask(image_aspect_flags)
         .base_mip_level(0)
@@ -575,5 +623,5 @@ pub fn create_image_view(
         .format(format)
         .subresource_range(subresource_range);
 
-    Ok(unsafe {device.create_image_view(&info, None)?})
+    Ok(unsafe { device.create_image_view(&info, None)? })
 }

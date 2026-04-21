@@ -1,10 +1,43 @@
 use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
 
-use crate::{core::math::matrix4::Matrix4x4, function::{render::{interface::vulkan::vulkan_rhi::{self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER, VulkanRHI}, passes::{color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo}, combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo}, fxaa_pass::{FXAAPass, FXAAPassInitInfo}, tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass}, ui_pass::{UIPass, UIPassInitInfo}}, render_common::{MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject, MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject}, render_helper::round_up, render_mesh::MeshVertex, render_pass::{RenderPass, RenderPipelineBase}, render_resource::{GlobalRenderResource, RenderResource}, render_type::RHISamplerType}, ui::ui2::UiRuntime}, shader::generated::shader::{DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT, SKYBOX_FRAG, SKYBOX_VERT}};
+use crate::{
+    core::math::matrix4::Matrix4x4,
+    function::{
+        render::{
+            interface::vulkan::vulkan_rhi::{
+                self, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER,
+                VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER,
+                VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER,
+                VulkanRHI,
+            },
+            passes::{
+                color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo},
+                combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo},
+                fxaa_pass::{FXAAPass, FXAAPassInitInfo},
+                tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass},
+                ui_pass::{UIPass, UIPassInitInfo},
+            },
+            render_common::{
+                MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject,
+                MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject,
+            },
+            render_helper::round_up,
+            render_mesh::MeshVertex,
+            render_pass::{RenderPass, RenderPipelineBase},
+            render_resource::{GlobalRenderResource, RenderResource},
+            render_type::RHISamplerType,
+        },
+        ui::ui2::UiRuntime,
+    },
+    shader::generated::shader::{
+        DEFERRED_LIGHTING_FRAG, DEFERRED_LIGHTING_VERT, MESH_FRAG, MESH_GBUFFER_FRAG, MESH_VERT,
+        SKYBOX_FRAG, SKYBOX_VERT,
+    },
+};
 
 use anyhow::Result;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*};
+use vulkanalia::prelude::v1_0::*;
 
 pub const _MAIN_CAMERA_PASS_GBUFFER_A: usize = 0;
 pub const _MAIN_CAMERA_PASS_GBUFFER_B: usize = 1;
@@ -17,7 +50,7 @@ pub const _MAIN_CAMERA_PASS_DEPTH: usize = 7;
 pub const _MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE: usize = 8;
 pub const _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT: usize = 5;
 pub const _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT: usize = 2;
-pub const _MAIN_CAMERA_PASS_ATTACHMENT_COUNT:usize = 9;
+pub const _MAIN_CAMERA_PASS_ATTACHMENT_COUNT: usize = 9;
 
 pub enum MainCameraSubPass {
     BasePass = 0,
@@ -28,7 +61,7 @@ pub enum MainCameraSubPass {
     FXAA = 5,
     UI = 6,
     CombineUI = 7,
-    EnumCount = 8
+    EnumCount = 8,
 }
 
 pub struct MainCameraPassInitInfo<'a> {
@@ -59,8 +92,8 @@ enum RenderPipelineType {
 }
 
 #[derive(Default)]
-pub struct MainCameraPass{
-    pub m_directional_light_shadow_color_image_view: vk::ImageView, 
+pub struct MainCameraPass {
+    pub m_directional_light_shadow_color_image_view: vk::ImageView,
     pub m_point_light_shadow_color_image_view: vk::ImageView,
     m_render_pass: RenderPass,
     m_enable_fxaa: bool,
@@ -75,7 +108,6 @@ pub struct MainCameraPass{
 }
 
 impl MainCameraPass {
-
     pub fn initialize(&mut self, info: &MainCameraPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
         self.m_enable_fxaa = info.enable_fxaa;
@@ -88,26 +120,29 @@ impl MainCameraPass {
         self.setup_framebuffer_descriptor_set(rhi)?;
         self.setup_framebuffer(rhi)?;
 
-        
         self.m_tone_mapping_pass.initialize(&ToneMappingInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
             rhi: rhi,
             global_render_resource: info.global_render_resource,
-            input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
+            input_attachment: self.m_render_pass.get_framebuffer_image_views()
+                [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
         })?;
 
-        self.m_color_grading_pass.initialize(&ColorGradingPassInitInfo {
-            render_pass: *self.m_render_pass.get_render_pass(),
-            rhi: rhi,
-            global_render_resource: info.global_render_resource,
-            input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
-        })?;
+        self.m_color_grading_pass
+            .initialize(&ColorGradingPassInitInfo {
+                render_pass: *self.m_render_pass.get_render_pass(),
+                rhi: rhi,
+                global_render_resource: info.global_render_resource,
+                input_attachment: self.m_render_pass.get_framebuffer_image_views()
+                    [_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
+            })?;
 
         self.m_fxaa_pass.initialize(&FXAAPassInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
             rhi: rhi,
             global_render_resource: info.global_render_resource,
-            input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD],
+            input_attachment: self.m_render_pass.get_framebuffer_image_views()
+                [_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD],
         })?;
 
         self.m_ui_pass.initialize(&UIPassInitInfo {
@@ -120,24 +155,32 @@ impl MainCameraPass {
             rhi: rhi,
             global_render_resource: info.global_render_resource,
             render_pass: *self.m_render_pass.get_render_pass(),
-            scene_input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
-            ui_input_attachment: self.m_render_pass.get_framebuffer_image_views()[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
+            scene_input_attachment: self.m_render_pass.get_framebuffer_image_views()
+                [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
+            ui_input_attachment: self.m_render_pass.get_framebuffer_image_views()
+                [_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
         })?;
 
         Ok(())
     }
 
     pub fn prepare_pass_data(&mut self, render_resource: &RenderResource) {
-        self.m_mesh_perframe_storage_buffer_object = render_resource.m_mesh_perframe_storage_buffer_object.clone();
+        self.m_mesh_perframe_storage_buffer_object = render_resource
+            .m_mesh_perframe_storage_buffer_object
+            .clone();
     }
-    
-    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) -> Result<()>{
-        self.m_render_pass.m_framebuffer.attachments.iter().for_each(|attachment| {
-            rhi.destroy_image(attachment.image);
-            rhi.destroy_image_view(attachment.view);
-            rhi.free_memory(attachment.mem);
-        });
-        for framebuffer in self.m_swapchain_framebuffers.drain(..){
+
+    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .iter()
+            .for_each(|attachment| {
+                rhi.destroy_image(attachment.image);
+                rhi.destroy_image_view(attachment.view);
+                rhi.free_memory(attachment.mem);
+            });
+        for framebuffer in self.m_swapchain_framebuffers.drain(..) {
             rhi.destroy_framebuffer(framebuffer);
         }
         self.setup_attachments(rhi)?;
@@ -145,28 +188,38 @@ impl MainCameraPass {
         self.setup_framebuffer(rhi)?;
 
         let image_views = self.m_render_pass.get_framebuffer_image_views();
-        self.m_tone_mapping_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
-        ).unwrap();
-        self.m_color_grading_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
-        ).unwrap();
-        self.m_fxaa_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD]
-        ).unwrap();
-        self.m_combine_ui_pass.update_after_framebuffer_recreate(
-            rhi,
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
-            image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
-        ).unwrap();
+        self.m_tone_mapping_pass
+            .update_after_framebuffer_recreate(
+                rhi,
+                image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
+            )
+            .unwrap();
+        self.m_color_grading_pass
+            .update_after_framebuffer_recreate(
+                rhi,
+                image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
+            )
+            .unwrap();
+        self.m_fxaa_pass
+            .update_after_framebuffer_recreate(
+                rhi,
+                image_views[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD],
+            )
+            .unwrap();
+        self.m_combine_ui_pass
+            .update_after_framebuffer_recreate(
+                rhi,
+                image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD],
+                image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
+            )
+            .unwrap();
         Ok(())
     }
 
     pub fn destroy(&self, rhi: &VulkanRHI) {
-        self.m_swapchain_framebuffers.iter().for_each(|f| rhi.destroy_framebuffer(*f));
+        self.m_swapchain_framebuffers
+            .iter()
+            .for_each(|f| rhi.destroy_framebuffer(*f));
         rhi.destroy_pipeline(self.m_render_pass.m_render_pipeline[0].pipeline);
         rhi.destroy_pipeline_layout(self.m_render_pass.m_render_pipeline[0].layout);
         // rhi.destroy_descriptor_set_layout(self.m_base.m_descriptor_infos[0].layout);
@@ -174,11 +227,11 @@ impl MainCameraPass {
     }
 
     pub fn draw(
-        &self, 
+        &self,
         rhi: &VulkanRHI,
         ui_runtime: &UiRuntime,
         current_swapchain_image_index: usize,
-        forward_draw: bool
+        forward_draw: bool,
     ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
@@ -191,13 +244,26 @@ impl MainCameraPass {
         clear_values[_MAIN_CAMERA_PASS_GBUFFER_A].color.float32 = [0.0, 0.0, 0.0, 0.0];
         clear_values[_MAIN_CAMERA_PASS_GBUFFER_B].color.float32 = [0.0, 0.0, 0.0, 0.0];
         clear_values[_MAIN_CAMERA_PASS_GBUFFER_C].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].color.float32 = [0.0, 0.0, 0.0, 0.0];
-        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].color.float32 = [0.0, 0.0, 0.0, 1.0];
-        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].color.float32 = [0.0, 0.0, 0.0, 1.0];
-        clear_values[_MAIN_CAMERA_PASS_DEPTH].depth_stencil = vk::ClearDepthStencilValue{depth: 1.0, stencil: 0};
-        clear_values[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE].color.float32 = [0.0, 0.0, 0.0, 1.0];
-        
+        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
+            .color
+            .float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
+            .color
+            .float32 = [0.0, 0.0, 0.0, 0.0];
+        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD]
+            .color
+            .float32 = [0.0, 0.0, 0.0, 1.0];
+        clear_values[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN]
+            .color
+            .float32 = [0.0, 0.0, 0.0, 1.0];
+        clear_values[_MAIN_CAMERA_PASS_DEPTH].depth_stencil = vk::ClearDepthStencilValue {
+            depth: 1.0,
+            stencil: 0,
+        };
+        clear_values[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE]
+            .color
+            .float32 = [0.0, 0.0, 0.0, 1.0];
+
         let info = vk::RenderPassBeginInfo::builder()
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
             .framebuffer(self.m_swapchain_framebuffers[current_swapchain_image_index])
@@ -210,22 +276,22 @@ impl MainCameraPass {
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-    
-            rhi.push_event(command_buffer, "Forward Lighting\0", [1.0;4]);
+
+            rhi.push_event(command_buffer, "Forward Lighting\0", [1.0; 4]);
             self.draw_mesh_lighting(rhi)?;
             self.draw_skybox(rhi)?;
             rhi.pop_event(command_buffer);
         } else {
-            rhi.push_event(command_buffer, "BasePass\0", [1.0;4]);
+            rhi.push_event(command_buffer, "BasePass\0", [1.0; 4]);
             self.draw_mesh_gbuffer(rhi)?;
             rhi.pop_event(command_buffer);
-    
+
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
-    
-            rhi.push_event(command_buffer, "DeferredLighting\0", [1.0;4]);
+
+            rhi.push_event(command_buffer, "DeferredLighting\0", [1.0; 4]);
             self.draw_deferred_lighting(rhi)?;
             rhi.pop_event(command_buffer);
-    
+
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
         }
 
@@ -247,25 +313,21 @@ impl MainCameraPass {
 
         let mut clear_value = vk::ClearValue::default();
         clear_value.color.float32 = [0.0, 0.0, 0.0, 0.0];
-        let clear_attachments = [
-            vk::ClearAttachment::builder()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .color_attachment(0)
-                .clear_value(clear_value)
-                .build()
-        ];
+        let clear_attachments = [vk::ClearAttachment::builder()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .color_attachment(0)
+            .clear_value(clear_value)
+            .build()];
         let mut clear_rect = vk::Rect2D::default();
         clear_rect.offset.x = 0;
         clear_rect.offset.y = 0;
         clear_rect.extent.width = swapchain_info.extent.width;
         clear_rect.extent.height = swapchain_info.extent.height;
-        let clear_rects = [
-            vk::ClearRect::builder()
-                .base_array_layer(0)
-                .layer_count(1)
-                .rect(clear_rect)
-                .build()
-        ];
+        let clear_rects = [vk::ClearRect::builder()
+            .base_array_layer(0)
+            .layer_count(1)
+            .rect(clear_rect)
+            .build()];
         rhi.cmd_clear_attachments(command_buffer, &clear_attachments, &clear_rects);
 
         self.m_ui_pass.draw(rhi, ui_runtime);
@@ -299,25 +361,41 @@ impl MainCameraPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let swapchain_info = rhi.get_swapchain_info();
 
-        let attachment_count = _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT + _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT;
+        let attachment_count = _MAIN_CAMERA_PASS_CUSTOM_ATTACHMENT_COUNT
+            + _MAIN_CAMERA_PASS_POST_PROCESS_ATTACHMENT_COUNT;
 
-        self.m_render_pass.m_framebuffer.attachments.resize_with(
-            attachment_count,
-            Default::default
-        );
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .resize_with(attachment_count, Default::default);
 
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].format = vk::Format::R8G8B8A8_SNORM;
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].format = vk::Format::R8G8B8A8_SNORM;
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].format = vk::Format::R8G8B8A8_SRGB;
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].format = vk::Format::R16G16B16A16_SFLOAT;
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].format = vk::Format::R16G16B16A16_SFLOAT;
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].format = vk::Format::R16G16B16A16_SFLOAT;
-        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].format = vk::Format::R16G16B16A16_SFLOAT;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].format =
+            vk::Format::R8G8B8A8_SNORM;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].format =
+            vk::Format::R8G8B8A8_SNORM;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].format =
+            vk::Format::R8G8B8A8_SRGB;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].format =
+            vk::Format::R16G16B16A16_SFLOAT;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].format =
+            vk::Format::R16G16B16A16_SFLOAT;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD]
+            .format = vk::Format::R16G16B16A16_SFLOAT;
+        self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN]
+            .format = vk::Format::R16G16B16A16_SFLOAT;
         for buffer_index in 0..attachment_count {
-            let usage = match buffer_index {                
-                _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD | _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN
-                    => vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
-                _ => vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
+            let usage = match buffer_index {
+                _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD
+                | _MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN => {
+                    vk::ImageUsageFlags::COLOR_ATTACHMENT
+                        | vk::ImageUsageFlags::INPUT_ATTACHMENT
+                        | vk::ImageUsageFlags::SAMPLED
+                }
+                _ => {
+                    vk::ImageUsageFlags::COLOR_ATTACHMENT
+                        | vk::ImageUsageFlags::INPUT_ATTACHMENT
+                        | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
+                }
             };
             (
                 self.m_render_pass.m_framebuffer.attachments[buffer_index].image,
@@ -333,23 +411,27 @@ impl MainCameraPass {
                 1,
                 1,
             )?;
-            self.m_render_pass.m_framebuffer.attachments[buffer_index].view = rhi.create_image_view(
-                self.m_render_pass.m_framebuffer.attachments[buffer_index].image,
-                self.m_render_pass.m_framebuffer.attachments[buffer_index].format,
-                vk::ImageAspectFlags::COLOR,
-                vk::ImageViewType::_2D,
-                1,
-                1,
-            )?;
+            self.m_render_pass.m_framebuffer.attachments[buffer_index].view = rhi
+                .create_image_view(
+                    self.m_render_pass.m_framebuffer.attachments[buffer_index].image,
+                    self.m_render_pass.m_framebuffer.attachments[buffer_index].format,
+                    vk::ImageAspectFlags::COLOR,
+                    vk::ImageViewType::_2D,
+                    1,
+                    1,
+                )?;
         }
         Ok(())
     }
 
     fn setup_render_pass(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        let mut attachments = [vk::AttachmentDescription::default(); _MAIN_CAMERA_PASS_ATTACHMENT_COUNT];
+        let mut attachments =
+            [vk::AttachmentDescription::default(); _MAIN_CAMERA_PASS_ATTACHMENT_COUNT];
 
         attachments[_MAIN_CAMERA_PASS_GBUFFER_A] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].format)
+            .format(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].format,
+            )
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
@@ -360,7 +442,9 @@ impl MainCameraPass {
             .build();
 
         attachments[_MAIN_CAMERA_PASS_GBUFFER_B] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].format)
+            .format(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].format,
+            )
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -371,7 +455,9 @@ impl MainCameraPass {
             .build();
 
         attachments[_MAIN_CAMERA_PASS_GBUFFER_C] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].format)
+            .format(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].format,
+            )
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -382,7 +468,10 @@ impl MainCameraPass {
             .build();
 
         attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD].format)
+            .format(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD]
+                    .format,
+            )
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -393,7 +482,10 @@ impl MainCameraPass {
             .build();
 
         attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN].format)
+            .format(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN]
+                    .format,
+            )
             .samples(vk::SampleCountFlags::_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -403,27 +495,37 @@ impl MainCameraPass {
             .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build();
 
-        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD].format)
-            .samples(vk::SampleCountFlags::_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .build();
+        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD] =
+            vk::AttachmentDescription::builder()
+                .format(
+                    self.m_render_pass.m_framebuffer.attachments
+                        [_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD]
+                        .format,
+                )
+                .samples(vk::SampleCountFlags::_1)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build();
 
-        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN] = vk::AttachmentDescription::builder()
-            .format(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN].format)
-            .samples(vk::SampleCountFlags::_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .build();
+        attachments[_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN] =
+            vk::AttachmentDescription::builder()
+                .format(
+                    self.m_render_pass.m_framebuffer.attachments
+                        [_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_EVEN]
+                        .format,
+                )
+                .samples(vk::SampleCountFlags::_1)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build();
 
         attachments[_MAIN_CAMERA_PASS_DEPTH] = vk::AttachmentDescription::builder()
             .format(rhi.get_depth_image_info().format)
@@ -445,8 +547,9 @@ impl MainCameraPass {
             .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-            .build();    
-        let mut subpasses = [vk::SubpassDescription::default(); MainCameraSubPass::EnumCount as usize];
+            .build();
+        let mut subpasses =
+            [vk::SubpassDescription::default(); MainCameraSubPass::EnumCount as usize];
 
         //gbuffer subpass
         let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
@@ -470,7 +573,7 @@ impl MainCameraPass {
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_refs)
             .depth_stencil_attachment(&depth_stencil_attachment_ref)
-            .build();  
+            .build();
 
         //deferred lighting subpass
         let input_attachment_refs = [
@@ -491,12 +594,10 @@ impl MainCameraPass {
                 .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .build(),
         ];
-        let color_attachment_refs = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build(),
-        ];
+        let color_attachment_refs = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
         subpasses[MainCameraSubPass::DeferredLighting as usize] = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_refs)
@@ -504,12 +605,10 @@ impl MainCameraPass {
             .build();
 
         //forward lighting subpass
-        let color_attachment_refs = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build(),
-        ];
+        let color_attachment_refs = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
         let depth_stencil_attachment_ref = vk::AttachmentReference::builder()
             .attachment(_MAIN_CAMERA_PASS_DEPTH as u32)
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -520,17 +619,13 @@ impl MainCameraPass {
             .build();
 
         //tone mapping subpass
-        let input_attachment_ref = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-        ];
+        let input_attachment_ref = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+            .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)];
 
-        let color_attachment_ref = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-        ];
+        let color_attachment_ref = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
 
         subpasses[MainCameraSubPass::ToneMapping as usize] = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
@@ -539,25 +634,18 @@ impl MainCameraPass {
             .build();
 
         //color grading subpass
-        let input_attachment_ref = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-        ];
+        let input_attachment_ref = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+            .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)];
 
         let color_attachment_ref = if self.m_enable_fxaa {
-            [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-            ]
-        }
-        else{
-            [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-            ]
+            [vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)]
+        } else {
+            [vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)]
         };
 
         subpasses[MainCameraSubPass::ColorGrading as usize] = vk::SubpassDescription::builder()
@@ -568,40 +656,31 @@ impl MainCameraPass {
 
         //fxaa subpass
         let input_attachment_ref = if self.m_enable_fxaa {
-            [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-            ]
-        }
-        else{
-            [
-                vk::AttachmentReference::builder()
-                    .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                    .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
-            ]
+            [vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_POST_PROCESS_BUFFER_ODD as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)]
+        } else {
+            [vk::AttachmentReference::builder()
+                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+                .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)]
         };
 
-        let color_attachment_ref = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build()
-        ];
+        let color_attachment_ref = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
 
         subpasses[MainCameraSubPass::FXAA as usize] = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_ref)
             .input_attachments(&input_attachment_ref)
-            .build();   
+            .build();
 
         //ui subpass
-        let color_attachment_ref = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build()
-        ];
+        let color_attachment_ref = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
         let preserve_attachments = [_MAIN_CAMERA_PASS_BACKUP_BUFFER_ODD as u32];
         subpasses[MainCameraSubPass::UI as usize] = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
@@ -618,12 +697,10 @@ impl MainCameraPass {
                 .attachment(_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN as u32)
                 .layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
         ];
-        let color_attachment_ref = [
-            vk::AttachmentReference::builder()
-                .attachment(_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE as u32)
-                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .build()
-        ];
+        let color_attachment_ref = [vk::AttachmentReference::builder()
+            .attachment(_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE as u32)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build()];
         subpasses[MainCameraSubPass::CombineUI as usize] = vk::SubpassDescription::builder()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_ref)
@@ -641,78 +718,134 @@ impl MainCameraPass {
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::BasePass as u32)
                 .dst_subpass(MainCameraSubPass::DeferredLighting as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::DeferredLighting as u32)
                 .dst_subpass(MainCameraSubPass::ForwardLighting as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::ForwardLighting as u32)
                 .dst_subpass(MainCameraSubPass::ToneMapping as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::ToneMapping as u32)
                 .dst_subpass(MainCameraSubPass::ColorGrading as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::ColorGrading as u32)
                 .dst_subpass(MainCameraSubPass::FXAA as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::FXAA as u32)
                 .dst_subpass(MainCameraSubPass::UI as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
             vk::SubpassDependency::builder()
                 .src_subpass(MainCameraSubPass::UI as u32)
                 .dst_subpass(MainCameraSubPass::CombineUI as u32)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | 
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT |
-                    vk::PipelineStageFlags::FRAGMENT_SHADER)   
-                .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                )
+                .src_access_mask(
+                    vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::SHADER_READ | vk::AccessFlags::COLOR_ATTACHMENT_READ,
+                )
                 .dependency_flags(vk::DependencyFlags::BY_REGION)
                 .build(),
         ];
@@ -730,12 +863,16 @@ impl MainCameraPass {
     fn setup_framebuffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let swapchain_info = rhi.get_swapchain_info();
         let depth_image_info = rhi.get_depth_image_info();
-        let framebuffers =  swapchain_info.image_views
+        let framebuffers = swapchain_info
+            .image_views
             .iter()
             .map(|image_view| {
-                let mut attachments = self.m_render_pass
-                    .m_framebuffer.attachments
-                    .iter().map(|a| a.view)
+                let mut attachments = self
+                    .m_render_pass
+                    .m_framebuffer
+                    .attachments
+                    .iter()
+                    .map(|a| a.view)
                     .collect::<Vec<_>>();
                 attachments.push(*depth_image_info.image_view);
                 attachments.push(*image_view);
@@ -754,23 +891,24 @@ impl MainCameraPass {
     }
 
     fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_descriptor_infos.resize_with(LayoutType::LayoutTypeCount as usize, Default::default);
+        self.m_render_pass
+            .m_descriptor_infos
+            .resize_with(LayoutType::LayoutTypeCount as usize, Default::default);
         // PerMesh
         {
-            let bindings = [
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX)
-                    .build(),
-            ];
+            let bindings = [vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build()];
 
             let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
                 .bindings(&bindings)
                 .build();
 
-            self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout = rhi.create_descriptor_set_layout(&create_info)?;
+            self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout =
+                rhi.create_descriptor_set_layout(&create_info)?;
         }
         // MeshGlobal
         {
@@ -827,7 +965,8 @@ impl MainCameraPass {
             let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
                 .bindings(&mesh_global_layout_bindings)
                 .build();
-            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout = rhi.create_descriptor_set_layout(&create_info)?;
+            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout =
+                rhi.create_descriptor_set_layout(&create_info)?;
         }
         // MeshPerMaterial
         {
@@ -872,7 +1011,8 @@ impl MainCameraPass {
             let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
                 .bindings(&mesh_material_layout_bindings)
                 .build();
-            self.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout = rhi.create_descriptor_set_layout(&create_info)?;
+            self.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout =
+                rhi.create_descriptor_set_layout(&create_info)?;
         }
         // Skybox
         {
@@ -899,9 +1039,7 @@ impl MainCameraPass {
                 rhi.create_descriptor_set_layout(&descriptor_set_layout_create_info)?;
         }
         // Axis
-        {
-
-        }
+        {}
         // DeferredLighting
         {
             let layout_bindings = [
@@ -935,15 +1073,18 @@ impl MainCameraPass {
                 .bindings(&layout_bindings)
                 .build();
 
-            self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout =   
+            self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout =
                 rhi.create_descriptor_set_layout(&create_info)?;
         }
         Ok(())
     }
 
-    fn setup_pipelines(&mut self ,rhi: &VulkanRHI)-> Result<()> {
-        self.m_render_pass.m_render_pipeline.resize_with(RenderPipelineType::RenderPipelineTypeCount as usize, Default::default);
-        
+    fn setup_pipelines(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        self.m_render_pass.m_render_pipeline.resize_with(
+            RenderPipelineType::RenderPipelineTypeCount as usize,
+            Default::default,
+        );
+
         // mesh gbuffer
         {
             let vert_shader_module = rhi.create_shader_module(&MESH_VERT)?;
@@ -988,11 +1129,12 @@ impl MainCameraPass {
                 .sample_shading_enable(false)
                 .rasterization_samples(vk::SampleCountFlags::_1);
 
-            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-                .depth_test_enable(true)
-                .depth_write_enable(true)
-                .depth_compare_op(vk::CompareOp::LESS)
-                .stencil_test_enable(false);
+            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+                vk::PipelineDepthStencilStateCreateInfo::builder()
+                    .depth_test_enable(true)
+                    .depth_write_enable(true)
+                    .depth_compare_op(vk::CompareOp::LESS)
+                    .stencil_test_enable(false);
 
             let attachments = [
                 vk::PipelineColorBlendAttachmentState::builder()
@@ -1022,8 +1164,7 @@ impl MainCameraPass {
                 self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout,
                 self.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout,
             ];
-            let layout_info = vk::PipelineLayoutCreateInfo::builder()
-                .set_layouts(set_layouts);
+            let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
             let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -1048,12 +1189,13 @@ impl MainCameraPass {
             rhi.destroy_shader_module(vert_shader_module);
             rhi.destroy_shader_module(frag_shader_module);
 
-            self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize] = RenderPipelineBase{
-                layout: pipeline_layout,
-                pipeline,
-            };
+            self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize] =
+                RenderPipelineBase {
+                    layout: pipeline_layout,
+                    pipeline,
+                };
         }
-        
+
         // deferred lighting
         {
             let vert_shader_module = rhi.create_shader_module(&DEFERRED_LIGHTING_VERT)?;
@@ -1092,11 +1234,12 @@ impl MainCameraPass {
                 .sample_shading_enable(false)
                 .rasterization_samples(vk::SampleCountFlags::_1);
 
-            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-                .depth_test_enable(false)
-                .depth_write_enable(false)
-                .depth_compare_op(vk::CompareOp::ALWAYS)
-                .stencil_test_enable(false);
+            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+                vk::PipelineDepthStencilStateCreateInfo::builder()
+                    .depth_test_enable(false)
+                    .depth_write_enable(false)
+                    .depth_compare_op(vk::CompareOp::ALWAYS)
+                    .stencil_test_enable(false);
 
             let attachment = vk::PipelineColorBlendAttachmentState::builder()
                 .color_write_mask(vk::ColorComponentFlags::all())
@@ -1117,8 +1260,7 @@ impl MainCameraPass {
                 self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout,
                 self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout,
             ];
-            let layout_info = vk::PipelineLayoutCreateInfo::builder()
-                .set_layouts(set_layouts);
+            let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
             let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -1143,10 +1285,11 @@ impl MainCameraPass {
             rhi.destroy_shader_module(vert_shader_module);
             rhi.destroy_shader_module(frag_shader_module);
 
-            self.m_render_pass.m_render_pipeline[RenderPipelineType::DeferredLighting as usize] = RenderPipelineBase{
-                layout: pipeline_layout,
-                pipeline,
-            };
+            self.m_render_pass.m_render_pipeline[RenderPipelineType::DeferredLighting as usize] =
+                RenderPipelineBase {
+                    layout: pipeline_layout,
+                    pipeline,
+                };
         }
 
         // mesh lighting
@@ -1193,18 +1336,17 @@ impl MainCameraPass {
                 .sample_shading_enable(false)
                 .rasterization_samples(vk::SampleCountFlags::_1);
 
-            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-                .depth_test_enable(true)
-                .depth_write_enable(true)
-                .depth_compare_op(vk::CompareOp::LESS)
-                .stencil_test_enable(false);
+            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+                vk::PipelineDepthStencilStateCreateInfo::builder()
+                    .depth_test_enable(true)
+                    .depth_write_enable(true)
+                    .depth_compare_op(vk::CompareOp::LESS)
+                    .stencil_test_enable(false);
 
-            let attachments = [
-                vk::PipelineColorBlendAttachmentState::builder()
-                    .color_write_mask(vk::ColorComponentFlags::all())
-                    .blend_enable(false)
-                    .build(),
-            ];
+            let attachments = [vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(vk::ColorComponentFlags::all())
+                .blend_enable(false)
+                .build()];
             let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
                 .logic_op_enable(false)
                 .logic_op(vk::LogicOp::COPY)
@@ -1219,8 +1361,7 @@ impl MainCameraPass {
                 self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout,
                 self.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout,
             ];
-            let layout_info = vk::PipelineLayoutCreateInfo::builder()
-                .set_layouts(set_layouts);
+            let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
             let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -1245,10 +1386,11 @@ impl MainCameraPass {
             rhi.destroy_shader_module(vert_shader_module);
             rhi.destroy_shader_module(frag_shader_module);
 
-            self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshLighting as usize] = RenderPipelineBase{
-                layout: pipeline_layout,
-                pipeline,
-            };
+            self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshLighting as usize] =
+                RenderPipelineBase {
+                    layout: pipeline_layout,
+                    pipeline,
+                };
         }
 
         // skybox
@@ -1289,18 +1431,17 @@ impl MainCameraPass {
                 .sample_shading_enable(false)
                 .rasterization_samples(vk::SampleCountFlags::_1);
 
-            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder = vk::PipelineDepthStencilStateCreateInfo::builder()
-                .depth_test_enable(true)
-                .depth_write_enable(true)
-                .depth_compare_op(vk::CompareOp::LESS)
-                .stencil_test_enable(false);
+            let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+                vk::PipelineDepthStencilStateCreateInfo::builder()
+                    .depth_test_enable(true)
+                    .depth_write_enable(true)
+                    .depth_compare_op(vk::CompareOp::LESS)
+                    .stencil_test_enable(false);
 
-            let attachments = [
-                vk::PipelineColorBlendAttachmentState::builder()
-                    .color_write_mask(vk::ColorComponentFlags::all())
-                    .blend_enable(false)
-                    .build(),
-            ];
+            let attachments = [vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(vk::ColorComponentFlags::all())
+                .blend_enable(false)
+                .build()];
             let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
                 .logic_op_enable(false)
                 .logic_op(vk::LogicOp::COPY)
@@ -1310,11 +1451,9 @@ impl MainCameraPass {
             let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
                 .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
 
-            let set_layouts = &[
-                self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout,
-            ];
-            let layout_info = vk::PipelineLayoutCreateInfo::builder()
-                .set_layouts(set_layouts);
+            let set_layouts =
+                &[self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout];
+            let layout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(set_layouts);
 
             let pipeline_layout = rhi.create_pipeline_layout(&layout_info)?;
 
@@ -1339,10 +1478,11 @@ impl MainCameraPass {
             rhi.destroy_shader_module(vert_shader_module);
             rhi.destroy_shader_module(frag_shader_module);
 
-            self.m_render_pass.m_render_pipeline[RenderPipelineType::SkyBox as usize] = RenderPipelineBase{
-                layout: pipeline_layout,
-                pipeline,
-            };
+            self.m_render_pass.m_render_pipeline[RenderPipelineType::SkyBox as usize] =
+                RenderPipelineBase {
+                    layout: pipeline_layout,
+                    pipeline,
+                };
         }
 
         Ok(())
@@ -1356,124 +1496,184 @@ impl MainCameraPass {
     }
 
     fn setup_model_global_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        let set_layouts = [self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout];
+        let set_layouts =
+            [self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout];
         let mesh_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
             .set_layouts(&set_layouts);
 
-        self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set = rhi.allocate_descriptor_sets(&mesh_global_descriptor_set_alloc_info)?[0];
+        self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set =
+            rhi.allocate_descriptor_sets(&mesh_global_descriptor_set_alloc_info)?[0];
 
-        let global_render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+        let global_render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
 
-        let mesh_perframe_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
+        let mesh_perframe_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .offset(0)
+            .range(size_of::<MeshPerframeStorageBufferObject>() as u64)
+            .buffer(
+                global_render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .build()];
+
+        let mesh_perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .offset(0)
+            .range(size_of::<MeshPerdrawcallStorageBufferObject>() as u64)
+            .buffer(
+                global_render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .build()];
+
+        let mesh_per_drawcall_vertex_blending_storage_buffer_info =
+            [vk::DescriptorBufferInfo::builder()
                 .offset(0)
-                .range(size_of::<MeshPerframeStorageBufferObject>() as u64)
-                .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .build()
-        ];
+                .range(size_of::<MeshPerdrawcallVertexBlendingStorageBufferObject>() as u64)
+                .buffer(
+                    global_render_resource
+                        .borrow()
+                        ._storage_buffer
+                        ._global_upload_ringbuffer,
+                )
+                .build()];
 
-        let mesh_perdrawcall_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .offset(0)
-                .range(size_of::<MeshPerdrawcallStorageBufferObject>() as u64) 
-                .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .build()
-        ];
+        let brdf_texture_image_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(
+                global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._brdf_lut_texture_image_view,
+            )
+            .sampler(
+                global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._brdf_lut_texture_sampler,
+            )
+            .build()];
 
-        let mesh_per_drawcall_vertex_blending_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .offset(0)
-                .range(size_of::<MeshPerdrawcallVertexBlendingStorageBufferObject>() as u64) 
-                .buffer(global_render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .build()
-        ];
-        
-        let brdf_texture_image_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(global_render_resource.borrow()._ibl_resource._brdf_lut_texture_image_view)
-                .sampler(global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler)
-                .build()
-        ];
+        let irradiance_texture_image_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(
+                global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._irradiance_texture_image_view,
+            )
+            .sampler(
+                global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._irradiance_texture_sampler,
+            )
+            .build()];
 
-        let irradiance_texture_image_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(global_render_resource.borrow()._ibl_resource._irradiance_texture_image_view)
-                .sampler(global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler)
-                .build()
-        ];
+        let specular_texture_image_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(
+                global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._specular_texture_image_view,
+            )
+            .sampler(
+                global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._specular_texture_sampler,
+            )
+            .build()];
 
-        let specular_texture_image_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(global_render_resource.borrow()._ibl_resource._specular_texture_image_view)
-                .sampler(global_render_resource.borrow()._ibl_resource._specular_texture_sampler)
-                .build()
-        ];
+        let point_light_shadow_texture_image_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.m_point_light_shadow_color_image_view)
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+            .build()];
 
-        let point_light_shadow_texture_image_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.m_point_light_shadow_color_image_view)
-                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-                .build()
-        ];   
-
-        let directional_light_shadow_texture_image_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.m_directional_light_shadow_color_image_view)
-                .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-                .build()
-        ];
+        let directional_light_shadow_texture_image_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.m_directional_light_shadow_color_image_view)
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+            .build()];
 
         let mesh_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
                 .buffer_info(&mesh_perframe_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
                 .buffer_info(&mesh_perdrawcall_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(2)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
                 .buffer_info(&mesh_per_drawcall_vertex_blending_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(3)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&brdf_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(4)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&irradiance_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(5)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&specular_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(6)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&point_light_shadow_texture_image_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(7)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&directional_light_shadow_texture_image_info)
@@ -1484,44 +1684,66 @@ impl MainCameraPass {
 
         Ok(())
     }
-    
+
     fn setup_skybox_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        let set_layouts = [self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout];
+        let set_layouts =
+            [self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout];
         let skybox_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
             .set_layouts(&set_layouts)
             .build();
 
-        self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set
-            = rhi.allocate_descriptor_sets(&skybox_descriptor_set_alloc_info)?[0];
+        self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set =
+            rhi.allocate_descriptor_sets(&skybox_descriptor_set_alloc_info)?[0];
 
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
 
-        let mesh_perframe_storage_buffer_info = [
-            vk::DescriptorBufferInfo::builder()
-                .buffer(render_resource.borrow()._storage_buffer._global_upload_ringbuffer)
-                .offset(0)
-                .range(std::mem::size_of::<MeshPerframeStorageBufferObject>() as u64)
-                .build()
-        ];
+        let mesh_perframe_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
+            .buffer(
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer,
+            )
+            .offset(0)
+            .range(std::mem::size_of::<MeshPerframeStorageBufferObject>() as u64)
+            .build()];
 
-        let specular_texture_image_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(render_resource.borrow()._ibl_resource._specular_texture_image_view)
-                .sampler(render_resource.borrow()._ibl_resource._specular_texture_sampler)
-                .build()
-        ];
+        let specular_texture_image_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(
+                render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._specular_texture_image_view,
+            )
+            .sampler(
+                render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._specular_texture_sampler,
+            )
+            .build()];
 
         let skybox_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
                 .buffer_info(&mesh_perframe_storage_buffer_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(&specular_texture_image_info)
@@ -1534,66 +1756,80 @@ impl MainCameraPass {
     }
 
     fn setup_gbuffer_lighting_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        let set_layouts = [self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout];
-        let gbuffer_light_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(rhi.get_descriptor_pool())
-            .set_layouts(&set_layouts)
-            .build();
-        self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set 
-            = rhi.allocate_descriptor_sets(&gbuffer_light_global_descriptor_set_alloc_info)?[0];
+        let set_layouts =
+            [self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout];
+        let gbuffer_light_global_descriptor_set_alloc_info =
+            vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(rhi.get_descriptor_pool())
+                .set_layouts(&set_layouts)
+                .build();
+        self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize]
+            .descriptor_set =
+            rhi.allocate_descriptor_sets(&gbuffer_light_global_descriptor_set_alloc_info)?[0];
         Ok(())
     }
 
-    fn setup_framebuffer_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> { 
-        let gbuffer_normal_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
+    fn setup_framebuffer_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        let gbuffer_normal_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].view,
+            )
+            .sampler(vk::Sampler::null())
+            .build()];
+        let gbuffer_metallic_roughness_shadingmodeid_input_attachment_info =
+            [vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_A].view)
+                .image_view(
+                    self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].view,
+                )
                 .sampler(vk::Sampler::null())
-                .build()
-        ];
-        let gbuffer_metallic_roughness_shadingmodeid_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_B].view)
-                .sampler(vk::Sampler::null())
-                .build()
-        ];
-        let gbuffer_albedo_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].view)
-                .sampler(vk::Sampler::null())
-                .build()
-        ];
-        let depth_input_attachment_info = [
-            vk::DescriptorImageInfo::builder()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(*rhi.get_depth_image_info().image_view)
-                .sampler(vk::Sampler::null())
-                .build()
-        ];
+                .build()];
+        let gbuffer_albedo_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(
+                self.m_render_pass.m_framebuffer.attachments[_MAIN_CAMERA_PASS_GBUFFER_C].view,
+            )
+            .sampler(vk::Sampler::null())
+            .build()];
+        let depth_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(*rhi.get_depth_image_info().image_view)
+            .sampler(vk::Sampler::null())
+            .build()];
         let deferred_lighting_descriptor_writes_info = [
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .image_info(&gbuffer_normal_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .image_info(&gbuffer_metallic_roughness_shadingmodeid_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(2)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .image_info(&gbuffer_albedo_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
-                .dst_set(self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set)
+                .dst_set(
+                    self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize]
+                        .descriptor_set,
+                )
                 .dst_binding(3)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .image_info(&depth_input_attachment_info)
@@ -1610,24 +1846,45 @@ impl MainCameraPass {
         rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
 
-        let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize];
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
-
-        let perframe_dynamic_offset = round_up(
-            render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
-            render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+        let pipeline =
+            &self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize];
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.pipeline,
         );
 
-        render_resource.borrow_mut()
-            ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
-        unsafe{
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._min_storage_buffer_offset_alignment,
+        );
+
+        render_resource
+            .borrow_mut()
+            ._storage_buffer
+            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+            perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
+        unsafe {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
-                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
-                std::mem::size_of::<MeshPerframeStorageBufferObject>()
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer_pointer
+                    .add(perframe_dynamic_offset as usize),
+                std::mem::size_of::<MeshPerframeStorageBufferObject>(),
             );
         }
 
@@ -1636,41 +1893,46 @@ impl MainCameraPass {
         }
 
         let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
-        let visiable_nodes = m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap();
+        let visiable_nodes = m_visible_nodes
+            .p_main_camera_visible_mesh_nodes
+            .upgrade()
+            .unwrap();
         let visiable_nodes = visiable_nodes.borrow();
-        
-        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_,Vec<_>>> = HashMap::new();
+
+        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 
         for node in visiable_nodes.iter() {
-            let mesh_instanced = 
-                main_camera_mesh_drawcall_batch.entry(node.ref_material.as_ptr()).or_default();
+            let mesh_instanced = main_camera_mesh_drawcall_batch
+                .entry(node.ref_material.as_ptr())
+                .or_default();
             let mesh_nodes = mesh_instanced.entry(node.ref_mesh.as_ptr()).or_default();
-            
+
             mesh_nodes.push(MeshNode {
-                model_matrix : &node.model_matrix
+                model_matrix: &node.model_matrix,
             });
         }
 
         for (material, mesh_instanced) in &main_camera_mesh_drawcall_batch {
-
             rhi.cmd_bind_descriptor_sets(
-                command_buffer, 
-                vk::PipelineBindPoint::GRAPHICS, 
-                self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize].layout,
-                2, 
-                &[unsafe{&**material}.material_descriptor_set], 
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize]
+                    .layout,
+                2,
+                &[unsafe { &**material }.material_descriptor_set],
                 &[],
             );
 
             for (mesh, mesh_nodes) in mesh_instanced {
-                let ref_mesh = unsafe{&**mesh};
+                let ref_mesh = unsafe { &**mesh };
 
                 rhi.cmd_bind_descriptor_sets(
-                    command_buffer, 
-                    vk::PipelineBindPoint::GRAPHICS, 
-                    self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize].layout,
-                    1, 
-                    &[ref_mesh.mesh_vertex_blending_descriptor_set], 
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize]
+                        .layout,
+                    1,
+                    &[ref_mesh.mesh_vertex_blending_descriptor_set],
                     &[],
                 );
 
@@ -1679,50 +1941,80 @@ impl MainCameraPass {
                     ref_mesh.mesh_vertex_varying_enable_blending_buffer,
                     ref_mesh.mesh_vertex_varying_buffer,
                 ];
-            
+
                 rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0, 0, 0]);
-                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
+                rhi.cmd_bind_index_buffer(
+                    command_buffer,
+                    ref_mesh.mesh_index_buffer,
+                    0,
+                    ref_mesh.mesh_index_type,
+                );
 
                 let instance_count = mesh_nodes.len();
-                let max_drawcall_instance =  MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
+                let max_drawcall_instance = MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
                 let drawcall_count = instance_count.div_ceil(max_drawcall_instance);
 
-                for index in 0..drawcall_count { 
-                    let current_count = max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
+                for index in 0..drawcall_count {
+                    let current_count =
+                        max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
 
                     let mut object = MeshPerdrawcallStorageBufferObject::default();
 
-                    for i in 0..current_count { 
-                        object.mesh_instances[i].model_matrix = mesh_nodes[index * max_drawcall_instance + i].model_matrix.clone();
+                    for i in 0..current_count {
+                        object.mesh_instances[i].model_matrix = mesh_nodes
+                            [index * max_drawcall_instance + i]
+                            .model_matrix
+                            .clone();
                     }
 
                     let perdrawcall_dynamic_offset = round_up(
-                        render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-                        render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._min_storage_buffer_offset_alignment,
                     );
-                    render_resource.borrow_mut()
-                        ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                            perdrawcall_dynamic_offset + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
+                    render_resource
+                        .borrow_mut()
+                        ._storage_buffer
+                        ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+                        perdrawcall_dynamic_offset
+                            + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
 
-                    unsafe{
+                    unsafe {
                         std::ptr::copy_nonoverlapping(
                             &object as *const _ as *const c_void,
-                            render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
-                            std::mem::size_of::<MeshPerdrawcallStorageBufferObject>()
+                            render_resource
+                                .borrow()
+                                ._storage_buffer
+                                ._global_upload_ringbuffer_pointer
+                                .add(perdrawcall_dynamic_offset as usize),
+                            std::mem::size_of::<MeshPerdrawcallStorageBufferObject>(),
                         );
                     }
 
                     rhi.cmd_bind_descriptor_sets(
-                        command_buffer, 
-                        vk::PipelineBindPoint::GRAPHICS, 
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
                         self.m_render_pass.m_render_pipeline[0].layout,
                         0,
                         &[
-                            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set,
+                            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                                .descriptor_set,
                         ],
                         &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
                     );
-                    rhi.cmd_draw_indexed(command_buffer, ref_mesh.mesh_index_count, current_count as u32, 0, 0, 0);
+                    rhi.cmd_draw_indexed(
+                        command_buffer,
+                        ref_mesh.mesh_index_count,
+                        current_count as u32,
+                        0,
+                        0,
+                        0,
+                    );
                 }
             }
         }
@@ -1736,26 +2028,46 @@ impl MainCameraPass {
         rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
 
-        let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::DeferredLighting as usize];
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
-
-        let perframe_dynamic_offset = round_up(
-            render_resource.borrow()
-                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-            render_resource.borrow()
-                ._storage_buffer._min_storage_buffer_offset_alignment
+        let pipeline =
+            &self.m_render_pass.m_render_pipeline[RenderPipelineType::DeferredLighting as usize];
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.pipeline,
         );
 
-        render_resource.borrow_mut()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._min_storage_buffer_offset_alignment,
+        );
+
+        render_resource
+            .borrow_mut()
+            ._storage_buffer
+            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
             perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
 
-        unsafe{
+        unsafe {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
-                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
-                std::mem::size_of::<MeshPerframeStorageBufferObject>()
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer_pointer
+                    .add(perframe_dynamic_offset as usize),
+                std::mem::size_of::<MeshPerframeStorageBufferObject>(),
             );
         }
 
@@ -1765,11 +2077,13 @@ impl MainCameraPass {
             pipeline.layout,
             0,
             &[
-                self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set,
-                self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].descriptor_set,
+                self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                    .descriptor_set,
+                self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize]
+                    .descriptor_set,
                 self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set,
             ],
-            &[perframe_dynamic_offset, perframe_dynamic_offset, 0 ,0],
+            &[perframe_dynamic_offset, perframe_dynamic_offset, 0, 0],
         );
 
         rhi.cmd_draw(command_buffer, 3, 1, 0, 0);
@@ -1784,24 +2098,45 @@ impl MainCameraPass {
         rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
 
-        let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshLighting as usize];
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
-
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
-
-        let perframe_dynamic_offset = round_up(
-            render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
-            render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+        let pipeline =
+            &self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshLighting as usize];
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.pipeline,
         );
 
-        render_resource.borrow_mut()
-            ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
-        unsafe{
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
+
+        let perframe_dynamic_offset = round_up(
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._min_storage_buffer_offset_alignment,
+        );
+
+        render_resource
+            .borrow_mut()
+            ._storage_buffer
+            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+            perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
+        unsafe {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
-                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
-                std::mem::size_of::<MeshPerframeStorageBufferObject>()
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer_pointer
+                    .add(perframe_dynamic_offset as usize),
+                std::mem::size_of::<MeshPerframeStorageBufferObject>(),
             );
         }
 
@@ -1810,41 +2145,46 @@ impl MainCameraPass {
         }
 
         let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
-        let visiable_nodes = m_visible_nodes.p_main_camera_visible_mesh_nodes.upgrade().unwrap();
+        let visiable_nodes = m_visible_nodes
+            .p_main_camera_visible_mesh_nodes
+            .upgrade()
+            .unwrap();
         let visiable_nodes = visiable_nodes.borrow();
-        
-        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_,Vec<_>>> = HashMap::new();
+
+        let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 
         for node in visiable_nodes.iter() {
-            let mesh_instanced = 
-                main_camera_mesh_drawcall_batch.entry(node.ref_material.as_ptr()).or_default();
+            let mesh_instanced = main_camera_mesh_drawcall_batch
+                .entry(node.ref_material.as_ptr())
+                .or_default();
             let mesh_nodes = mesh_instanced.entry(node.ref_mesh.as_ptr()).or_default();
-            
+
             mesh_nodes.push(MeshNode {
-                model_matrix : &node.model_matrix
+                model_matrix: &node.model_matrix,
             });
         }
 
         for (material, mesh_instanced) in &main_camera_mesh_drawcall_batch {
-
             rhi.cmd_bind_descriptor_sets(
-                command_buffer, 
-                vk::PipelineBindPoint::GRAPHICS, 
-                self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize].layout,
-                2, 
-                &[unsafe{&**material}.material_descriptor_set], 
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize]
+                    .layout,
+                2,
+                &[unsafe { &**material }.material_descriptor_set],
                 &[],
             );
 
             for (mesh, mesh_nodes) in mesh_instanced {
-                let ref_mesh = unsafe{&**mesh};
+                let ref_mesh = unsafe { &**mesh };
 
                 rhi.cmd_bind_descriptor_sets(
-                    command_buffer, 
-                    vk::PipelineBindPoint::GRAPHICS, 
-                    self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize].layout,
-                    1, 
-                    &[ref_mesh.mesh_vertex_blending_descriptor_set], 
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.m_render_pass.m_render_pipeline[RenderPipelineType::MeshGBuffer as usize]
+                        .layout,
+                    1,
+                    &[ref_mesh.mesh_vertex_blending_descriptor_set],
                     &[],
                 );
 
@@ -1853,50 +2193,80 @@ impl MainCameraPass {
                     ref_mesh.mesh_vertex_varying_enable_blending_buffer,
                     ref_mesh.mesh_vertex_varying_buffer,
                 ];
-            
+
                 rhi.cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &[0, 0, 0]);
-                rhi.cmd_bind_index_buffer(command_buffer, ref_mesh.mesh_index_buffer, 0, ref_mesh.mesh_index_type);
+                rhi.cmd_bind_index_buffer(
+                    command_buffer,
+                    ref_mesh.mesh_index_buffer,
+                    0,
+                    ref_mesh.mesh_index_type,
+                );
 
                 let instance_count = mesh_nodes.len();
-                let max_drawcall_instance =  MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
+                let max_drawcall_instance = MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT;
                 let drawcall_count = instance_count.div_ceil(max_drawcall_instance);
 
-                for index in 0..drawcall_count { 
-                    let current_count = max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
+                for index in 0..drawcall_count {
+                    let current_count =
+                        max_drawcall_instance.min(instance_count - index * max_drawcall_instance);
 
                     let mut object = MeshPerdrawcallStorageBufferObject::default();
 
-                    for i in 0..current_count { 
-                        object.mesh_instances[i].model_matrix = mesh_nodes[index * max_drawcall_instance + i].model_matrix.clone();
+                    for i in 0..current_count {
+                        object.mesh_instances[i].model_matrix = mesh_nodes
+                            [index * max_drawcall_instance + i]
+                            .model_matrix
+                            .clone();
                     }
 
                     let perdrawcall_dynamic_offset = round_up(
-                        render_resource.borrow()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-                        render_resource.borrow()._storage_buffer._min_storage_buffer_offset_alignment
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+                        render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._min_storage_buffer_offset_alignment,
                     );
-                    render_resource.borrow_mut()
-                        ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
-                            perdrawcall_dynamic_offset + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
+                    render_resource
+                        .borrow_mut()
+                        ._storage_buffer
+                        ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
+                        perdrawcall_dynamic_offset
+                            + std::mem::size_of::<MeshPerdrawcallStorageBufferObject>() as u32;
 
-                    unsafe{
+                    unsafe {
                         std::ptr::copy_nonoverlapping(
                             &object as *const _ as *const c_void,
-                            render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perdrawcall_dynamic_offset as usize), 
-                            std::mem::size_of::<MeshPerdrawcallStorageBufferObject>()
+                            render_resource
+                                .borrow()
+                                ._storage_buffer
+                                ._global_upload_ringbuffer_pointer
+                                .add(perdrawcall_dynamic_offset as usize),
+                            std::mem::size_of::<MeshPerdrawcallStorageBufferObject>(),
                         );
                     }
 
                     rhi.cmd_bind_descriptor_sets(
-                        command_buffer, 
-                        vk::PipelineBindPoint::GRAPHICS, 
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
                         self.m_render_pass.m_render_pipeline[0].layout,
                         0,
                         &[
-                            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set,
+                            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize]
+                                .descriptor_set,
                         ],
                         &[perframe_dynamic_offset, perdrawcall_dynamic_offset, 0],
                     );
-                    rhi.cmd_draw_indexed(command_buffer, ref_mesh.mesh_index_count, current_count as u32, 0, 0, 0);
+                    rhi.cmd_draw_indexed(
+                        command_buffer,
+                        ref_mesh.mesh_index_count,
+                        current_count as u32,
+                        0,
+                        0,
+                        0,
+                    );
                 }
             }
         }
@@ -1906,23 +2276,38 @@ impl MainCameraPass {
     fn draw_skybox(&self, rhi: &VulkanRHI) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
-        let render_resource = self.m_render_pass.m_global_render_resource.upgrade().unwrap();
+        let render_resource = self
+            .m_render_pass
+            .m_global_render_resource
+            .upgrade()
+            .unwrap();
 
         let perframe_dynamic_offset = round_up(
-            render_resource.borrow()
-                ._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()], 
-            render_resource.borrow()
-                ._storage_buffer._min_storage_buffer_offset_alignment
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
+            render_resource
+                .borrow()
+                ._storage_buffer
+                ._min_storage_buffer_offset_alignment,
         );
 
-        render_resource.borrow_mut()._storage_buffer._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = 
+        render_resource
+            .borrow_mut()
+            ._storage_buffer
+            ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
             perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
 
-        unsafe{
+        unsafe {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
-                render_resource.borrow()._storage_buffer._global_upload_ringbuffer_pointer.add(perframe_dynamic_offset as usize), 
-                std::mem::size_of::<MeshPerframeStorageBufferObject>()
+                render_resource
+                    .borrow()
+                    ._storage_buffer
+                    ._global_upload_ringbuffer_pointer
+                    .add(perframe_dynamic_offset as usize),
+                std::mem::size_of::<MeshPerframeStorageBufferObject>(),
             );
         }
 
@@ -1931,16 +2316,18 @@ impl MainCameraPass {
         rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
 
         let pipeline = &self.m_render_pass.m_render_pipeline[RenderPipelineType::SkyBox as usize];
-        rhi.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.pipeline);
+        rhi.cmd_bind_pipeline(
+            command_buffer,
+            vk::PipelineBindPoint::GRAPHICS,
+            pipeline.pipeline,
+        );
 
         rhi.cmd_bind_descriptor_sets(
             command_buffer,
             vk::PipelineBindPoint::GRAPHICS,
             pipeline.layout,
             0,
-            &[
-                self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set,
-            ],
+            &[self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set],
             &[perframe_dynamic_offset],
         );
 
