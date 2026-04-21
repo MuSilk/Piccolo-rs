@@ -19,7 +19,7 @@ use crate::{
             render_scene::RenderScene,
             render_swap_context::{
                 LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc,
-                RenderSwapContext,
+                RenderSwapContext, RenderSwapData,
             },
             render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType},
             window_system::WindowSystem,
@@ -150,7 +150,7 @@ impl RenderSystem {
             .borrow_mut()
             .update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
         self.m_render_scene.update_visible_objects(
-            &mut self.m_render_resource.borrow_mut(),
+            &self.m_render_resource.borrow(),
             &self.m_render_camera.borrow(),
         );
         self.m_render_pipeline
@@ -194,8 +194,8 @@ impl RenderSystem {
         self.m_swap_context.swap_logic_render_data();
     }
 
-    pub fn get_swap_context(&self) -> &RenderSwapContext {
-        &self.m_swap_context
+    pub fn get_logic_swap_data(&self) -> &RefCell<RenderSwapData> {
+        &self.m_swap_context.get_logic_swap_data()
     }
 
     pub fn get_render_camera(&self) -> &Rc<RefCell<RenderCamera>> {

@@ -226,13 +226,7 @@ impl MainCameraPass {
         rhi.destroy_render_pass(self.m_render_pass.m_framebuffer.render_pass);
     }
 
-    pub fn draw(
-        &self,
-        rhi: &VulkanRHI,
-        ui_runtime: &UiRuntime,
-        current_swapchain_image_index: usize,
-        forward_draw: bool,
-    ) -> Result<()> {
+    pub fn draw(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let swapchain_info = rhi.get_swapchain_info();
@@ -263,6 +257,8 @@ impl MainCameraPass {
         clear_values[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE]
             .color
             .float32 = [0.0, 0.0, 0.0, 1.0];
+
+        let current_swapchain_image_index = rhi.get_current_swapchain_image_index();
 
         let info = vk::RenderPassBeginInfo::builder()
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)

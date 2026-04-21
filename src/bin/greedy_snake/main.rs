@@ -147,18 +147,7 @@ impl SceneTrait for Scene {
         update(self, engine, delta_time);
         render_ui(self, engine);
 
-        let input_system = engine.input_system();
-        let input_system = input_system.borrow();
-        let render_system = engine.render_system();
-        let render_system = render_system.borrow();
-
-        self.scene
-            .query_mut::<CameraComponent>()
-            .for_each(|mut camera| {
-                camera.tick_free_camera(&input_system, &render_system, delta_time);
-            });
-        self.scene.tick_transform_components(engine);
-        self.scene.tick_mesh_components(&render_system);
+        self.scene.tick(engine, delta_time);
     }
 
     fn get_url(&self) -> String {
@@ -321,32 +310,37 @@ fn sync_entity_transforms(scene: &mut Scene) {
         (state.cells.clone(), state.food_cell)
     };
 
-    if let Some((_, mut head_transform)) = scene
-        .scene
-        .query_pair_mut::<SnakeHead, TransformComponent>()
-        .next()
-    {
+    let head_id = scene.scene.get_resource::<SnakeState>().unwrap().head_id;
+    if let Some(snake_head) = scene.scene.get_gobject_by_id(head_id) {
+        let mut head_transform = snake_head
+            .get_component_mut::<TransformComponent>()
+            .unwrap();
         head_transform.set_position(cells[0].to_world());
     }
 
-    if let Some((_, mut food_transform)) = scene
-        .scene
-        .query_pair_mut::<Food, TransformComponent>()
-        .next()
-    {
+    let food_id = scene.scene.get_resource::<SnakeState>().unwrap().food_id;
+    if let Some(food) = scene.scene.get_gobject_by_id(food_id) {
+        let mut food_transform = food.get_component_mut::<TransformComponent>().unwrap();
         food_transform.set_position(food_cell.to_world());
     }
 
-    scene
+    let body_ids = scene
         .scene
-        .query_pair_mut::<SnakeSegment, TransformComponent>()
-        .for_each(|(segment, mut transform)| {
+        .get_resource::<SnakeState>()
+        .unwrap()
+        .body_ids
+        .clone();
+    for body_id in body_ids {
+        if let Some(body) = scene.scene.get_gobject_by_id(body_id) {
+            let segment = body.get_component::<SnakeSegment>().unwrap();
+            let mut body_transform = body.get_component_mut::<TransformComponent>().unwrap();
             if let Some(cell) = cells.get(segment.pool_index + 1) {
-                transform.set_position(cell.to_world());
+                body_transform.set_position(cell.to_world());
             } else {
-                transform.set_position(Vector3::new(0.0, 0.0, HIDDEN_Z));
+                body_transform.set_position(Vector3::new(0.0, 0.0, HIDDEN_Z));
             }
-        });
+        }
+    }
 }
 
 fn random_free_cell(occupied: &[GridPos]) -> GridPos {
@@ -374,7 +368,6 @@ fn random_free_cell(occupied: &[GridPos]) -> GridPos {
 }
 
 fn spawn_camera(scene: &mut EngineScene) {
-    let object = scene.spawn();
     let mut camera = Box::new(CameraComponent::new_free_camera());
     camera.look_at(
         Vector3::new(
@@ -390,19 +383,17 @@ fn spawn_camera(scene: &mut EngineScene) {
         &Vector3::UNIT_Z,
     );
     scene.create_object(
-        object,
         vec![RefCell::new(camera as Box<dyn ComponentTrait>)],
     );
 }
 
 fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
-    let object = scene.spawn();
     let mut ground = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
         .load_asset("asset/greedy_snake/ground.json")
         .unwrap();
-    ground.post_load_resource(object, &asset_manager, &mesh_res);
+    ground.post_load_resource(&asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -412,23 +403,21 @@ fn spawn_ground(scene: &mut EngineScene, engine: &Engine) {
     ));
 
     scene.create_object(
-        object,
         vec![
-            RefCell::new(ground as Box<dyn ComponentTrait>),
             RefCell::new(transform as Box<dyn ComponentTrait>),
+            RefCell::new(ground as Box<dyn ComponentTrait>),
         ],
     );
 }
 
 fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
-    let object = scene.spawn();
     let head = Box::new(SnakeHead::default());
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
         .load_asset("asset/greedy_snake/head.json")
         .unwrap();
-    mesh.post_load_resource(object, &asset_manager, &mesh_res);
+    mesh.post_load_resource(&asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -438,25 +427,22 @@ fn spawn_head_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     ));
 
     scene.create_object(
-        object,
         vec![
             RefCell::new(head as Box<dyn ComponentTrait>),
-            RefCell::new(mesh as Box<dyn ComponentTrait>),
             RefCell::new(transform as Box<dyn ComponentTrait>),
+            RefCell::new(mesh as Box<dyn ComponentTrait>),
         ],
-    );
-    object
+    )
 }
 
 fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: usize) -> GObjectID {
-    let object = scene.spawn();
     let segment = Box::new(SnakeSegment { pool_index });
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
         .load_asset("asset/greedy_snake/head.json")
         .unwrap();
-    mesh.post_load_resource(object, &asset_manager, &mesh_res);
+    mesh.post_load_resource(&asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -466,25 +452,22 @@ fn spawn_segment_entity(scene: &mut EngineScene, engine: &Engine, pool_index: us
     ));
 
     scene.create_object(
-        object,
         vec![
             RefCell::new(segment as Box<dyn ComponentTrait>),
-            RefCell::new(mesh as Box<dyn ComponentTrait>),
             RefCell::new(transform as Box<dyn ComponentTrait>),
+            RefCell::new(mesh as Box<dyn ComponentTrait>),
         ],
-    );
-    object
+    )
 }
 
 fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
-    let object = scene.spawn();
     let food = Box::new(Food::default());
     let mut mesh = Box::new(MeshComponent::default());
     let asset_manager = engine.asset_manager();
     let mesh_res = asset_manager
         .load_asset("asset/greedy_snake/head.json")
         .unwrap();
-    mesh.post_load_resource(object, &asset_manager, &mesh_res);
+    mesh.post_load_resource(&asset_manager, &mesh_res);
 
     let mut transform = Box::new(TransformComponent::default());
     transform.post_load_resource(Transform::new(
@@ -494,14 +477,12 @@ fn spawn_food_entity(scene: &mut EngineScene, engine: &Engine) -> GObjectID {
     ));
 
     scene.create_object(
-        object,
         vec![
             RefCell::new(food as Box<dyn ComponentTrait>),
-            RefCell::new(mesh as Box<dyn ComponentTrait>),
             RefCell::new(transform as Box<dyn ComponentTrait>),
+            RefCell::new(mesh as Box<dyn ComponentTrait>),
         ],
-    );
-    object
+    )
 }
 
 #[derive(Default, ComponentTrait)]

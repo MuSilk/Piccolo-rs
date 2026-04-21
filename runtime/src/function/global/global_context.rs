@@ -27,10 +27,11 @@ pub struct RuntimeGlobalContext {
 
 impl RuntimeGlobalContext {
     pub fn new(config_file_path: &Path) -> Self {
-        let config_manager = ConfigManager::default();
+        let mut config_manager = ConfigManager::default();
+        config_manager.initialize(config_file_path);
         let asset_manager = AssetManager::new(&config_manager);
 
-        let mut ctx = RuntimeGlobalContext {
+        let ctx = RuntimeGlobalContext {
             m_config_manager: config_manager,
             m_asset_manager: asset_manager,
             m_input_system: RefCell::new(GameCommandInputSystem::default()),
@@ -39,7 +40,6 @@ impl RuntimeGlobalContext {
             m_render_system: None,
             m_ui_runtime: RefCell::new(UiRuntime::default()),
         };
-        ctx.m_config_manager.initialize(config_file_path);
         ctx.m_world_manager
             .borrow_mut()
             .initialize(&ctx.m_config_manager);

@@ -119,12 +119,7 @@ impl RenderPipeline {
         self.m_point_light_pass.draw(rhi);
 
         self.m_main_camera_pass
-            .draw(
-                rhi,
-                ui_runtime,
-                rhi.get_current_swapchain_image_index(),
-                forward_draw,
-            )
+            .draw(rhi, ui_runtime, forward_draw)
             .unwrap();
     }
 

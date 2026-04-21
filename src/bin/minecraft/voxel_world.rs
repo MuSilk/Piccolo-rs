@@ -779,9 +779,8 @@ pub struct VoxelWorld {
 impl VoxelWorld {
     fn create_chunk_object(&mut self, engine: &Engine, scene: &mut Scene, cx: i32, cy: i32) {
         let mesh = Rc::new(RefCell::new(build_chunk_mesh(cx, cy, &self.overrides)));
-        let object_id = scene.spawn();
         let mut mesh_component = Box::new(MeshComponent::default());
-        mesh_component.post_load_resource(object_id, engine.asset_manager(), &self.mesh_res);
+        mesh_component.post_load_resource(engine.asset_manager(), &self.mesh_res);
         mesh_component
             .m_raw_meshes
             .resize(1, GameObjectPartDesc::default());
@@ -795,13 +794,10 @@ impl VoxelWorld {
             Vector3::ONES,
         ));
 
-        scene.create_object(
-            object_id,
-            vec![
-                RefCell::new(mesh_component) as RefCell<Box<dyn ComponentTrait>>,
-                RefCell::new(transform),
-            ],
-        );
+        let object_id = scene.create_object(vec![
+            RefCell::new(mesh_component) as RefCell<Box<dyn ComponentTrait>>,
+            RefCell::new(transform),
+        ]);
         self.loaded_chunks
             .insert((cx, cy), ChunkRenderEntry { object_id, mesh });
     }

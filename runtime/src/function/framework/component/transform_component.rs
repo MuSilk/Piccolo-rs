@@ -1,13 +1,14 @@
-use runtime_derive::ComponentTrait;
+use std::any::Any;
 
 use crate::{
     core::math::{
         matrix4::Matrix4x4, quaternion::Quaternion, transform::Transform, vector3::Vector3,
     },
     engine::Engine,
+    function::framework::{component::component::ComponentTrait, object::object::GObject},
 };
 
-#[derive(Clone, Debug, ComponentTrait)]
+#[derive(Clone, Debug)]
 pub struct TransformComponent {
     m_transform: Transform,
     m_transform_buffer: [Transform; 2],
@@ -73,5 +74,17 @@ impl TransformComponent {
 
     pub fn set_dirty_flag(&mut self, is_dirty: bool) {
         self.m_is_dirty = is_dirty;
+    }
+}
+
+impl ComponentTrait for TransformComponent {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn tick(&mut self, engine: &Engine, _gobject: &GObject, _delta_time: f32) {
+        self.tick(engine);
     }
 }

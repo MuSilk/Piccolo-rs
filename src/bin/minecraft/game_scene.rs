@@ -217,7 +217,6 @@ impl SceneTrait for GameScene {
             world.borrow_mut().flush_voxel_mesh_sync(&spawn);
         }
 
-        let object = self.inner.spawn();
         let mut character = Box::new(CharacterComponent::new());
         character.m_position = spawn;
         let camera = Box::new(CameraComponent::new());
@@ -239,7 +238,7 @@ impl SceneTrait for GameScene {
             RefCell::new(transform as Box<dyn ComponentTrait>),
             RefCell::new(motor as Box<dyn ComponentTrait>),
         ];
-        self.inner.create_object(object, components);
+        self.inner.create_object(components);
         self.inner.set_loaded(true);
     }
 
@@ -265,36 +264,39 @@ impl SceneTrait for GameScene {
         if !self.is_loaded() {
             return;
         }
-        self.inner.tick_transform_components(engine);
         if !engine.is_editor_mode() {
-            self.inner
-                .query_triple_mut::<CharacterComponent, TransformComponent, MinecraftMotorComponent>()
-                .for_each(|(mut character, mut transform, mut motor)| {
-                    let input = engine.input_system().borrow();
-                    motor.tick(&input, delta_time, &mut transform, character.get_rotation());
-                    if character.m_rotation_dirty {
-                        transform.set_rotation(character.m_rotation_buffer);
-                        character.m_rotation_dirty = false;
-                    }
-                    if motor.get_is_moving() {
-                        character.m_rotation_buffer = character.m_rotation;
-                        transform.set_rotation(character.m_rotation_buffer);
-                        character.m_rotation_dirty = true;
-                    }
-                    character.m_position = *motor.get_target_position();
-                });
-            let player_pos = self
-                .inner
-                .query_mut::<CharacterComponent>()
-                .next()
-                .map(|c| c.m_position);
+            let mut player_pos = None;
+            for gobject in self.inner.m_entities.values() {
+                let mut character = match gobject.get_component_mut::<CharacterComponent>() {
+                    Some(component) => component,
+                    None => continue,
+                };
+                let mut transform = match gobject.get_component_mut::<TransformComponent>() {
+                    Some(component) => component,
+                    None => continue,
+                };
+                let mut motor = match gobject.get_component_mut::<MinecraftMotorComponent>() {
+                    Some(component) => component,
+                    None => continue,
+                };
+
+                let input = engine.input_system().borrow();
+                motor.tick(&input, delta_time, &mut transform, character.get_rotation());
+                if character.m_rotation_dirty {
+                    transform.set_rotation(character.m_rotation_buffer);
+                    character.m_rotation_dirty = false;
+                }
+                if motor.get_is_moving() {
+                    character.m_rotation_buffer = character.m_rotation;
+                    transform.set_rotation(character.m_rotation_buffer);
+                    character.m_rotation_dirty = true;
+                }
+                character.m_position = *motor.get_target_position();
+                player_pos = Some(character.m_position);
+            }
             if let Some(pos) = player_pos {
                 self.latest_player_position = pos;
             }
-            let input = engine.input_system().borrow();
-            let render = engine.render_system().borrow();
-            self.inner
-                .tick_camera_components(&input, &render, delta_time);
 
             const REACH: f32 = 5.5;
             let (mouse_left, mouse_right) = {
@@ -305,11 +307,19 @@ impl SceneTrait for GameScene {
                 let inp = engine.input_system().borrow();
                 slot_to_block(inp.get_selected_block_slot())
             };
-            let cam_snap = self
-                .inner
-                .query_pair::<CameraComponent, CharacterComponent>()
-                .next()
-                .map(|(cam, ch)| (cam.m_position, cam.m_forward, ch.get_position()));
+            let mut cam_snap = None;
+            for gobject in self.inner.m_entities.values() {
+                let cam = match gobject.get_component::<CameraComponent>() {
+                    Some(component) => component,
+                    None => continue,
+                };
+                let ch = match gobject.get_component::<CharacterComponent>() {
+                    Some(component) => component,
+                    None => continue,
+                };
+                cam_snap = Some((cam.m_position, cam.m_forward, ch.get_position()));
+                break;
+            }
 
             let mut world_changed = false;
             if let (Some(world_rc), Some((origin, forward, feet))) = (self.world.as_ref(), cam_snap)
@@ -356,8 +366,7 @@ impl SceneTrait for GameScene {
             }
             self.draw_hotbar_ui(engine);
         }
-        let render = engine.render_system().borrow();
-        self.inner.tick_mesh_components(&render);
+        self.inner.tick(engine, delta_time);
     }
 
     fn get_url(&self) -> String {

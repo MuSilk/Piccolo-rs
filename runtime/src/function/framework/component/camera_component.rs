@@ -1,10 +1,12 @@
-use runtime_derive::ComponentTrait;
+use std::any::Any;
 
 use crate::{
     core::math::{self, quaternion::Quaternion, vector3::Vector3},
+    engine::Engine,
     function::{
         framework::{
-            component::character_component::CharacterComponent,
+            component::{character_component::CharacterComponent, component::ComponentTrait},
+            object::object::GObject,
             resource::component::camera::{
                 CameraComponentRes, CameraParameter, FirstPersonCameraParameter,
                 FreeCameraParameter,
@@ -26,9 +28,11 @@ pub enum CameraMode {
     Invalid,
 }
 
-#[derive(Clone, ComponentTrait)]
+#[derive(Clone)]
 pub struct CameraComponent {
     pub m_camera_res: CameraComponentRes,
+
+    m_camera_mode: CameraMode,
 
     pub m_position: Vector3,
     pub m_forward: Vector3,
@@ -42,6 +46,7 @@ impl CameraComponent {
             m_camera_res: CameraComponentRes {
                 m_parameter: CameraParameter::Free(FreeCameraParameter::default()),
             },
+            m_camera_mode: CameraMode::Free,
             m_position: Default::default(),
             m_forward: Vector3::NEGATIVE_UNIT_Y,
             m_up: Vector3::UNIT_Z,
@@ -54,6 +59,7 @@ impl CameraComponent {
             m_camera_res: CameraComponentRes {
                 m_parameter: CameraParameter::FirstPerson(FirstPersonCameraParameter::default()),
             },
+            m_camera_mode: CameraMode::FirstPerson,
             m_position: Default::default(),
             m_forward: Vector3::NEGATIVE_UNIT_Y,
             m_up: Vector3::UNIT_Z,
@@ -89,8 +95,7 @@ impl CameraComponent {
             &self.m_up,
         );
 
-        let swap_context = render_system.get_swap_context();
-        swap_context
+        render_system
             .get_logic_swap_data()
             .borrow_mut()
             .m_camera_swap_data = Some(CameraSwapData {
@@ -145,8 +150,7 @@ impl CameraComponent {
             &(self.m_position + self.m_forward),
             &self.m_up,
         );
-        let swap_context = render_system.get_swap_context();
-        swap_context
+        render_system
             .get_logic_swap_data()
             .borrow_mut()
             .m_camera_swap_data = Some(CameraSwapData {
@@ -209,8 +213,7 @@ impl CameraComponent {
             &(self.m_position + self.m_forward),
             &self.m_up,
         );
-        let swap_context = render_system.get_swap_context();
-        swap_context
+        render_system
             .get_logic_swap_data()
             .borrow_mut()
             .m_camera_swap_data = Some(CameraSwapData {
@@ -229,5 +232,36 @@ impl CameraComponent {
         self.m_forward = forward;
         self.m_left = -right;
         self.m_up = right.cross(&forward);
+    }
+}
+
+impl ComponentTrait for CameraComponent {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn tick(&mut self, engine: &Engine, gobject: &GObject, delta_time: f32) {
+        match self.m_camera_mode {
+            CameraMode::FirstPerson => self.tick_first_person_camera(
+                &engine.input_system().borrow(),
+                &engine.render_system().borrow(),
+                &mut gobject.get_component_mut::<CharacterComponent>().unwrap(),
+            ),
+            CameraMode::ThirdPerson => self.tick_third_person_camera(
+                &engine.input_system().borrow(),
+                &engine.render_system().borrow(),
+                &mut gobject.get_component_mut::<CharacterComponent>().unwrap(),
+            ),
+            CameraMode::Free => self.tick_free_camera(
+                &engine.input_system().borrow(),
+                &engine.render_system().borrow(),
+                delta_time,
+            ),
+            CameraMode::Invalid => panic!("Invalid camera mode"),
+        }
     }
 }

@@ -1,10 +1,39 @@
-use std::{cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc};
 use anyhow::Result;
 use itertools::Itertools;
 use linkme::distributed_slice;
-use vulkanalia::{prelude::v1_0::*};
+use std::{
+    cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void,
+    ptr::copy_nonoverlapping, rc::Rc,
+};
+use vulkanalia::prelude::v1_0::*;
 
-use crate::{core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4}, function::render::{interface::vulkan::vulkan_rhi::{self, VulkanRHI, K_MAX_FRAMES_IN_FLIGHT}, render_camera::RenderCamera, render_common::{MeshDirectionalLightShadowPerframeStorageBufferObject, MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject, MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject, TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial}, render_entity::RenderEntity, render_mesh::{VulkanMeshVertexPosition, VulkanMeshVertexVarying, VulkanMeshVertexVaryingEnableBlending}, render_resource_base::RenderResourceBase, render_scene::RenderScene, render_swap_context::LevelResourceDesc, render_type::{MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData, TextureData}}, resource::{asset_manager::AssetManager}};
+use crate::{
+    core::math::{vector2::Vector2, vector3::Vector3, vector4::Vector4},
+    function::render::{
+        interface::vulkan::vulkan_rhi::{self, K_MAX_FRAMES_IN_FLIGHT, VulkanRHI},
+        render_camera::RenderCamera,
+        render_common::{
+            MeshDirectionalLightShadowPerframeStorageBufferObject,
+            MeshInefficientPickPerframeStorageBufferObject, MeshPerMaterialUniformBufferObject,
+            MeshPerframeStorageBufferObject, MeshPointLightShadowPerframeStorageBufferObject,
+            TextureDataToUpdate, VulkanMesh, VulkanPBRMaterial,
+        },
+        render_entity::RenderEntity,
+        render_helper::calculate_directional_light_camera,
+        render_mesh::{
+            VulkanMeshVertexPosition, VulkanMeshVertexVarying,
+            VulkanMeshVertexVaryingEnableBlending,
+        },
+        render_resource_base::RenderResourceBase,
+        render_scene::RenderScene,
+        render_swap_context::LevelResourceDesc,
+        render_type::{
+            MeshVertexDataDefinition, RHISamplerType, RenderMaterialData, RenderMeshData,
+            TextureData,
+        },
+    },
+    resource::asset_manager::AssetManager,
+};
 
 #[distributed_slice(vulkan_rhi::VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
 static STORAGE_BUFFER_COUNT_RENDER_RESOURCE: u32 = vulkan_rhi::MAX_MATERIAL_COUNT;
@@ -65,15 +94,18 @@ struct DeferredVkMeshDestroy {
 }
 
 #[derive(Default)]
-pub struct RenderResource{
-    pub m_base:RenderResourceBase,
+pub struct RenderResource {
+    pub m_base: RenderResourceBase,
 
     pub m_global_render_resource: Rc<RefCell<GlobalRenderResource>>,
 
     pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
-    pub m_mesh_point_light_shadow_perframe_storage_buffer_object: MeshPointLightShadowPerframeStorageBufferObject,
-    pub m_mesh_directional_light_shadow_perframe_storage_buffer_object: MeshDirectionalLightShadowPerframeStorageBufferObject,
-    pub m_mesh_inefficient_pick_perframe_storage_buffer_object: MeshInefficientPickPerframeStorageBufferObject,
+    pub m_mesh_point_light_shadow_perframe_storage_buffer_object:
+        MeshPointLightShadowPerframeStorageBufferObject,
+    pub m_mesh_directional_light_shadow_perframe_storage_buffer_object:
+        MeshDirectionalLightShadowPerframeStorageBufferObject,
+    pub m_mesh_inefficient_pick_perframe_storage_buffer_object:
+        MeshInefficientPickPerframeStorageBufferObject,
 
     pub m_vulkan_meshes: HashMap<usize, Rc<VulkanMesh>>,
     pub m_vulkan_pbr_materials: HashMap<usize, Rc<VulkanPBRMaterial>>,
@@ -136,30 +168,99 @@ impl RenderResource {
     }
 
     pub fn upload_global_render_resource(
-        &mut self, 
+        &mut self,
         asset_manager: &AssetManager,
-        rhi: &VulkanRHI, 
-        level_resource_desc: &LevelResourceDesc
+        rhi: &VulkanRHI,
+        level_resource_desc: &LevelResourceDesc,
     ) {
         self.create_and_map_storage_buffer(rhi);
-        
-        let skybox_irradiance_map = &level_resource_desc.m_ibl_resource_desc.m_skybox_irradiance_map;
-        let irradiace_pos_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.positive_x_map, 4).unwrap();
-        let irradiace_neg_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.negative_x_map, 4).unwrap();
-        let irradiace_pos_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.positive_y_map, 4).unwrap();
-        let irradiace_neg_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.negative_y_map, 4).unwrap();
-        let irradiace_pos_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.positive_z_map, 4).unwrap();
-        let irradiace_neg_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_irradiance_map.negative_z_map, 4).unwrap();
 
-        let skybox_specular_map = &level_resource_desc.m_ibl_resource_desc.m_skybox_specular_map;
-        let specular_pos_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.positive_x_map, 4).unwrap();
-        let specular_neg_x_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.negative_x_map, 4).unwrap();
-        let specular_pos_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.positive_y_map, 4).unwrap();
-        let specular_neg_y_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.negative_y_map, 4).unwrap();
-        let specular_pos_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.positive_z_map, 4).unwrap();
-        let specular_neg_z_map = RenderResourceBase::load_texture_hdr(asset_manager, &skybox_specular_map.negative_z_map, 4).unwrap();
+        let skybox_irradiance_map = &level_resource_desc
+            .m_ibl_resource_desc
+            .m_skybox_irradiance_map;
+        let irradiace_pos_x_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_irradiance_map.positive_x_map,
+            4,
+        )
+        .unwrap();
+        let irradiace_neg_x_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_irradiance_map.negative_x_map,
+            4,
+        )
+        .unwrap();
+        let irradiace_pos_y_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_irradiance_map.positive_y_map,
+            4,
+        )
+        .unwrap();
+        let irradiace_neg_y_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_irradiance_map.negative_y_map,
+            4,
+        )
+        .unwrap();
+        let irradiace_pos_z_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_irradiance_map.positive_z_map,
+            4,
+        )
+        .unwrap();
+        let irradiace_neg_z_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_irradiance_map.negative_z_map,
+            4,
+        )
+        .unwrap();
 
-        let brdf_map = RenderResourceBase::load_texture_hdr(asset_manager, &level_resource_desc.m_ibl_resource_desc.m_brdf_map, 4).unwrap();
+        let skybox_specular_map = &level_resource_desc
+            .m_ibl_resource_desc
+            .m_skybox_specular_map;
+        let specular_pos_x_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_specular_map.positive_x_map,
+            4,
+        )
+        .unwrap();
+        let specular_neg_x_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_specular_map.negative_x_map,
+            4,
+        )
+        .unwrap();
+        let specular_pos_y_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_specular_map.positive_y_map,
+            4,
+        )
+        .unwrap();
+        let specular_neg_y_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_specular_map.negative_y_map,
+            4,
+        )
+        .unwrap();
+        let specular_pos_z_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_specular_map.positive_z_map,
+            4,
+        )
+        .unwrap();
+        let specular_neg_z_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &skybox_specular_map.negative_z_map,
+            4,
+        )
+        .unwrap();
+
+        let brdf_map = RenderResourceBase::load_texture_hdr(
+            asset_manager,
+            &level_resource_desc.m_ibl_resource_desc.m_brdf_map,
+            4,
+        )
+        .unwrap();
 
         self.create_ibl_samplers(rhi);
 
@@ -183,38 +284,62 @@ impl RenderResource {
         self.create_ibl_textures(rhi, &irradiance_maps, &specular_maps);
 
         (
-            self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_image,
-            self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_image_allocation,
-            self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_image_view,
-        ) = rhi.create_texture_image(
-            brdf_map.m_width,
-            brdf_map.m_height,
-            &brdf_map.m_pixels,
-            brdf_map.m_format,
-            0,
-        ).unwrap();
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._brdf_lut_texture_image,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._brdf_lut_texture_image_allocation,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._brdf_lut_texture_image_view,
+        ) = rhi
+            .create_texture_image(
+                brdf_map.m_width,
+                brdf_map.m_height,
+                &brdf_map.m_pixels,
+                brdf_map.m_format,
+                0,
+            )
+            .unwrap();
 
         let color_grading_map = RenderResourceBase::load_texture(
             asset_manager,
-            &level_resource_desc.m_color_grading_resource_desc.m_color_grading_map,
-            false
-        ).unwrap();
+            &level_resource_desc
+                .m_color_grading_resource_desc
+                .m_color_grading_map,
+            false,
+        )
+        .unwrap();
 
         (
-            self.m_global_render_resource.borrow_mut()._color_grading_resource._color_grading_lut_texture_image,
-            self.m_global_render_resource.borrow_mut()._color_grading_resource._color_grading_lut_texture_image_allocation,
-            self.m_global_render_resource.borrow_mut()._color_grading_resource._color_grading_lut_texture_image_view,
-        ) = rhi.create_texture_image(
-            color_grading_map.m_width,
-            color_grading_map.m_height,
-            &color_grading_map.m_pixels,
-            color_grading_map.m_format,
-            0,
-        ).unwrap();
-
+            self.m_global_render_resource
+                .borrow_mut()
+                ._color_grading_resource
+                ._color_grading_lut_texture_image,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._color_grading_resource
+                ._color_grading_lut_texture_image_allocation,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._color_grading_resource
+                ._color_grading_lut_texture_image_view,
+        ) = rhi
+            .create_texture_image(
+                color_grading_map.m_width,
+                color_grading_map.m_height,
+                &color_grading_map.m_pixels,
+                color_grading_map.m_format,
+                0,
+            )
+            .unwrap();
     }
-    
-    pub fn update_per_frame_buffer(&mut self, render_scene: &RenderScene, camera: &RenderCamera){
+
+    pub fn update_per_frame_buffer(&mut self, render_scene: &RenderScene, camera: &RenderCamera) {
         let view_matrix = camera.get_view_matrix();
         let proj_matrix = camera.get_perspective_matrix();
         let camera_position = camera.position();
@@ -228,35 +353,77 @@ impl RenderResource {
         self.m_mesh_perframe_storage_buffer_object.ambient_light = ambient_light;
         self.m_mesh_perframe_storage_buffer_object.point_light_num = point_light_num as u32;
 
-        self.m_mesh_point_light_shadow_perframe_storage_buffer_object.point_light_num = point_light_num as u32;
-        render_scene.m_point_light_list.m_lights.iter().enumerate().for_each(|(i, light)| {
-            let radius = light.calculate_radius();
-            self.m_mesh_perframe_storage_buffer_object.scene_point_lights[i].position = light.m_position;
-            self.m_mesh_perframe_storage_buffer_object.scene_point_lights[i].radius = radius;
-            self.m_mesh_perframe_storage_buffer_object.scene_point_lights[i].intensity = light.m_flux / (4.0 * PI);
+        self.m_mesh_point_light_shadow_perframe_storage_buffer_object
+            .point_light_num = point_light_num as u32;
+        render_scene
+            .m_point_light_list
+            .m_lights
+            .iter()
+            .enumerate()
+            .for_each(|(i, light)| {
+                let radius = light.calculate_radius();
+                self.m_mesh_perframe_storage_buffer_object
+                    .scene_point_lights[i]
+                    .position = light.m_position;
+                self.m_mesh_perframe_storage_buffer_object
+                    .scene_point_lights[i]
+                    .radius = radius;
+                self.m_mesh_perframe_storage_buffer_object
+                    .scene_point_lights[i]
+                    .intensity = light.m_flux / (4.0 * PI);
 
-            self.m_mesh_point_light_shadow_perframe_storage_buffer_object.point_lights_position_and_radius[i] = 
-                Vector4::new(light.m_position.x, light.m_position.y, light.m_position.z, radius);
-        });
+                self.m_mesh_point_light_shadow_perframe_storage_buffer_object
+                    .point_lights_position_and_radius[i] = Vector4::new(
+                    light.m_position.x,
+                    light.m_position.y,
+                    light.m_position.z,
+                    radius,
+                );
+            });
 
-        self.m_mesh_perframe_storage_buffer_object.scene_directional_light.direction = 
-            render_scene.m_directional_light.m_direction;
-        self.m_mesh_perframe_storage_buffer_object.scene_directional_light.color = 
-            render_scene.m_directional_light.m_color;
+        let directional_light_proj_view = calculate_directional_light_camera(render_scene, camera);
+        self.m_mesh_perframe_storage_buffer_object
+            .directional_light_proj_view = directional_light_proj_view;
+        self.m_mesh_directional_light_shadow_perframe_storage_buffer_object
+            .light_proj_view = directional_light_proj_view;
 
-        self.m_mesh_inefficient_pick_perframe_storage_buffer_object.proj_view_matrix = proj_view_matrix;
+        self.m_mesh_perframe_storage_buffer_object
+            .scene_directional_light
+            .direction = render_scene.m_directional_light.m_direction;
+        self.m_mesh_perframe_storage_buffer_object
+            .scene_directional_light
+            .color = render_scene.m_directional_light.m_color;
+
+        self.m_mesh_inefficient_pick_perframe_storage_buffer_object
+            .proj_view_matrix = proj_view_matrix;
     }
 
-    pub fn upload_game_object_render_resource(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData, material_data: &RenderMaterialData) {
+    pub fn upload_game_object_render_resource(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_entity: &RenderEntity,
+        mesh_data: &RenderMeshData,
+        material_data: &RenderMaterialData,
+    ) {
         self.update_vulkan_mesh(rhi, render_entity.m_mesh_asset_id, mesh_data);
         self.get_or_create_vulkan_material(rhi, render_entity, material_data);
     }
 
-    pub fn upload_game_object_render_resource_mesh(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, mesh_data: &RenderMeshData){
+    pub fn upload_game_object_render_resource_mesh(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_entity: &RenderEntity,
+        mesh_data: &RenderMeshData,
+    ) {
         self.update_vulkan_mesh(rhi, render_entity.m_mesh_asset_id, mesh_data);
     }
 
-    pub fn upload_game_object_render_resource_material(&mut self, rhi: &VulkanRHI, render_entity: &RenderEntity, material_data: &RenderMaterialData){
+    pub fn upload_game_object_render_resource_material(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_entity: &RenderEntity,
+        material_data: &RenderMaterialData,
+    ) {
         self.get_or_create_vulkan_material(rhi, render_entity, material_data);
     }
 
@@ -265,33 +432,43 @@ impl RenderResource {
     }
 
     pub fn get_entity_material(&self, entity: &RenderEntity) -> &Rc<VulkanPBRMaterial> {
-        self.m_vulkan_pbr_materials.get(&entity.m_material_asset_id).unwrap()
+        self.m_vulkan_pbr_materials
+            .get(&entity.m_material_asset_id)
+            .unwrap()
     }
 }
 
 impl RenderResource {
-    fn acquire_mesh_vertex_blending_descriptor_set(&mut self, rhi: &VulkanRHI) -> vk::DescriptorSet {
+    fn acquire_mesh_vertex_blending_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+    ) -> vk::DescriptorSet {
         if let Some(descriptor_set) = self.m_free_mesh_vertex_blending_descriptor_sets.pop() {
             descriptor_set
         } else {
             let set_layouts = [self.m_mesh_descriptor_set_layout];
-            let mesh_vertex_blending_per_mesh_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(rhi.get_descriptor_pool())
-                .set_layouts(&set_layouts)
-                .build();
-            rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info).unwrap()[0]
+            let mesh_vertex_blending_per_mesh_descriptor_set_alloc_info =
+                vk::DescriptorSetAllocateInfo::builder()
+                    .descriptor_pool(rhi.get_descriptor_pool())
+                    .set_layouts(&set_layouts)
+                    .build();
+            rhi.allocate_descriptor_sets(&mesh_vertex_blending_per_mesh_descriptor_set_alloc_info)
+                .unwrap()[0]
         }
     }
 
     fn recycle_mesh_vertex_blending_descriptor_set(&mut self, descriptor_set: vk::DescriptorSet) {
         if descriptor_set != vk::DescriptorSet::null() {
-            self.m_free_mesh_vertex_blending_descriptor_sets.push(descriptor_set);
+            self.m_free_mesh_vertex_blending_descriptor_sets
+                .push(descriptor_set);
         }
     }
 
     fn destroy_vulkan_mesh_resources(&mut self, rhi: &VulkanRHI, mesh: &VulkanMesh) -> Result<()> {
         if mesh.mesh_vertex_blending_descriptor_set != vk::DescriptorSet::null() {
-            self.recycle_mesh_vertex_blending_descriptor_set(mesh.mesh_vertex_blending_descriptor_set);
+            self.recycle_mesh_vertex_blending_descriptor_set(
+                mesh.mesh_vertex_blending_descriptor_set,
+            );
         }
 
         if mesh.mesh_index_buffer != vk::Buffer::null() {
@@ -332,7 +509,6 @@ impl RenderResource {
     }
 
     fn update_vulkan_mesh(&mut self, rhi: &VulkanRHI, assetid: usize, mesh_data: &RenderMeshData) {
-
         if let Some(old_rc) = self.m_vulkan_meshes.remove(&assetid) {
             let old_mesh = match Rc::try_unwrap(old_rc) {
                 Ok(m) => m,
@@ -345,27 +521,35 @@ impl RenderResource {
         let mut now_mesh = VulkanMesh::default();
 
         let index_buffer_data = &mesh_data.m_static_mesh_data.m_index_buffer.m_data;
-        
+
         let vertex_buffer_data = &mesh_data.m_static_mesh_data.m_vertex_buffer.m_data;
 
-        if mesh_data.m_skeleton_binding_buffer.m_data.len() > 0{
+        if mesh_data.m_skeleton_binding_buffer.m_data.len() > 0 {
             unimplemented!();
-        }
-        else{
-            let vertex_buffer_data: &[MeshVertexDataDefinition] = bytemuck::cast_slice(&vertex_buffer_data);
+        } else {
+            let vertex_buffer_data: &[MeshVertexDataDefinition] =
+                bytemuck::cast_slice(&vertex_buffer_data);
             match mesh_data.m_static_mesh_data.m_index_type {
                 vk::IndexType::UINT16 => {
                     Self::update_mesh_data::<u16>(
-                        self, rhi, false,
-                        index_buffer_data, vertex_buffer_data, &mut now_mesh
+                        self,
+                        rhi,
+                        false,
+                        index_buffer_data,
+                        vertex_buffer_data,
+                        &mut now_mesh,
                     );
-                },
+                }
                 vk::IndexType::UINT32 => {
                     Self::update_mesh_data::<u32>(
-                        self, rhi, false,
-                        index_buffer_data, vertex_buffer_data, &mut now_mesh
+                        self,
+                        rhi,
+                        false,
+                        index_buffer_data,
+                        vertex_buffer_data,
+                        &mut now_mesh,
                     );
-                },
+                }
                 _ => panic!("unsupported index type"),
             }
             now_mesh.mesh_index_type = mesh_data.m_static_mesh_data.m_index_type;
@@ -374,7 +558,12 @@ impl RenderResource {
         self.m_vulkan_meshes.insert(assetid, Rc::new(now_mesh));
     }
 
-    fn get_or_create_vulkan_material(&mut self, rhi: &VulkanRHI, entity: &RenderEntity, material_data: &RenderMaterialData) -> &VulkanPBRMaterial {
+    fn get_or_create_vulkan_material(
+        &mut self,
+        rhi: &VulkanRHI,
+        entity: &RenderEntity,
+        material_data: &RenderMaterialData,
+    ) -> &VulkanPBRMaterial {
         let assetid = entity.m_material_asset_id;
 
         if let None = self.m_vulkan_pbr_materials.get(&assetid) {
@@ -440,17 +629,25 @@ impl RenderResource {
             {
                 let buffer_size = std::mem::size_of::<MeshPerMaterialUniformBufferObject>();
 
-                let (staging_buffer, staging_memory) = rhi.create_buffer(
-                    buffer_size as u64, 
-                    vk::BufferUsageFlags::TRANSFER_SRC, 
-                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-                ).unwrap();
+                let (staging_buffer, staging_memory) = rhi
+                    .create_buffer(
+                        buffer_size as u64,
+                        vk::BufferUsageFlags::TRANSFER_SRC,
+                        vk::MemoryPropertyFlags::HOST_VISIBLE
+                            | vk::MemoryPropertyFlags::HOST_COHERENT,
+                    )
+                    .unwrap();
 
-                let staging_buffer_data = rhi.map_memory(
-                    staging_memory, 0, buffer_size as u64, vk::MemoryMapFlags::empty()
-                ).unwrap();
+                let staging_buffer_data = rhi
+                    .map_memory(
+                        staging_memory,
+                        0,
+                        buffer_size as u64,
+                        vk::MemoryMapFlags::empty(),
+                    )
+                    .unwrap();
 
-                let material_uniform_buffer_info = unsafe{
+                let material_uniform_buffer_info = unsafe {
                     &mut *(staging_buffer_data as *mut MeshPerMaterialUniformBufferObject)
                 };
                 material_uniform_buffer_info.is_blend = entity.m_blend as u32;
@@ -464,15 +661,25 @@ impl RenderResource {
 
                 rhi.unmap_memory(staging_memory);
 
-                (now_material.material_uniform_buffer, now_material.material_uniform_buffer_allocation) = rhi.create_buffer(
-                    buffer_size as u64,
-                    vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                ).unwrap();//todo: alignment
+                (
+                    now_material.material_uniform_buffer,
+                    now_material.material_uniform_buffer_allocation,
+                ) = rhi
+                    .create_buffer(
+                        buffer_size as u64,
+                        vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                    )
+                    .unwrap(); //todo: alignment
 
                 rhi.copy_buffer(
-                    staging_buffer, now_material.material_uniform_buffer, 0, 0, buffer_size as u64
-                ).unwrap();
+                    staging_buffer,
+                    now_material.material_uniform_buffer,
+                    0,
+                    0,
+                    buffer_size as u64,
+                )
+                .unwrap();
 
                 rhi.destroy_buffer(staging_buffer);
                 rhi.free_memory(staging_memory);
@@ -503,7 +710,7 @@ impl RenderResource {
                 emissive_image_width,
                 emissive_image_height,
                 emissive_image_format,
-                
+
                 now_material: &mut now_material,
             };
 
@@ -514,71 +721,76 @@ impl RenderResource {
             let material_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
                 .descriptor_pool(rhi.get_descriptor_pool())
                 .set_layouts(&set_layouts);
-            now_material.material_descriptor_set = rhi.allocate_descriptor_sets(&material_descriptor_set_alloc_info).unwrap()[0];
+            now_material.material_descriptor_set = rhi
+                .allocate_descriptor_sets(&material_descriptor_set_alloc_info)
+                .unwrap()[0];
 
-            let material_uniform_buffer_info = [
-                vk::DescriptorBufferInfo::builder()
-                    .buffer(now_material.material_uniform_buffer)
-                    .offset(0)
-                    .range(size_of::<MeshPerMaterialUniformBufferObject>() as u64)
-                    .build()
-            ];
+            let material_uniform_buffer_info = [vk::DescriptorBufferInfo::builder()
+                .buffer(now_material.material_uniform_buffer)
+                .offset(0)
+                .range(size_of::<MeshPerMaterialUniformBufferObject>() as u64)
+                .build()];
 
-            let base_color_image_info = [
-                vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(now_material.base_color_image_view)
-                    .sampler(rhi.get_or_create_mipmap_sampler(
+            let base_color_image_info = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.base_color_image_view)
+                .sampler(
+                    rhi.get_or_create_mipmap_sampler(
                         base_color_image_width,
                         base_color_image_height,
                         RHISamplerType::Nearest,
-                    ).unwrap())
-                    .build()
-            ];
-            let metallic_roughness_image_info = [
-                vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(now_material.metallic_roughness_image_view)
-                    .sampler(rhi.get_or_create_mipmap_sampler(
+                    )
+                    .unwrap(),
+                )
+                .build()];
+            let metallic_roughness_image_info = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.metallic_roughness_image_view)
+                .sampler(
+                    rhi.get_or_create_mipmap_sampler(
                         metallic_roughness_image_width,
                         metallic_roughness_image_height,
                         RHISamplerType::Linear,
-                    ).unwrap())
-                    .build()
-            ];
-            let normal_roughness_image_info = [
-                vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(now_material.normal_image_view)
-                    .sampler(rhi.get_or_create_mipmap_sampler(
+                    )
+                    .unwrap(),
+                )
+                .build()];
+            let normal_roughness_image_info = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.normal_image_view)
+                .sampler(
+                    rhi.get_or_create_mipmap_sampler(
                         normal_roughness_image_width,
                         normal_roughness_image_height,
                         RHISamplerType::Linear,
-                    ).unwrap())
-                    .build()
-            ];
-            let occlusion_image_info = [
-                vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(now_material.occlusion_image_view)
-                    .sampler(rhi.get_or_create_mipmap_sampler(
+                    )
+                    .unwrap(),
+                )
+                .build()];
+            let occlusion_image_info = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.occlusion_image_view)
+                .sampler(
+                    rhi.get_or_create_mipmap_sampler(
                         occlusion_image_width,
                         occlusion_image_height,
                         RHISamplerType::Linear,
-                    ).unwrap())
-                    .build()
-            ];
-            let emissive_image_info = [
-                vk::DescriptorImageInfo::builder()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(now_material.emissive_image_view)
-                    .sampler(rhi.get_or_create_mipmap_sampler(
+                    )
+                    .unwrap(),
+                )
+                .build()];
+            let emissive_image_info = [vk::DescriptorImageInfo::builder()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(now_material.emissive_image_view)
+                .sampler(
+                    rhi.get_or_create_mipmap_sampler(
                         emissive_image_width,
                         emissive_image_height,
                         RHISamplerType::Linear,
-                    ).unwrap())
-                    .build()
-            ];
+                    )
+                    .unwrap(),
+                )
+                .build()];
 
             let mesh_descriptor_writes_info = [
                 vk::WriteDescriptorSet::builder()
@@ -625,14 +837,16 @@ impl RenderResource {
                     .build(),
             ];
 
-            rhi.update_descriptor_sets(&mesh_descriptor_writes_info).unwrap();
+            rhi.update_descriptor_sets(&mesh_descriptor_writes_info)
+                .unwrap();
 
-            self.m_vulkan_pbr_materials.insert(assetid, Rc::new(now_material));
+            self.m_vulkan_pbr_materials
+                .insert(assetid, Rc::new(now_material));
         }
 
         self.m_vulkan_pbr_materials.get(&assetid).unwrap()
     }
-    
+
     fn update_mesh_data<IndexType>(
         &mut self,
         rhi: &VulkanRHI,
@@ -643,8 +857,15 @@ impl RenderResource {
     ) {
         now_mesh.enable_vertex_blending = enable_vertex_blending;
         now_mesh.mesh_vertex_count = vertex_buffer_data.len() as u32;
-        Self::update_vertex_buffer(self, rhi, enable_vertex_blending, vertex_buffer_data, now_mesh);
-        now_mesh.mesh_index_count = (index_buffer_data.len() / std::mem::size_of::<IndexType>()) as u32;
+        Self::update_vertex_buffer(
+            self,
+            rhi,
+            enable_vertex_blending,
+            vertex_buffer_data,
+            now_mesh,
+        );
+        now_mesh.mesh_index_count =
+            (index_buffer_data.len() / std::mem::size_of::<IndexType>()) as u32;
         Self::update_index_buffer(rhi, index_buffer_data, now_mesh).unwrap();
     }
 
@@ -655,46 +876,60 @@ impl RenderResource {
         vertex_buffer_data: &[MeshVertexDataDefinition],
         now_mesh: &mut VulkanMesh,
     ) {
-        if enable_vertex_blending{
+        if enable_vertex_blending {
             unimplemented!();
-        }
-        else{
+        } else {
             let vertex_count = vertex_buffer_data.len();
 
             let vertex_position_buffer_size = size_of::<VulkanMeshVertexPosition>() * vertex_count;
-            let vertex_varying_enable_blending_buffer_size = size_of::<VulkanMeshVertexVaryingEnableBlending>() * vertex_count;
+            let vertex_varying_enable_blending_buffer_size =
+                size_of::<VulkanMeshVertexVaryingEnableBlending>() * vertex_count;
             let vertex_varying_buffer_size = size_of::<VulkanMeshVertexVarying>() * vertex_count;
 
             let vertex_position_buffer_offset = 0;
-            let vertex_varying_enable_blending_buffer_offset = vertex_position_buffer_offset + vertex_position_buffer_size;
-            let vertex_varying_buffer_offset = vertex_varying_enable_blending_buffer_offset + vertex_varying_enable_blending_buffer_size;
+            let vertex_varying_enable_blending_buffer_offset =
+                vertex_position_buffer_offset + vertex_position_buffer_size;
+            let vertex_varying_buffer_offset = vertex_varying_enable_blending_buffer_offset
+                + vertex_varying_enable_blending_buffer_size;
 
-            let staging_buffer_size = vertex_position_buffer_size + vertex_varying_enable_blending_buffer_size + vertex_varying_buffer_size;
+            let staging_buffer_size = vertex_position_buffer_size
+                + vertex_varying_enable_blending_buffer_size
+                + vertex_varying_buffer_size;
 
-            let (staging_buffer, staging_memory) = rhi.create_buffer(
-                staging_buffer_size as u64, 
-                vk::BufferUsageFlags::TRANSFER_SRC, 
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            ).unwrap();
-            let staging_buffer_data = rhi.map_memory(
-                staging_memory, 0, staging_buffer_size as u64, vk::MemoryMapFlags::empty()
-            ).unwrap();
+            let (staging_buffer, staging_memory) = rhi
+                .create_buffer(
+                    staging_buffer_size as u64,
+                    vk::BufferUsageFlags::TRANSFER_SRC,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                )
+                .unwrap();
+            let staging_buffer_data = rhi
+                .map_memory(
+                    staging_memory,
+                    0,
+                    staging_buffer_size as u64,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap();
 
-            let mesh_vertex_positions = unsafe{
+            let mesh_vertex_positions = unsafe {
                 std::slice::from_raw_parts_mut::<VulkanMeshVertexPosition>(
                     staging_buffer_data as *mut VulkanMeshVertexPosition,
                     vertex_count,
                 )
             };
-            let mesh_vertex_blending_varyings = unsafe{
+            let mesh_vertex_blending_varyings = unsafe {
                 std::slice::from_raw_parts_mut::<VulkanMeshVertexVaryingEnableBlending>(
-                    (staging_buffer_data as *mut u8).add(vertex_varying_enable_blending_buffer_offset) as *mut VulkanMeshVertexVaryingEnableBlending,
+                    (staging_buffer_data as *mut u8)
+                        .add(vertex_varying_enable_blending_buffer_offset)
+                        as *mut VulkanMeshVertexVaryingEnableBlending,
                     vertex_count,
                 )
             };
-            let mesh_vertex_varyings = unsafe{
+            let mesh_vertex_varyings = unsafe {
                 std::slice::from_raw_parts_mut::<VulkanMeshVertexVarying>(
-                    (staging_buffer_data as *mut u8).add(vertex_varying_buffer_offset) as *mut VulkanMeshVertexVarying,
+                    (staging_buffer_data as *mut u8).add(vertex_varying_buffer_offset)
+                        as *mut VulkanMeshVertexVarying,
                     vertex_count,
                 )
             };
@@ -723,67 +958,114 @@ impl RenderResource {
                     vertex_buffer_data[vertex_index].v,
                 )
             }
-            
+
             rhi.unmap_memory(staging_memory);
-            (now_mesh.mesh_vertex_position_buffer, now_mesh.mesh_vertex_position_buffer_allocation) = rhi.create_buffer(
-                vertex_position_buffer_size as u64, 
-                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
-                vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            ).unwrap();
-            (now_mesh.mesh_vertex_varying_enable_blending_buffer, now_mesh.mesh_vertex_varying_enable_blending_buffer_allocation) = rhi.create_buffer(
-                vertex_varying_enable_blending_buffer_size as u64, 
-                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
-                vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            ).unwrap();
-            (now_mesh.mesh_vertex_varying_buffer, now_mesh.mesh_vertex_varying_buffer_allocation) = rhi.create_buffer(
-                vertex_varying_buffer_size as u64, 
-                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
-                vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            ).unwrap();
-            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_position_buffer,vertex_position_buffer_offset as u64,0, vertex_position_buffer_size as u64).unwrap();
-            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_enable_blending_buffer,vertex_varying_enable_blending_buffer_offset as u64,0, vertex_varying_enable_blending_buffer_size as u64).unwrap();
-            rhi.copy_buffer(staging_buffer, now_mesh.mesh_vertex_varying_buffer, vertex_varying_buffer_offset as u64,0, vertex_varying_buffer_size as u64).unwrap();
+            (
+                now_mesh.mesh_vertex_position_buffer,
+                now_mesh.mesh_vertex_position_buffer_allocation,
+            ) = rhi
+                .create_buffer(
+                    vertex_position_buffer_size as u64,
+                    vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                )
+                .unwrap();
+            (
+                now_mesh.mesh_vertex_varying_enable_blending_buffer,
+                now_mesh.mesh_vertex_varying_enable_blending_buffer_allocation,
+            ) = rhi
+                .create_buffer(
+                    vertex_varying_enable_blending_buffer_size as u64,
+                    vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                )
+                .unwrap();
+            (
+                now_mesh.mesh_vertex_varying_buffer,
+                now_mesh.mesh_vertex_varying_buffer_allocation,
+            ) = rhi
+                .create_buffer(
+                    vertex_varying_buffer_size as u64,
+                    vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                )
+                .unwrap();
+            rhi.copy_buffer(
+                staging_buffer,
+                now_mesh.mesh_vertex_position_buffer,
+                vertex_position_buffer_offset as u64,
+                0,
+                vertex_position_buffer_size as u64,
+            )
+            .unwrap();
+            rhi.copy_buffer(
+                staging_buffer,
+                now_mesh.mesh_vertex_varying_enable_blending_buffer,
+                vertex_varying_enable_blending_buffer_offset as u64,
+                0,
+                vertex_varying_enable_blending_buffer_size as u64,
+            )
+            .unwrap();
+            rhi.copy_buffer(
+                staging_buffer,
+                now_mesh.mesh_vertex_varying_buffer,
+                vertex_varying_buffer_offset as u64,
+                0,
+                vertex_varying_buffer_size as u64,
+            )
+            .unwrap();
             rhi.destroy_buffer(staging_buffer);
             rhi.free_memory(staging_memory);
 
             now_mesh.mesh_vertex_blending_descriptor_set =
                 self.acquire_mesh_vertex_blending_descriptor_set(rhi);
 
-            let mesh_vertex_joint_binding_storage_buffer_info = [
-                vk::DescriptorBufferInfo::builder()
-                    .buffer(self.m_global_render_resource.borrow()._storage_buffer._global_null_descriptor_storage_buffer)
+            let mesh_vertex_joint_binding_storage_buffer_info =
+                [vk::DescriptorBufferInfo::builder()
+                    .buffer(
+                        self.m_global_render_resource
+                            .borrow()
+                            ._storage_buffer
+                            ._global_null_descriptor_storage_buffer,
+                    )
                     .range(1)
-                    .build()
-            ];
+                    .build()];
 
-            let descriptor_writes = [
-                vk::WriteDescriptorSet::builder()
-                    .dst_set(now_mesh.mesh_vertex_blending_descriptor_set)
-                    .dst_binding(0)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .buffer_info(&mesh_vertex_joint_binding_storage_buffer_info)
-                    .build(),
-            ];
+            let descriptor_writes = [vk::WriteDescriptorSet::builder()
+                .dst_set(now_mesh.mesh_vertex_blending_descriptor_set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .buffer_info(&mesh_vertex_joint_binding_storage_buffer_info)
+                .build()];
             rhi.update_descriptor_sets(&descriptor_writes).unwrap();
         }
-    } 
-    
-    fn update_index_buffer(rhi: &VulkanRHI, index_buffer_data: &[u8], now_mesh: &mut VulkanMesh) -> Result<()>{
+    }
+
+    fn update_index_buffer(
+        rhi: &VulkanRHI,
+        index_buffer_data: &[u8],
+        now_mesh: &mut VulkanMesh,
+    ) -> Result<()> {
         let buffer_size = index_buffer_data.len() as u64;
         let (staging_buffer, staging_memory) = rhi.create_buffer(
-            buffer_size, 
-            vk::BufferUsageFlags::TRANSFER_SRC, 
+            buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )?;
-        let staging_buffer_data = rhi.map_memory(staging_memory, 0, buffer_size, vk::MemoryMapFlags::empty())?;
-        unsafe{
-            copy_nonoverlapping(index_buffer_data.as_ptr().cast(), staging_buffer_data, buffer_size as usize);
+        let staging_buffer_data =
+            rhi.map_memory(staging_memory, 0, buffer_size, vk::MemoryMapFlags::empty())?;
+        unsafe {
+            copy_nonoverlapping(
+                index_buffer_data.as_ptr().cast(),
+                staging_buffer_data,
+                buffer_size as usize,
+            );
         }
         rhi.unmap_memory(staging_memory);
-        
+
         let (buffer, memory) = rhi.create_buffer(
-            buffer_size, 
-            vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, 
+            buffer_size,
+            vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )?;
 
@@ -801,105 +1083,138 @@ impl RenderResource {
         (
             texture_data.now_material.base_color_texture_image,
             texture_data.now_material.base_color_image_allocation,
-            texture_data.now_material.base_color_image_view
-        ) = rhi.create_texture_image(
-            texture_data.base_color_image_width,
-            texture_data.base_color_image_height,
-            texture_data.base_color_image_pixels,
-            texture_data.base_color_image_format,
-            0,
-        ).unwrap();
+            texture_data.now_material.base_color_image_view,
+        ) = rhi
+            .create_texture_image(
+                texture_data.base_color_image_width,
+                texture_data.base_color_image_height,
+                texture_data.base_color_image_pixels,
+                texture_data.base_color_image_format,
+                0,
+            )
+            .unwrap();
 
         (
             texture_data.now_material.metallic_roughness_texture_image,
-            texture_data.now_material.metallic_roughness_image_allocation,
-            texture_data.now_material.metallic_roughness_image_view
-        ) = rhi.create_texture_image(
-            texture_data.metallic_roughness_image_width,
-            texture_data.metallic_roughness_image_height,
-            texture_data.metallic_roughness_image_pixels,
-            texture_data.metallic_roughness_image_format,
-            0,
-        ).unwrap();
+            texture_data
+                .now_material
+                .metallic_roughness_image_allocation,
+            texture_data.now_material.metallic_roughness_image_view,
+        ) = rhi
+            .create_texture_image(
+                texture_data.metallic_roughness_image_width,
+                texture_data.metallic_roughness_image_height,
+                texture_data.metallic_roughness_image_pixels,
+                texture_data.metallic_roughness_image_format,
+                0,
+            )
+            .unwrap();
 
         (
             texture_data.now_material.normal_texture_image,
             texture_data.now_material.normal_image_allocation,
-            texture_data.now_material.normal_image_view
-        ) = rhi.create_texture_image(
-            texture_data.normal_roughness_image_width,
-            texture_data.normal_roughness_image_height,
-            texture_data.normal_roughness_image_pixels,
-            texture_data.normal_roughness_image_format,
-            0,
-        ).unwrap();
+            texture_data.now_material.normal_image_view,
+        ) = rhi
+            .create_texture_image(
+                texture_data.normal_roughness_image_width,
+                texture_data.normal_roughness_image_height,
+                texture_data.normal_roughness_image_pixels,
+                texture_data.normal_roughness_image_format,
+                0,
+            )
+            .unwrap();
 
         (
             texture_data.now_material.occlusion_texture_image,
             texture_data.now_material.occlusion_image_allocation,
-            texture_data.now_material.occlusion_image_view
-        ) = rhi.create_texture_image(
-            texture_data.occlusion_image_width,
-            texture_data.occlusion_image_height,
-            texture_data.occlusion_image_pixels,
-            texture_data.occlusion_image_format,
-            0,
-        ).unwrap();
+            texture_data.now_material.occlusion_image_view,
+        ) = rhi
+            .create_texture_image(
+                texture_data.occlusion_image_width,
+                texture_data.occlusion_image_height,
+                texture_data.occlusion_image_pixels,
+                texture_data.occlusion_image_format,
+                0,
+            )
+            .unwrap();
 
         (
             texture_data.now_material.emissive_texture_image,
             texture_data.now_material.emissive_image_allocation,
-            texture_data.now_material.emissive_image_view
-        ) = rhi.create_texture_image(
-            texture_data.emissive_image_width,
-            texture_data.emissive_image_height,
-            texture_data.emissive_image_pixels,
-            texture_data.emissive_image_format,
-            0,
-        ).unwrap();
+            texture_data.now_material.emissive_image_view,
+        ) = rhi
+            .create_texture_image(
+                texture_data.emissive_image_width,
+                texture_data.emissive_image_height,
+                texture_data.emissive_image_pixels,
+                texture_data.emissive_image_format,
+                0,
+            )
+            .unwrap();
     }
-    
-    fn create_and_map_storage_buffer(&mut self, rhi: &VulkanRHI){
+
+    fn create_and_map_storage_buffer(&mut self, rhi: &VulkanRHI) {
         let _storage_buffer = &mut self.m_global_render_resource.borrow_mut()._storage_buffer;
         let frames_in_flight = vulkan_rhi::K_MAX_FRAMES_IN_FLIGHT;
 
         let properties = rhi.get_physical_device_properties();
-        _storage_buffer._min_uniform_buffer_offset_alignment = properties.limits.min_uniform_buffer_offset_alignment as u32;
-        _storage_buffer._min_storage_buffer_offset_alignment = properties.limits.min_storage_buffer_offset_alignment as u32;
-        _storage_buffer._max_storage_buffer_range = properties.limits.max_storage_buffer_range as u32;
+        _storage_buffer._min_uniform_buffer_offset_alignment =
+            properties.limits.min_uniform_buffer_offset_alignment as u32;
+        _storage_buffer._min_storage_buffer_offset_alignment =
+            properties.limits.min_storage_buffer_offset_alignment as u32;
+        _storage_buffer._max_storage_buffer_range =
+            properties.limits.max_storage_buffer_range as u32;
         _storage_buffer._non_coherent_atom_size = properties.limits.non_coherent_atom_size as u32;
 
         let global_storage_buffer_size = 1024 * 1024 * 128;
-        (_storage_buffer._global_upload_ringbuffer, _storage_buffer._global_upload_ringbuffer_memory) = rhi.create_buffer(
-            global_storage_buffer_size,
-            vk::BufferUsageFlags::STORAGE_BUFFER,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        ).unwrap();
+        (
+            _storage_buffer._global_upload_ringbuffer,
+            _storage_buffer._global_upload_ringbuffer_memory,
+        ) = rhi
+            .create_buffer(
+                global_storage_buffer_size,
+                vk::BufferUsageFlags::STORAGE_BUFFER,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            )
+            .unwrap();
 
-        _storage_buffer._global_upload_ringbuffers_begin.resize(frames_in_flight, 0);
-        _storage_buffer._global_upload_ringbuffers_end.resize(frames_in_flight, 0);
-        _storage_buffer._global_upload_ringbuffers_size.resize(frames_in_flight, 0);
+        _storage_buffer
+            ._global_upload_ringbuffers_begin
+            .resize(frames_in_flight, 0);
+        _storage_buffer
+            ._global_upload_ringbuffers_end
+            .resize(frames_in_flight, 0);
+        _storage_buffer
+            ._global_upload_ringbuffers_size
+            .resize(frames_in_flight, 0);
 
         for i in 0..frames_in_flight {
             _storage_buffer._global_upload_ringbuffers_begin[i] =
                 (global_storage_buffer_size as u32 * i as u32) / frames_in_flight as u32;
             _storage_buffer._global_upload_ringbuffers_size[i] =
-                (global_storage_buffer_size as u32 * (i + 1) as u32) / frames_in_flight as u32 - 
-                (global_storage_buffer_size as u32 * i as u32) / frames_in_flight as u32;
+                (global_storage_buffer_size as u32 * (i + 1) as u32) / frames_in_flight as u32
+                    - (global_storage_buffer_size as u32 * i as u32) / frames_in_flight as u32;
         }
 
-        _storage_buffer._global_upload_ringbuffer_pointer = rhi.map_memory(
-            _storage_buffer._global_upload_ringbuffer_memory, 
-            0,
-            global_storage_buffer_size as u64, 
-            vk::MemoryMapFlags::empty()
-        ).unwrap();
+        _storage_buffer._global_upload_ringbuffer_pointer = rhi
+            .map_memory(
+                _storage_buffer._global_upload_ringbuffer_memory,
+                0,
+                global_storage_buffer_size as u64,
+                vk::MemoryMapFlags::empty(),
+            )
+            .unwrap();
 
-        (_storage_buffer._global_null_descriptor_storage_buffer, _storage_buffer._global_null_descriptor_storage_buffer_memory) = rhi.create_buffer(
-            64,
-            vk::BufferUsageFlags::STORAGE_BUFFER,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
-        ).unwrap();
+        (
+            _storage_buffer._global_null_descriptor_storage_buffer,
+            _storage_buffer._global_null_descriptor_storage_buffer_memory,
+        ) = rhi
+            .create_buffer(
+                64,
+                vk::BufferUsageFlags::STORAGE_BUFFER,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            )
+            .unwrap();
     }
 
     fn create_ibl_samplers(&mut self, rhi: &VulkanRHI) {
@@ -922,66 +1237,154 @@ impl RenderResource {
             .max_lod(0.0)
             .build();
 
-        if self.m_global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler != vk::Sampler::null() {
-            rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._brdf_lut_texture_sampler);
+        if self
+            .m_global_render_resource
+            .borrow()
+            ._ibl_resource
+            ._brdf_lut_texture_sampler
+            != vk::Sampler::null()
+        {
+            rhi.destroy_sampler(
+                self.m_global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._brdf_lut_texture_sampler,
+            );
         }
 
-        self.m_global_render_resource.borrow_mut()._ibl_resource._brdf_lut_texture_sampler =
-            rhi.create_sampler(&sampler_info).unwrap();
+        self.m_global_render_resource
+            .borrow_mut()
+            ._ibl_resource
+            ._brdf_lut_texture_sampler = rhi.create_sampler(&sampler_info).unwrap();
 
         sampler_info.min_lod = 0.0;
         sampler_info.max_lod = 8.0;
         sampler_info.mip_lod_bias = 0.0;
 
-        if self.m_global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler != vk::Sampler::null() {
-            rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._irradiance_texture_sampler);
+        if self
+            .m_global_render_resource
+            .borrow()
+            ._ibl_resource
+            ._irradiance_texture_sampler
+            != vk::Sampler::null()
+        {
+            rhi.destroy_sampler(
+                self.m_global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._irradiance_texture_sampler,
+            );
         }
 
-        self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_sampler =
-            rhi.create_sampler(&sampler_info).unwrap();
+        self.m_global_render_resource
+            .borrow_mut()
+            ._ibl_resource
+            ._irradiance_texture_sampler = rhi.create_sampler(&sampler_info).unwrap();
 
-        if self.m_global_render_resource.borrow()._ibl_resource._specular_texture_sampler != vk::Sampler::null() {
-            rhi.destroy_sampler(self.m_global_render_resource.borrow()._ibl_resource._specular_texture_sampler);
+        if self
+            .m_global_render_resource
+            .borrow()
+            ._ibl_resource
+            ._specular_texture_sampler
+            != vk::Sampler::null()
+        {
+            rhi.destroy_sampler(
+                self.m_global_render_resource
+                    .borrow()
+                    ._ibl_resource
+                    ._specular_texture_sampler,
+            );
         }
 
-        self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_sampler =
-            rhi.create_sampler(&sampler_info).unwrap();
+        self.m_global_render_resource
+            .borrow_mut()
+            ._ibl_resource
+            ._specular_texture_sampler = rhi.create_sampler(&sampler_info).unwrap();
     }
 
-    fn create_ibl_textures(&mut self, rhi: &VulkanRHI, irradiance_maps: &[TextureData; 6], specular_maps: &[TextureData; 6]) {
+    fn create_ibl_textures(
+        &mut self,
+        rhi: &VulkanRHI,
+        irradiance_maps: &[TextureData; 6],
+        specular_maps: &[TextureData; 6],
+    ) {
         let irradiance_cubemap_miplevels =
-            (irradiance_maps[0].m_width.max(irradiance_maps[0].m_height) as f32).log2().floor() as u32 + 1;
+            (irradiance_maps[0].m_width.max(irradiance_maps[0].m_height) as f32)
+                .log2()
+                .floor() as u32
+                + 1;
 
-        (self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_image,
-        self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_image_allocation,
-        self.m_global_render_resource.borrow_mut()._ibl_resource._irradiance_texture_image_view) = rhi.create_cube_map(
-            irradiance_maps[0].m_width, 
-            irradiance_maps[0].m_height, 
-            &irradiance_maps.iter().map(|texture|texture.m_pixels.as_slice()).collect_array().unwrap(), 
-            irradiance_maps[0].m_format, 
-            irradiance_cubemap_miplevels
-        ).unwrap();
+        (
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._irradiance_texture_image,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._irradiance_texture_image_allocation,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._irradiance_texture_image_view,
+        ) = rhi
+            .create_cube_map(
+                irradiance_maps[0].m_width,
+                irradiance_maps[0].m_height,
+                &irradiance_maps
+                    .iter()
+                    .map(|texture| texture.m_pixels.as_slice())
+                    .collect_array()
+                    .unwrap(),
+                irradiance_maps[0].m_format,
+                irradiance_cubemap_miplevels,
+            )
+            .unwrap();
 
-        let specular_cubemap_miplevels =
-            (specular_maps[0].m_width.max(specular_maps[0].m_height) as f32).log2().floor() as u32 + 1;
-        
-        (self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_image,
-        self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_image_allocation,
-        self.m_global_render_resource.borrow_mut()._ibl_resource._specular_texture_image_view) = rhi.create_cube_map(
-            specular_maps[0].m_width, 
-            specular_maps[0].m_height, 
-            &specular_maps.iter().map(|texture|texture.m_pixels.as_slice()).collect_array().unwrap(), 
-            specular_maps[0].m_format, 
-            specular_cubemap_miplevels
-        ).unwrap();
+        let specular_cubemap_miplevels = (specular_maps[0].m_width.max(specular_maps[0].m_height)
+            as f32)
+            .log2()
+            .floor() as u32
+            + 1;
+
+        (
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._specular_texture_image,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._specular_texture_image_allocation,
+            self.m_global_render_resource
+                .borrow_mut()
+                ._ibl_resource
+                ._specular_texture_image_view,
+        ) = rhi
+            .create_cube_map(
+                specular_maps[0].m_width,
+                specular_maps[0].m_height,
+                &specular_maps
+                    .iter()
+                    .map(|texture| texture.m_pixels.as_slice())
+                    .collect_array()
+                    .unwrap(),
+                specular_maps[0].m_format,
+                specular_cubemap_miplevels,
+            )
+            .unwrap();
     }
 }
 
-impl std::ops::Deref for RenderResource { 
+impl std::ops::Deref for RenderResource {
     type Target = RenderResourceBase;
-    fn deref(&self) -> &Self::Target { &self.m_base }
+    fn deref(&self) -> &Self::Target {
+        &self.m_base
+    }
 }
 
 impl std::ops::DerefMut for RenderResource {
-    fn deref_mut(&mut self) -> &mut Self::Target {&mut self.m_base   }
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.m_base
+    }
 }
