@@ -1,12 +1,16 @@
 use std::{
+    any::TypeId,
     cell::{LazyCell, RefCell},
+    collections::HashMap,
     rc::{Rc, Weak},
 };
 
+use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
 
 use crate::function::render::{
-    render_common::RenderMeshNode, render_resource::GlobalRenderResource,
+    interface::vulkan::vulkan_rhi::VulkanRHI, render_common::RenderMeshNode,
+    render_resource::GlobalRenderResource,
 };
 
 #[derive(Default)]
@@ -38,6 +42,38 @@ pub struct Framebuffer {
 pub struct Descriptor {
     pub layout: vk::DescriptorSetLayout,
     pub descriptor_set: vk::DescriptorSet,
+}
+
+pub trait DescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout>;
+}
+
+#[derive(Default)]
+pub struct DescriptorLayoutManager {
+    m_descriptor_set_layouts: RefCell<HashMap<TypeId, vk::DescriptorSetLayout>>,
+}
+
+impl DescriptorLayoutManager {
+    pub fn acquire<T: DescriptorLayout + 'static>(
+        &self,
+        rhi: &VulkanRHI,
+    ) -> Result<vk::DescriptorSetLayout> {
+        let type_id = TypeId::of::<T>();
+        if let Some(layout) = self
+            .m_descriptor_set_layouts
+            .borrow()
+            .get(&type_id)
+            .copied()
+        {
+            return Ok(layout);
+        }
+
+        let layout = T::new(rhi)?;
+        self.m_descriptor_set_layouts
+            .borrow_mut()
+            .insert(type_id, layout);
+        Ok(layout)
+    }
 }
 
 #[derive(Default)]
@@ -76,12 +112,6 @@ impl RenderPass {
             .attachments
             .iter()
             .map(|attachment| attachment.view)
-            .collect::<Vec<_>>()
-    }
-    pub fn get_descriptor_set_layouts(&self) -> Vec<vk::DescriptorSetLayout> {
-        self.m_descriptor_infos
-            .iter()
-            .map(|descriptor| descriptor.layout)
             .collect::<Vec<_>>()
     }
 

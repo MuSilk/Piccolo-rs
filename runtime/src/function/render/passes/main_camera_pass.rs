@@ -23,7 +23,9 @@ use crate::{
             },
             render_helper::round_up,
             render_mesh::MeshVertex,
-            render_pass::{RenderPass, RenderPipelineBase},
+            render_pass::{
+                DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase,
+            },
             render_resource::{GlobalRenderResource, RenderResource},
             render_type::RHISamplerType,
         },
@@ -68,6 +70,7 @@ pub struct MainCameraPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub enable_fxaa: bool,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
 }
 
 pub enum LayoutType {
@@ -112,9 +115,10 @@ impl MainCameraPass {
         self.m_render_pass.initialize(info.global_render_resource);
         self.m_enable_fxaa = info.enable_fxaa;
         let rhi = info.rhi;
+        let descriptor_layout_manager = info.descriptor_layout_manager;
         self.setup_attachments(rhi)?;
         self.setup_render_pass(rhi)?;
-        self.setup_descriptor_layout(rhi)?;
+        self.setup_descriptor_layout(rhi, descriptor_layout_manager)?;
         self.setup_pipelines(rhi)?;
         self.setup_descriptor_set(rhi)?;
         self.setup_framebuffer_descriptor_set(rhi)?;
@@ -122,6 +126,7 @@ impl MainCameraPass {
 
         self.m_tone_mapping_pass.initialize(&ToneMappingInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
+            descriptor_layout_manager: descriptor_layout_manager,
             rhi: rhi,
             global_render_resource: info.global_render_resource,
             input_attachment: self.m_render_pass.get_framebuffer_image_views()
@@ -131,6 +136,7 @@ impl MainCameraPass {
         self.m_color_grading_pass
             .initialize(&ColorGradingPassInitInfo {
                 render_pass: *self.m_render_pass.get_render_pass(),
+                descriptor_layout_manager: descriptor_layout_manager,
                 rhi: rhi,
                 global_render_resource: info.global_render_resource,
                 input_attachment: self.m_render_pass.get_framebuffer_image_views()
@@ -139,6 +145,7 @@ impl MainCameraPass {
 
         self.m_fxaa_pass.initialize(&FXAAPassInitInfo {
             render_pass: *self.m_render_pass.get_render_pass(),
+            descriptor_layout_manager: descriptor_layout_manager,
             rhi: rhi,
             global_render_resource: info.global_render_resource,
             input_attachment: self.m_render_pass.get_framebuffer_image_views()
@@ -147,12 +154,14 @@ impl MainCameraPass {
 
         self.m_ui_pass.initialize(&UIPassInitInfo {
             rhi: rhi,
+            descriptor_layout_manager: descriptor_layout_manager,
             global_render_resource: info.global_render_resource,
             render_pass: *self.m_render_pass.get_render_pass(),
         })?;
 
         self.m_combine_ui_pass.initialize(&CombineUIPassInitInfo {
             rhi: rhi,
+            descriptor_layout_manager: descriptor_layout_manager,
             global_render_resource: info.global_render_resource,
             render_pass: *self.m_render_pass.get_render_pass(),
             scene_input_attachment: self.m_render_pass.get_framebuffer_image_views()
@@ -336,10 +345,6 @@ impl MainCameraPass {
 
         Ok(())
     }
-
-    pub fn get_descriptor_set_layouts(&self, layout_type: LayoutType) -> vk::DescriptorSetLayout {
-        self.m_render_pass.m_descriptor_infos[layout_type as usize].layout
-    }
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER)]
@@ -352,6 +357,202 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3 + 1;
 static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 5 + 5 * vulkan_rhi::MAX_MATERIAL_COUNT + 1;
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
 static INPUT_ATTACHMENT_COUNT: u32 = 4;
+
+pub struct PerMeshDescriptorLayout;
+impl DescriptorLayout for PerMeshDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let bindings = [vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .build()];
+
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&bindings)
+            .build();
+
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
+    }
+}
+
+pub struct MeshGlobalDescriptorLayout;
+impl DescriptorLayout for MeshGlobalDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let mesh_global_layout_bindings = [
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(3)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(4)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(5)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(6)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(7)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+        ];
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&mesh_global_layout_bindings)
+            .build();
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
+    }
+}
+
+pub struct MeshPerMaterialDescriptorLayout;
+impl DescriptorLayout for MeshPerMaterialDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let mesh_material_layout_bindings = [
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(3)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(4)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(5)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+        ];
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&mesh_material_layout_bindings)
+            .build();
+
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
+    }
+}
+
+pub struct SkyboxDescriptorLayout;
+impl DescriptorLayout for SkyboxDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let skybox_layout_bindings = [
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+        ];
+
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&skybox_layout_bindings)
+            .build();
+
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
+    }
+}
+
+pub struct DeferredLightingDescriptorLayout;
+impl DescriptorLayout for DeferredLightingDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let layout_bindings = [
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(3)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+        ];
+
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&layout_bindings)
+            .build();
+
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
+    }
+}
 
 impl MainCameraPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
@@ -886,191 +1087,44 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_descriptor_layout(
+        &mut self,
+        rhi: &VulkanRHI,
+        descriptor_layout_manager: &DescriptorLayoutManager,
+    ) -> Result<()> {
         self.m_render_pass
             .m_descriptor_infos
             .resize_with(LayoutType::LayoutTypeCount as usize, Default::default);
         // PerMesh
         {
-            let bindings = [vk::DescriptorSetLayoutBinding::builder()
-                .binding(0)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .build()];
-
-            let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-                .bindings(&bindings)
-                .build();
-
-            self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout =
-                rhi.create_descriptor_set_layout(&create_info)?;
+            let layout = descriptor_layout_manager.acquire::<PerMeshDescriptorLayout>(rhi)?;
+            self.m_render_pass.m_descriptor_infos[LayoutType::PerMesh as usize].layout = layout;
         }
         // MeshGlobal
         {
-            let mesh_global_layout_bindings = [
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(1)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(2)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(3)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(4)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(5)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(6)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(7)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-            ];
-            let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-                .bindings(&mesh_global_layout_bindings)
-                .build();
-            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout =
-                rhi.create_descriptor_set_layout(&create_info)?;
+            let layout = descriptor_layout_manager.acquire::<MeshGlobalDescriptorLayout>(rhi)?;
+            self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout = layout;
         }
         // MeshPerMaterial
         {
-            let mesh_material_layout_bindings = [
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(1)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(2)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(3)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(4)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(5)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-            ];
-            let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-                .bindings(&mesh_material_layout_bindings)
-                .build();
+            let layout =
+                descriptor_layout_manager.acquire::<MeshPerMaterialDescriptorLayout>(rhi)?;
             self.m_render_pass.m_descriptor_infos[LayoutType::MeshPerMaterial as usize].layout =
-                rhi.create_descriptor_set_layout(&create_info)?;
+                layout;
         }
         // Skybox
         {
-            let skybox_layout_bindings = [
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(1)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-            ];
-
-            let descriptor_set_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-                .bindings(&skybox_layout_bindings)
-                .build();
-
-            self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout =
-                rhi.create_descriptor_set_layout(&descriptor_set_layout_create_info)?;
+            let layout = descriptor_layout_manager.acquire::<SkyboxDescriptorLayout>(rhi)?;
+            self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout = layout;
         }
         // Axis
         {}
         // DeferredLighting
         {
-            let layout_bindings = [
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(1)
-                    .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(2)
-                    .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-                vk::DescriptorSetLayoutBinding::builder()
-                    .binding(3)
-                    .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                    .build(),
-            ];
-
-            let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-                .bindings(&layout_bindings)
-                .build();
-
+            let layout =
+                descriptor_layout_manager.acquire::<DeferredLightingDescriptorLayout>(rhi)?;
             self.m_render_pass.m_descriptor_infos[LayoutType::DeferredLighting as usize].layout =
-                rhi.create_descriptor_set_layout(&create_info)?;
+                layout;
         }
         Ok(())
     }

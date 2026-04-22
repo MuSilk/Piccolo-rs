@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     function::render::{
         interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI},
+        passes::main_camera_pass::PerMeshDescriptorLayout,
         render_common::{
             MeshPointLightShadowPerdrawcallStorageBufferObject,
             MeshPointLightShadowPerdrawcallVertexBlendingStorageBufferObject,
@@ -10,7 +11,7 @@ use crate::{
             S_POINT_LIGHT_SHADOW_MAP_DIMENSION,
         },
         render_mesh::MeshVertex,
-        render_pass::{RenderPass, RenderPipelineBase},
+        render_pass::{DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase},
         render_resource::{GlobalRenderResource, RenderResource},
     },
     shader::generated::shader::{
@@ -24,6 +25,7 @@ use vulkanalia::prelude::v1_0::*;
 
 pub struct PointLightShadowPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
+    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
@@ -33,6 +35,36 @@ pub struct PointLightShadowPass {
     m_per_mesh_layout: vk::DescriptorSetLayout,
     m_mesh_point_light_shadow_perframe_storage_buffer_object:
         MeshPointLightShadowPerframeStorageBufferObject,
+}
+
+pub struct PointLightShadowDescriptorLayout;
+impl DescriptorLayout for PointLightShadowDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let layout_bindings = [
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::GEOMETRY | vk::ShaderStageFlags::FRAGMENT)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+        ];
+
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(&layout_bindings);
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
+    }
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC)]
@@ -46,15 +78,10 @@ impl PointLightShadowPass {
         self.setup_attachments(&rhi)?;
         self.setup_render_pass(&rhi)?;
         self.setup_framebuffer(&rhi)?;
-        self.setup_descriptor_layout(&rhi)?;
-
-        Ok(())
-    }
-
-    pub fn post_initialize(&mut self, info: &PointLightShadowPassInitInfo) -> Result<()> {
-        let rhi = info.rhi;
+        self.setup_descriptor_layout(&rhi, info.descriptor_layout_manager)?;
         self.setup_pipelines(&rhi)?;
         self.setup_descriptor_set(&rhi)?;
+
         Ok(())
     }
 
@@ -66,10 +93,6 @@ impl PointLightShadowPass {
 
     pub fn draw(&self, rhi: &VulkanRHI) {
         self.draw_model(rhi);
-    }
-
-    pub fn set_per_mesh_layout(&mut self, layout: vk::DescriptorSetLayout) {
-        self.m_per_mesh_layout = layout;
     }
 }
 
@@ -209,36 +232,19 @@ impl PointLightShadowPass {
         Ok(())
     }
 
-    fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_descriptor_layout(
+        &mut self,
+        rhi: &VulkanRHI,
+        descriptor_layout_manager: &DescriptorLayoutManager,
+    ) -> Result<()> {
         self.m_render_pass
             .m_descriptor_infos
             .resize_with(1, Default::default);
-        let layout_bindings = [
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(0)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::GEOMETRY | vk::ShaderStageFlags::FRAGMENT)
-                .build(),
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(1)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .build(),
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(2)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .build(),
-        ];
-
-        let layout_create_info =
-            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&layout_bindings);
 
         self.m_render_pass.m_descriptor_infos[0].layout =
-            rhi.create_descriptor_set_layout(&layout_create_info)?;
+            descriptor_layout_manager.acquire::<PointLightShadowDescriptorLayout>(rhi)?;
+        self.m_per_mesh_layout =
+            descriptor_layout_manager.acquire::<PerMeshDescriptorLayout>(rhi)?;
 
         Ok(())
     }

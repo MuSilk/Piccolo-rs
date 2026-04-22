@@ -11,7 +11,9 @@ use crate::{
     function::render::{
         interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI},
         passes::main_camera_pass::MainCameraSubPass,
-        render_pass::{Descriptor, RenderPass, RenderPipelineBase},
+        render_pass::{
+            Descriptor, DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase,
+        },
         render_resource::GlobalRenderResource,
         render_type::RHISamplerType,
     },
@@ -20,6 +22,7 @@ use crate::{
 
 pub struct ToneMappingInitInfo<'a> {
     pub render_pass: vk::RenderPass,
+    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
     pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
@@ -34,7 +37,7 @@ impl ToneMappingPass {
     pub fn initialize(&mut self, info: &ToneMappingInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
-        self.setup_descriptor_layout(info.rhi)?;
+        self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;
         self.setup_descriptor_set(info.rhi)?;
         self.update_after_framebuffer_recreate(info.rhi, info.input_attachment)?;
@@ -85,12 +88,9 @@ impl ToneMappingPass {
     }
 }
 
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
-static INPUT_ATTACHMENT_COUNT: u32 = 1;
-
-impl ToneMappingPass {
-    fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_descriptor_infos.clear();
+pub struct ToneMappingDescriptorLayout;
+impl DescriptorLayout for ToneMappingDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
         let post_process_global_layout_in_color = [vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
             .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
@@ -99,8 +99,24 @@ impl ToneMappingPass {
             .build()];
         let post_process_global_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(&post_process_global_layout_in_color);
+        let layout = rhi.create_descriptor_set_layout(&post_process_global_layout_create_info)?;
+        Ok(layout)
+    }
+}
+
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
+static INPUT_ATTACHMENT_COUNT: u32 = 1;
+
+impl ToneMappingPass {
+    fn setup_descriptor_layout(
+        &mut self,
+        rhi: &VulkanRHI,
+        descriptor_layout_manager: &DescriptorLayoutManager,
+    ) -> Result<()> {
+        self.m_render_pass.m_descriptor_infos.clear();
+        let layout = descriptor_layout_manager.acquire::<ToneMappingDescriptorLayout>(rhi)?;
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
-            layout: rhi.create_descriptor_set_layout(&post_process_global_layout_create_info)?,
+            layout,
             descriptor_set: Default::default(),
         });
         Ok(())

@@ -9,7 +9,7 @@ use crate::{
             debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo},
             interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI},
             light::{AmbientLight, DirectionalLight},
-            passes::main_camera_pass::LayoutType,
+            passes::main_camera_pass::{MeshPerMaterialDescriptorLayout, PerMeshDescriptorLayout},
             render_camera::RenderCamera,
             render_entity::RenderEntity,
             render_object::{GameObjectMeshDesc, GameObjectPartId},
@@ -112,13 +112,15 @@ impl RenderSystem {
         })
         .unwrap();
 
-        render_resource.borrow_mut().m_mesh_descriptor_set_layout =
-            render_pipeline.get_descriptor_set_layouts(LayoutType::PerMesh);
+        render_resource.borrow_mut().m_mesh_descriptor_set_layout = render_pipeline
+            .get_descriptor_set_layout::<PerMeshDescriptorLayout>(&vulkan_rhi.borrow())
+            .unwrap();
 
         render_resource
             .borrow_mut()
-            .m_material_descriptor_set_layout =
-            render_pipeline.get_descriptor_set_layouts(LayoutType::MeshPerMaterial);
+            .m_material_descriptor_set_layout = render_pipeline
+            .get_descriptor_set_layout::<MeshPerMaterialDescriptorLayout>(&vulkan_rhi.borrow())
+            .unwrap();
 
         let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
             rhi: &vulkan_rhi,

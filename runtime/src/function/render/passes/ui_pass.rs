@@ -10,7 +10,10 @@ use crate::{
                 K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI,
             },
             passes::main_camera_pass::MainCameraSubPass,
-            render_pass::{Descriptor, RenderPass, RenderPipelineBase},
+            render_pass::{
+                Descriptor, DescriptorLayout, DescriptorLayoutManager, RenderPass,
+                RenderPipelineBase,
+            },
             render_resource::GlobalRenderResource,
             render_type::RHISamplerType,
         },
@@ -22,6 +25,7 @@ use crate::{
 pub struct UIPassInitInfo<'a> {
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
+    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
@@ -46,7 +50,7 @@ impl UIPass {
         self.m_render_pass.initialize(info.global_render_resource);
 
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
-        self.setup_descriptor_layout(info.rhi)?;
+        self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;
         self.update_after_framebuffer_recreate(info.rhi)?;
         Ok(())
@@ -198,12 +202,9 @@ impl UIPass {
     }
 }
 
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
-static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 4096;
-
-impl UIPass {
-    fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_descriptor_infos.clear();
+pub struct UIDescriptorLayout;
+impl DescriptorLayout for UIDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
         let text_texture_binding = [vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -212,11 +213,26 @@ impl UIPass {
             .build()];
         let text_texture_binding_layout_create_info =
             vk::DescriptorSetLayoutCreateInfo::builder().bindings(&text_texture_binding);
+        let layout = rhi.create_descriptor_set_layout(&text_texture_binding_layout_create_info)?;
+        Ok(layout)
+    }
+}
+
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
+static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 4096;
+
+impl UIPass {
+    fn setup_descriptor_layout(
+        &mut self,
+        rhi: &VulkanRHI,
+        descriptor_layout_manager: &DescriptorLayoutManager,
+    ) -> Result<()> {
+        self.m_render_pass.m_descriptor_infos.clear();
+        let layout = descriptor_layout_manager.acquire::<UIDescriptorLayout>(rhi)?;
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
-            layout: rhi.create_descriptor_set_layout(&text_texture_binding_layout_create_info)?,
+            layout,
             descriptor_set: Default::default(),
         });
-
         Ok(())
     }
 

@@ -4,6 +4,7 @@ use crate::{
     core::math::matrix4::Matrix4x4,
     function::render::{
         interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI},
+        passes::main_camera_pass::PerMeshDescriptorLayout,
         render_common::{
             MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT,
             MeshDirectionalLightShadowPerdrawcallStorageBufferObject,
@@ -13,7 +14,7 @@ use crate::{
         },
         render_helper::round_up,
         render_mesh::MeshVertex,
-        render_pass::{RenderPass, RenderPipelineBase},
+        render_pass::{DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase},
         render_resource::{GlobalRenderResource, RenderResource},
     },
     shader::generated::shader::{
@@ -28,6 +29,7 @@ use vulkanalia::prelude::v1_0::*;
 pub struct DirectionalLightShadowPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
 }
 
 #[derive(Default)]
@@ -49,15 +51,10 @@ impl DirectionalLightShadowPass {
         self.setup_attachments(&rhi)?;
         self.setup_render_pass(&rhi)?;
         self.setup_framebuffer(&rhi)?;
-        self.setup_descriptor_layout(&rhi)?;
-
-        Ok(())
-    }
-
-    pub fn post_initialize(&mut self, info: &DirectionalLightShadowPassInitInfo) -> Result<()> {
-        let rhi = info.rhi;
+        self.setup_descriptor_layout(&rhi, info.descriptor_layout_manager)?;
         self.setup_pipelines(&rhi)?;
         self.setup_descriptor_set(&rhi)?;
+
         Ok(())
     }
 
@@ -70,9 +67,35 @@ impl DirectionalLightShadowPass {
     pub fn draw(&self, rhi: &VulkanRHI) {
         self.draw_model(rhi);
     }
+}
 
-    pub fn set_per_mesh_layout(&mut self, layout: vk::DescriptorSetLayout) {
-        self.m_per_mesh_layout = layout;
+pub struct DirectionalLightShadowDescriptorLayout;
+impl DescriptorLayout for DirectionalLightShadowDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
+        let layout_bindings = [
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+            vk::DescriptorSetLayoutBinding::builder()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .build(),
+        ];
+
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder().bindings(&layout_bindings);
+        let layout = rhi.create_descriptor_set_layout(&create_info)?;
+        Ok(layout)
     }
 }
 
@@ -212,36 +235,20 @@ impl DirectionalLightShadowPass {
         Ok(())
     }
 
-    fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_descriptor_layout(
+        &mut self,
+        rhi: &VulkanRHI,
+        descriptor_layout_manager: &DescriptorLayoutManager,
+    ) -> Result<()> {
         self.m_render_pass
             .m_descriptor_infos
             .resize_with(1, Default::default);
-        let layout_bindings = [
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(0)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .build(),
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(1)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .build(),
-            vk::DescriptorSetLayoutBinding::builder()
-                .binding(2)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER_DYNAMIC)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
-                .build(),
-        ];
-
-        let layout_create_info =
-            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&layout_bindings);
 
         self.m_render_pass.m_descriptor_infos[0].layout =
-            rhi.create_descriptor_set_layout(&layout_create_info)?;
+            descriptor_layout_manager.acquire::<DirectionalLightShadowDescriptorLayout>(rhi)?;
+
+        self.m_per_mesh_layout =
+            descriptor_layout_manager.acquire::<PerMeshDescriptorLayout>(rhi)?;
 
         Ok(())
     }

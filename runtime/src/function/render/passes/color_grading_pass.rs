@@ -14,7 +14,9 @@ use crate::{
             VulkanRHI,
         },
         passes::main_camera_pass::MainCameraSubPass,
-        render_pass::{Descriptor, RenderPass, RenderPipelineBase},
+        render_pass::{
+            Descriptor, DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase,
+        },
         render_resource::GlobalRenderResource,
         render_type::RHISamplerType,
     },
@@ -23,6 +25,7 @@ use crate::{
 
 pub struct ColorGradingPassInitInfo<'a> {
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
@@ -37,7 +40,7 @@ impl ColorGradingPass {
     pub fn initialize(&mut self, info: &ColorGradingPassInitInfo) -> Result<()> {
         self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
-        self.setup_descriptor_layout(info.rhi)?;
+        self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;
         self.setup_descriptor_set(info.rhi)?;
         self.update_after_framebuffer_recreate(info.rhi, info.input_attachment)?;
@@ -113,15 +116,9 @@ impl ColorGradingPass {
     }
 }
 
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
-static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 1;
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
-static INPUT_ATTACHMENT_COUNT: u32 = 1;
-
-impl ColorGradingPass {
-    fn setup_descriptor_layout(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass.m_descriptor_infos.clear();
-
+pub struct ColorGradingDescriptorLayout;
+impl DescriptorLayout for ColorGradingDescriptorLayout {
+    fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
         let post_process_global_layout_in_color = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
@@ -138,8 +135,26 @@ impl ColorGradingPass {
         ];
         let post_process_global_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(&post_process_global_layout_in_color);
+        let layout = rhi.create_descriptor_set_layout(&post_process_global_layout_create_info)?;
+        Ok(layout)
+    }
+}
+
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
+static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 1;
+#[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
+static INPUT_ATTACHMENT_COUNT: u32 = 1;
+
+impl ColorGradingPass {
+    fn setup_descriptor_layout(
+        &mut self,
+        rhi: &VulkanRHI,
+        descriptor_layout_manager: &DescriptorLayoutManager,
+    ) -> Result<()> {
+        self.m_render_pass.m_descriptor_infos.clear();
+        let layout = descriptor_layout_manager.acquire::<ColorGradingDescriptorLayout>(rhi)?;
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
-            layout: rhi.create_descriptor_set_layout(&post_process_global_layout_create_info)?,
+            layout,
             descriptor_set: Default::default(),
         });
         Ok(())
