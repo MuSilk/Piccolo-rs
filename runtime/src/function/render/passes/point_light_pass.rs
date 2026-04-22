@@ -11,7 +11,10 @@ use crate::{
             S_POINT_LIGHT_SHADOW_MAP_DIMENSION,
         },
         render_mesh::MeshVertex,
-        render_pass::{DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase},
+        render_pass::{
+            DescriptorLayout, DescriptorLayoutRegistry, FrameBufferAttachment, RenderPass,
+            RenderPipelineBase,
+        },
         render_resource::{GlobalRenderResource, RenderResource},
     },
     shader::generated::shader::{
@@ -25,16 +28,17 @@ use vulkanalia::prelude::v1_0::*;
 
 pub struct PointLightShadowPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
-    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
+    pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
 #[derive(Default)]
 pub struct PointLightShadowPass {
-    pub m_render_pass: RenderPass,
+    m_render_pass: RenderPass,
     m_per_mesh_layout: vk::DescriptorSetLayout,
     m_mesh_point_light_shadow_perframe_storage_buffer_object:
         MeshPointLightShadowPerframeStorageBufferObject,
+    pub m_point_light_shadow_attachment: FrameBufferAttachment,
 }
 
 pub struct PointLightShadowDescriptorLayout;
@@ -98,19 +102,13 @@ impl PointLightShadowPass {
 
 impl PointLightShadowPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass
-            .m_framebuffer
-            .attachments
-            .resize_with(2, Default::default);
+        self.m_render_pass.m_framebuffer.attachments.clear();
 
-        self.m_render_pass.m_framebuffer.attachments[0].format = vk::Format::R32_SFLOAT;
-        (
-            self.m_render_pass.m_framebuffer.attachments[0].image,
-            self.m_render_pass.m_framebuffer.attachments[0].mem,
-        ) = rhi.create_image(
+        let format = vk::Format::R32_SFLOAT;
+        let (image, mem) = rhi.create_image(
             S_POINT_LIGHT_SHADOW_MAP_DIMENSION,
             S_POINT_LIGHT_SHADOW_MAP_DIMENSION,
-            self.m_render_pass.m_framebuffer.attachments[0].format,
+            format,
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
@@ -119,23 +117,27 @@ impl PointLightShadowPass {
             1,
         )?;
 
-        self.m_render_pass.m_framebuffer.attachments[0].view = rhi.create_image_view(
-            self.m_render_pass.m_framebuffer.attachments[0].image,
-            self.m_render_pass.m_framebuffer.attachments[0].format,
+        let view = rhi.create_image_view(
+            image,
+            format,
             vk::ImageAspectFlags::COLOR,
             vk::ImageViewType::_2D_ARRAY,
             2 * S_MAX_POINT_LIGHT_COUNT as u32,
             1,
         )?;
 
-        self.m_render_pass.m_framebuffer.attachments[1].format = rhi.get_depth_image_info().format;
-        (
-            self.m_render_pass.m_framebuffer.attachments[1].image,
-            self.m_render_pass.m_framebuffer.attachments[1].mem,
-        ) = rhi.create_image(
+        self.m_point_light_shadow_attachment = FrameBufferAttachment {
+            image,
+            mem,
+            view,
+            format,
+        };
+
+        let format = rhi.get_depth_image_info().format;
+        let (image, mem) = rhi.create_image(
             S_POINT_LIGHT_SHADOW_MAP_DIMENSION,
             S_POINT_LIGHT_SHADOW_MAP_DIMENSION,
-            self.m_render_pass.m_framebuffer.attachments[1].format,
+            format,
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
                 | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT,
@@ -145,14 +147,24 @@ impl PointLightShadowPass {
             1,
         )?;
 
-        self.m_render_pass.m_framebuffer.attachments[1].view = rhi.create_image_view(
-            self.m_render_pass.m_framebuffer.attachments[1].image,
-            self.m_render_pass.m_framebuffer.attachments[1].format,
+        let view = rhi.create_image_view(
+            image,
+            format,
             vk::ImageAspectFlags::DEPTH,
             vk::ImageViewType::_2D_ARRAY,
             2 * S_MAX_POINT_LIGHT_COUNT as u32,
             1,
         )?;
+
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .push(FrameBufferAttachment {
+                image,
+                mem,
+                view,
+                format,
+            });
 
         Ok(())
     }
@@ -160,7 +172,7 @@ impl PointLightShadowPass {
     fn setup_render_pass(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let attachements = [
             vk::AttachmentDescription::builder()
-                .format(self.m_render_pass.m_framebuffer.attachments[0].format)
+                .format(self.m_point_light_shadow_attachment.format)
                 .samples(vk::SampleCountFlags::_1)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::STORE)
@@ -170,7 +182,7 @@ impl PointLightShadowPass {
                 .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .build(),
             vk::AttachmentDescription::builder()
-                .format(self.m_render_pass.m_framebuffer.attachments[1].format)
+                .format(self.m_render_pass.m_framebuffer.attachments[0].format)
                 .samples(vk::SampleCountFlags::_1)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -214,8 +226,8 @@ impl PointLightShadowPass {
 
     fn setup_framebuffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let attachments = [
+            self.m_point_light_shadow_attachment.view,
             self.m_render_pass.m_framebuffer.attachments[0].view,
-            self.m_render_pass.m_framebuffer.attachments[1].view,
         ];
 
         let framebuffer_create_info = vk::FramebufferCreateInfo::builder()
@@ -235,7 +247,7 @@ impl PointLightShadowPass {
     fn setup_descriptor_layout(
         &mut self,
         rhi: &VulkanRHI,
-        descriptor_layout_manager: &DescriptorLayoutManager,
+        descriptor_layout_manager: &DescriptorLayoutRegistry,
     ) -> Result<()> {
         self.m_render_pass
             .m_descriptor_infos

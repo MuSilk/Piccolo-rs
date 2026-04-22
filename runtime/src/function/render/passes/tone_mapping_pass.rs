@@ -12,7 +12,7 @@ use crate::{
         interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI},
         passes::main_camera_pass::MainCameraSubPass,
         render_pass::{
-            Descriptor, DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase,
+            Descriptor, DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
         },
         render_resource::GlobalRenderResource,
         render_type::RHISamplerType,
@@ -22,7 +22,7 @@ use crate::{
 
 pub struct ToneMappingInitInfo<'a> {
     pub render_pass: vk::RenderPass,
-    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
+    pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
@@ -111,7 +111,7 @@ impl ToneMappingPass {
     fn setup_descriptor_layout(
         &mut self,
         rhi: &VulkanRHI,
-        descriptor_layout_manager: &DescriptorLayoutManager,
+        descriptor_layout_manager: &DescriptorLayoutRegistry,
     ) -> Result<()> {
         self.m_render_pass.m_descriptor_infos.clear();
         let layout = descriptor_layout_manager.acquire::<ToneMappingDescriptorLayout>(rhi)?;

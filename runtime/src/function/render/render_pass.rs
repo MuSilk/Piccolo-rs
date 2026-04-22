@@ -49,11 +49,11 @@ pub trait DescriptorLayout {
 }
 
 #[derive(Default)]
-pub struct DescriptorLayoutManager {
+pub struct DescriptorLayoutRegistry {
     m_descriptor_set_layouts: RefCell<HashMap<TypeId, vk::DescriptorSetLayout>>,
 }
 
-impl DescriptorLayoutManager {
+impl DescriptorLayoutRegistry {
     pub fn acquire<T: DescriptorLayout + 'static>(
         &self,
         rhi: &VulkanRHI,

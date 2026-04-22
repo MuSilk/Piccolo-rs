@@ -11,7 +11,7 @@ use crate::{
             },
             passes::main_camera_pass::MainCameraSubPass,
             render_pass::{
-                Descriptor, DescriptorLayout, DescriptorLayoutManager, RenderPass,
+                Descriptor, DescriptorLayout, DescriptorLayoutRegistry, RenderPass,
                 RenderPipelineBase,
             },
             render_resource::GlobalRenderResource,
@@ -25,7 +25,7 @@ use crate::{
 pub struct UIPassInitInfo<'a> {
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
-    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
+    pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
 }
 
@@ -225,7 +225,7 @@ impl UIPass {
     fn setup_descriptor_layout(
         &mut self,
         rhi: &VulkanRHI,
-        descriptor_layout_manager: &DescriptorLayoutManager,
+        descriptor_layout_manager: &DescriptorLayoutRegistry,
     ) -> Result<()> {
         self.m_render_pass.m_descriptor_infos.clear();
         let layout = descriptor_layout_manager.acquire::<UIDescriptorLayout>(rhi)?;

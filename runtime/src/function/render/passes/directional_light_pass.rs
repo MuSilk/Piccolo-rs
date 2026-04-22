@@ -14,7 +14,10 @@ use crate::{
         },
         render_helper::round_up,
         render_mesh::MeshVertex,
-        render_pass::{DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase},
+        render_pass::{
+            DescriptorLayout, DescriptorLayoutRegistry, FrameBufferAttachment, RenderPass,
+            RenderPipelineBase,
+        },
         render_resource::{GlobalRenderResource, RenderResource},
     },
     shader::generated::shader::{
@@ -29,15 +32,16 @@ use vulkanalia::prelude::v1_0::*;
 pub struct DirectionalLightShadowPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
-    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
+    pub descriptor_layout_registry: &'a DescriptorLayoutRegistry,
 }
 
 #[derive(Default)]
 pub struct DirectionalLightShadowPass {
-    pub m_render_pass: RenderPass,
+    m_render_pass: RenderPass,
     m_per_mesh_layout: vk::DescriptorSetLayout,
     m_mesh_directional_light_shadow_perframe_storage_buffer_object:
         MeshDirectionalLightShadowPerframeStorageBufferObject,
+    pub m_directional_light_shadow_attachment: FrameBufferAttachment,
 }
 
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC)]
@@ -51,7 +55,7 @@ impl DirectionalLightShadowPass {
         self.setup_attachments(&rhi)?;
         self.setup_render_pass(&rhi)?;
         self.setup_framebuffer(&rhi)?;
-        self.setup_descriptor_layout(&rhi, info.descriptor_layout_manager)?;
+        self.setup_descriptor_layout(&rhi, info.descriptor_layout_registry)?;
         self.setup_pipelines(&rhi)?;
         self.setup_descriptor_set(&rhi)?;
 
@@ -101,19 +105,13 @@ impl DescriptorLayout for DirectionalLightShadowDescriptorLayout {
 
 impl DirectionalLightShadowPass {
     fn setup_attachments(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.m_render_pass
-            .m_framebuffer
-            .attachments
-            .resize_with(2, Default::default);
+        self.m_render_pass.m_framebuffer.attachments.clear();
 
-        self.m_render_pass.m_framebuffer.attachments[0].format = vk::Format::R32_SFLOAT;
-        (
-            self.m_render_pass.m_framebuffer.attachments[0].image,
-            self.m_render_pass.m_framebuffer.attachments[0].mem,
-        ) = rhi.create_image(
+        let format = vk::Format::R32_SFLOAT;
+        let (image, mem) = rhi.create_image(
             S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
             S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
-            self.m_render_pass.m_framebuffer.attachments[0].format,
+            format,
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             vk::MemoryPropertyFlags::DEVICE_LOCAL,
@@ -122,23 +120,27 @@ impl DirectionalLightShadowPass {
             1,
         )?;
 
-        self.m_render_pass.m_framebuffer.attachments[0].view = rhi.create_image_view(
-            self.m_render_pass.m_framebuffer.attachments[0].image,
-            self.m_render_pass.m_framebuffer.attachments[0].format,
+        let view = rhi.create_image_view(
+            image,
+            format,
             vk::ImageAspectFlags::COLOR,
             vk::ImageViewType::_2D,
             1,
             1,
         )?;
 
-        self.m_render_pass.m_framebuffer.attachments[1].format = rhi.get_depth_image_info().format;
-        (
-            self.m_render_pass.m_framebuffer.attachments[1].image,
-            self.m_render_pass.m_framebuffer.attachments[1].mem,
-        ) = rhi.create_image(
+        self.m_directional_light_shadow_attachment = FrameBufferAttachment {
+            image,
+            mem,
+            view,
+            format,
+        };
+
+        let format = rhi.get_depth_image_info().format;
+        let (image, mem) = rhi.create_image(
             S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
             S_DIRECTIONAL_LIGHT_SHADOW_MAP_DIMENSION,
-            self.m_render_pass.m_framebuffer.attachments[1].format,
+            format,
             vk::ImageTiling::OPTIMAL,
             vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
                 | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT,
@@ -148,14 +150,24 @@ impl DirectionalLightShadowPass {
             1,
         )?;
 
-        self.m_render_pass.m_framebuffer.attachments[1].view = rhi.create_image_view(
-            self.m_render_pass.m_framebuffer.attachments[1].image,
-            self.m_render_pass.m_framebuffer.attachments[1].format,
+        let view = rhi.create_image_view(
+            image,
+            format,
             vk::ImageAspectFlags::DEPTH,
             vk::ImageViewType::_2D,
             1,
             1,
         )?;
+
+        self.m_render_pass
+            .m_framebuffer
+            .attachments
+            .push(FrameBufferAttachment {
+                image,
+                mem,
+                view,
+                format,
+            });
 
         Ok(())
     }
@@ -163,7 +175,7 @@ impl DirectionalLightShadowPass {
     fn setup_render_pass(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let attachements = [
             vk::AttachmentDescription::builder()
-                .format(self.m_render_pass.m_framebuffer.attachments[0].format)
+                .format(self.m_directional_light_shadow_attachment.format)
                 .samples(vk::SampleCountFlags::_1)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::STORE)
@@ -173,7 +185,7 @@ impl DirectionalLightShadowPass {
                 .final_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .build(),
             vk::AttachmentDescription::builder()
-                .format(self.m_render_pass.m_framebuffer.attachments[1].format)
+                .format(self.m_render_pass.m_framebuffer.attachments[0].format)
                 .samples(vk::SampleCountFlags::_1)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -217,8 +229,8 @@ impl DirectionalLightShadowPass {
 
     fn setup_framebuffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let attachments = [
+            self.m_directional_light_shadow_attachment.view,
             self.m_render_pass.m_framebuffer.attachments[0].view,
-            self.m_render_pass.m_framebuffer.attachments[1].view,
         ];
 
         let framebuffer_create_info = vk::FramebufferCreateInfo::builder()
@@ -238,7 +250,7 @@ impl DirectionalLightShadowPass {
     fn setup_descriptor_layout(
         &mut self,
         rhi: &VulkanRHI,
-        descriptor_layout_manager: &DescriptorLayoutManager,
+        descriptor_layout_manager: &DescriptorLayoutRegistry,
     ) -> Result<()> {
         self.m_render_pass
             .m_descriptor_infos

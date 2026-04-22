@@ -24,7 +24,7 @@ use crate::{
             render_helper::round_up,
             render_mesh::MeshVertex,
             render_pass::{
-                DescriptorLayout, DescriptorLayoutManager, RenderPass, RenderPipelineBase,
+                DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
             },
             render_resource::{GlobalRenderResource, RenderResource},
             render_type::RHISamplerType,
@@ -70,7 +70,7 @@ pub struct MainCameraPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub enable_fxaa: bool,
     pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
-    pub descriptor_layout_manager: &'a DescriptorLayoutManager,
+    pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
 }
 
 pub enum LayoutType {
@@ -1090,7 +1090,7 @@ impl MainCameraPass {
     fn setup_descriptor_layout(
         &mut self,
         rhi: &VulkanRHI,
-        descriptor_layout_manager: &DescriptorLayoutManager,
+        descriptor_layout_manager: &DescriptorLayoutRegistry,
     ) -> Result<()> {
         self.m_render_pass
             .m_descriptor_infos

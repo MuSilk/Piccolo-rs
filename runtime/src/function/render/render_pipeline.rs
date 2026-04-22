@@ -13,7 +13,7 @@ use crate::{
                 pick_pass::{PickPass, PickPassInitInfo},
                 point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo},
             },
-            render_pass::{DescriptorLayout, DescriptorLayoutManager},
+            render_pass::{DescriptorLayout, DescriptorLayoutRegistry},
             render_resource::RenderResource,
         },
         ui::ui2::UiRuntime,
@@ -33,12 +33,12 @@ pub struct RenderPipeline {
     m_point_light_pass: PointLightShadowPass,
     m_main_camera_pass: MainCameraPass,
     m_pick_pass: PickPass,
-    m_descriptor_layout_manager: DescriptorLayoutManager,
+    m_descriptor_layout_registry: DescriptorLayoutRegistry,
 }
 
 impl RenderPipeline {
     pub fn create(create_info: &RenderPipelineCreateInfo) -> Result<Self> {
-        let descriptor_layout_manager = DescriptorLayoutManager::default();
+        let descriptor_layout_manager = DescriptorLayoutRegistry::default();
 
         let mut m_directional_light_pass = DirectionalLightShadowPass::default();
         let mut m_point_light_pass = PointLightShadowPass::default();
@@ -49,7 +49,7 @@ impl RenderPipeline {
 
         m_directional_light_pass.initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,
-            descriptor_layout_manager: &descriptor_layout_manager,
+            descriptor_layout_registry: &descriptor_layout_manager,
             global_render_resource: &global_render_resource,
         })?;
 
@@ -60,13 +60,11 @@ impl RenderPipeline {
         })?;
 
         m_main_camera_pass.m_directional_light_shadow_color_image_view = m_directional_light_pass
-            .m_render_pass
-            .m_framebuffer
-            .attachments[0]
+            .m_directional_light_shadow_attachment
             .view;
 
         m_main_camera_pass.m_point_light_shadow_color_image_view =
-            m_point_light_pass.m_render_pass.m_framebuffer.attachments[0].view;
+            m_point_light_pass.m_point_light_shadow_attachment.view;
 
         m_main_camera_pass.initialize(&MainCameraPassInitInfo {
             rhi: create_info.rhi,
@@ -87,7 +85,7 @@ impl RenderPipeline {
             m_point_light_pass,
             m_main_camera_pass,
             m_pick_pass,
-            m_descriptor_layout_manager: descriptor_layout_manager,
+            m_descriptor_layout_registry: descriptor_layout_manager,
         })
     }
 
@@ -128,6 +126,6 @@ impl RenderPipeline {
         &self,
         rhi: &VulkanRHI,
     ) -> Result<vk::DescriptorSetLayout> {
-        self.m_descriptor_layout_manager.acquire::<T>(rhi)
+        self.m_descriptor_layout_registry.acquire::<T>(rhi)
     }
 }

@@ -14,11 +14,9 @@ use runtime::{
 
 use crate::editor_input_manager::EditorInputManager;
 use crate::editor_scene_manager::EditorSceneManager;
-use crate::render_graph::graph_ui::RenderGraphUI;
 
 pub struct EditorUI {
     m_state: RefCell<State>,
-    m_render_graph_ui: RefCell<RenderGraphUI>,
     m_input_manager: Option<Rc<RefCell<EditorInputManager>>>,
     m_scene_manager: Option<Rc<RefCell<EditorSceneManager>>>,
 }
@@ -27,7 +25,6 @@ impl Default for EditorUI {
     fn default() -> Self {
         Self {
             m_state: RefCell::new(State::default()),
-            m_render_graph_ui: RefCell::new(RenderGraphUI::default()),
             m_input_manager: None,
             m_scene_manager: None,
         }
@@ -274,7 +271,6 @@ impl EditorUI {
     }
 
     fn show_render_graph_window(&self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
-        self.m_render_graph_ui.borrow_mut().draw(ui_runtime, panel);
     }
 
     fn show_editor_detail_window(&self, ui_runtime: &mut UiRuntime, panel: &UiPanel) {
