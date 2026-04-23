@@ -19,6 +19,7 @@ use crate::{
             RenderPipelineBase,
         },
         render_resource::{GlobalRenderResource, RenderResource},
+        render_scene::RenderScene,
     },
     shader::generated::shader::{
         MESH_DIRECTIONAL_LIGHT_SHADOW_FRAG, MESH_DIRECTIONAL_LIGHT_SHADOW_VERT,
@@ -67,8 +68,13 @@ impl DirectionalLightShadowPass {
             .clone();
     }
 
-    pub fn draw(&self, rhi: &VulkanRHI, resource: &mut GlobalRenderResource) {
-        self.draw_model(rhi, resource);
+    pub fn draw(
+        &self,
+        rhi: &VulkanRHI,
+        render_scene: &RenderScene,
+        resource: &mut GlobalRenderResource,
+    ) {
+        self.draw_model(rhi, render_scene, resource);
     }
 }
 
@@ -439,7 +445,12 @@ impl DirectionalLightShadowPass {
         Ok(())
     }
 
-    fn draw_model(&self, rhi: &VulkanRHI, render_resource: &mut GlobalRenderResource) {
+    fn draw_model(
+        &self,
+        rhi: &VulkanRHI,
+        render_scene: &RenderScene,
+        render_resource: &mut GlobalRenderResource,
+    ) {
         let command_buffer = rhi.get_current_command_buffer();
 
         let mut clear_values: [vk::ClearValue; 2] = [Default::default(); 2];
@@ -502,12 +513,9 @@ impl DirectionalLightShadowPass {
             model_matrix: &'a Matrix4x4,
         }
 
-        let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
-        let visiable_nodes = m_visible_nodes
-            .p_directional_light_visible_mesh_nodes
-            .upgrade()
-            .unwrap();
-        let visiable_nodes = visiable_nodes.borrow();
+        let visiable_nodes = render_scene
+            .get_directional_light_visible_mesh_nodes()
+            .borrow();
 
         let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 

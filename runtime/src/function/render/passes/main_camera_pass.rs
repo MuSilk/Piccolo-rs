@@ -27,6 +27,7 @@ use crate::{
                 DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
             },
             render_resource::{GlobalRenderResource, RenderResource},
+            render_scene::RenderScene,
             render_type::RHISamplerType,
         },
         ui::ui2::UiRuntime,
@@ -242,6 +243,7 @@ impl MainCameraPass {
     pub fn draw(
         &self,
         rhi: &VulkanRHI,
+        render_scene: &RenderScene,
         render_resource: &mut GlobalRenderResource,
         ui_runtime: &UiRuntime,
         forward_draw: bool,
@@ -293,12 +295,12 @@ impl MainCameraPass {
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
             rhi.push_event(command_buffer, "Forward Lighting\0", [1.0; 4]);
-            self.draw_mesh_lighting(rhi, render_resource)?;
+            self.draw_mesh_lighting(rhi, render_scene, render_resource)?;
             self.draw_skybox(rhi, render_resource)?;
             rhi.pop_event(command_buffer);
         } else {
             rhi.push_event(command_buffer, "BasePass\0", [1.0; 4]);
-            self.draw_mesh_gbuffer(rhi, render_resource)?;
+            self.draw_mesh_gbuffer(rhi, render_scene, render_resource)?;
             rhi.pop_event(command_buffer);
 
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
@@ -1878,6 +1880,7 @@ impl MainCameraPass {
     fn draw_mesh_gbuffer(
         &self,
         rhi: &VulkanRHI,
+        render_scene: &RenderScene,
         render_resource: &mut GlobalRenderResource,
     ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
@@ -1922,12 +1925,7 @@ impl MainCameraPass {
             model_matrix: &'a Matrix4x4,
         }
 
-        let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
-        let visiable_nodes = m_visible_nodes
-            .p_main_camera_visible_mesh_nodes
-            .upgrade()
-            .unwrap();
-        let visiable_nodes = visiable_nodes.borrow();
+        let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes().borrow();
 
         let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 
@@ -2114,6 +2112,7 @@ impl MainCameraPass {
     fn draw_mesh_lighting(
         &self,
         rhi: &VulkanRHI,
+        render_scene: &RenderScene,
         render_resource: &mut GlobalRenderResource,
     ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
@@ -2158,12 +2157,7 @@ impl MainCameraPass {
             model_matrix: &'a Matrix4x4,
         }
 
-        let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
-        let visiable_nodes = m_visible_nodes
-            .p_main_camera_visible_mesh_nodes
-            .upgrade()
-            .unwrap();
-        let visiable_nodes = visiable_nodes.borrow();
+        let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes().borrow();
 
         let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 

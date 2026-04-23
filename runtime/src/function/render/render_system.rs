@@ -84,7 +84,6 @@ impl RenderSystem {
             m_direction: global_rendering_res.directional_light.direction,
             m_color: global_rendering_res.directional_light.color,
         };
-        render_scene.set_visible_nodes_reference();
 
         let level_resource_desc = LevelResourceDesc {
             m_ibl_resource_desc: LevelIBLResourceDesc {
@@ -543,6 +542,7 @@ impl RenderSystem {
 
             self.m_render_pipeline.borrow().draw(
                 &rhi,
+                &self.m_render_scene,
                 &mut self.m_render_resource.borrow_mut().m_global_render_resource,
                 ui_runtime,
                 forward_draw,

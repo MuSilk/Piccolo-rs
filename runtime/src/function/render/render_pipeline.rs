@@ -15,6 +15,7 @@ use crate::{
             },
             render_pass::{DescriptorLayout, DescriptorLayoutRegistry},
             render_resource::{GlobalRenderResource, RenderResource},
+            render_scene::RenderScene,
         },
         ui::ui2::UiRuntime,
     },
@@ -110,15 +111,16 @@ impl RenderPipeline {
     pub fn draw(
         &self,
         rhi: &VulkanRHI,
+        render_scene: &RenderScene,
         render_resource: &mut GlobalRenderResource,
         ui_runtime: &UiRuntime,
         forward_draw: bool,
     ) {
-        self.m_directional_light_pass.draw(rhi, render_resource);
+        self.m_directional_light_pass
+            .draw(rhi, render_scene, render_resource);
         self.m_point_light_pass.draw(rhi);
-
         self.m_main_camera_pass
-            .draw(rhi, render_resource, ui_runtime, forward_draw)
+            .draw(rhi, render_scene, render_resource, ui_runtime, forward_draw)
             .unwrap();
     }
 

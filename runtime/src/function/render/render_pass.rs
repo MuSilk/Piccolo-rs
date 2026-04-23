@@ -1,24 +1,9 @@
-use std::{
-    any::TypeId,
-    cell::{LazyCell, RefCell},
-    collections::HashMap,
-    rc::Weak,
-};
+use std::{any::TypeId, cell::RefCell, collections::HashMap};
 
 use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
 
-use crate::function::render::{
-    interface::vulkan::vulkan_rhi::VulkanRHI, render_common::RenderMeshNode,
-};
-
-#[derive(Default)]
-pub struct VisiableNodes {
-    pub p_directional_light_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
-    pub p_point_light_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
-    pub p_main_camera_visible_mesh_nodes: Weak<RefCell<Vec<RenderMeshNode>>>,
-    // p_axis_node: RenderAxisNode,
-}
+use crate::function::render::interface::vulkan::vulkan_rhi::VulkanRHI;
 
 #[derive(Default, Clone, Copy)]
 pub struct FrameBufferAttachment {
@@ -81,9 +66,6 @@ pub struct RenderPipelineBase {
     pub pipeline: vk::Pipeline,
 }
 
-pub static mut M_VISIABLE_NODES: LazyCell<RefCell<VisiableNodes>> =
-    LazyCell::new(|| RefCell::new(VisiableNodes::default()));
-
 #[derive(Default)]
 pub struct RenderPass {
     pub m_descriptor_infos: Vec<Descriptor>,
@@ -106,10 +88,5 @@ impl RenderPass {
             .iter()
             .map(|attachment| attachment.view)
             .collect::<Vec<_>>()
-    }
-
-    #[allow(static_mut_refs)]
-    pub fn m_visible_nodes() -> &'static RefCell<VisiableNodes> {
-        unsafe { &M_VISIABLE_NODES }
     }
 }

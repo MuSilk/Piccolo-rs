@@ -11,7 +11,6 @@ use crate::{
             render_entity::RenderEntity,
             render_guid_allocator::GuidAllocator,
             render_object::GameObjectPartId,
-            render_pass::RenderPass,
             render_resource::RenderResource,
             render_type::{MaterialSourceDesc, MeshSourceDesc},
         },
@@ -26,8 +25,8 @@ pub struct RenderScene {
 
     m_render_entities: RefCell<HashMap<u32, Box<RenderEntity>>>,
 
-    m_main_camera_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
-    m_directional_light_visible_mesh_nodes: Rc<RefCell<Vec<RenderMeshNode>>>,
+    m_main_camera_visible_mesh_nodes: RefCell<Vec<RenderMeshNode>>,
+    m_directional_light_visible_mesh_nodes: RefCell<Vec<RenderMeshNode>>,
 
     m_instance_id_allocator: RefCell<GuidAllocator<GameObjectPartId>>,
     m_mesh_asset_id_allocator: RefCell<GuidAllocator<MeshSourceDesc>>,
@@ -40,17 +39,6 @@ impl RenderScene {
     pub fn update_visible_objects(&self, render_resource: &RenderResource, camera: &RenderCamera) {
         self.update_visible_objects_main_camera(render_resource, camera);
         self.update_visible_objects_directional_light(render_resource, camera);
-    }
-
-    pub fn set_visible_nodes_reference(&self) {
-        RenderPass::m_visible_nodes()
-            .borrow_mut()
-            .p_directional_light_visible_mesh_nodes =
-            Rc::downgrade(&self.m_directional_light_visible_mesh_nodes);
-        RenderPass::m_visible_nodes()
-            .borrow_mut()
-            .p_main_camera_visible_mesh_nodes =
-            Rc::downgrade(&self.m_main_camera_visible_mesh_nodes);
     }
 
     pub fn alloc_instance_id(&self, part_id: &GameObjectPartId) -> usize {
@@ -124,6 +112,14 @@ impl RenderScene {
                 .borrow_mut()
                 .insert(instance_id, render_entity);
         }
+    }
+
+    pub fn get_main_camera_visible_mesh_nodes(&self) -> &RefCell<Vec<RenderMeshNode>> {
+        &self.m_main_camera_visible_mesh_nodes
+    }
+
+    pub fn get_directional_light_visible_mesh_nodes(&self) -> &RefCell<Vec<RenderMeshNode>> {
+        &self.m_directional_light_visible_mesh_nodes
     }
 }
 

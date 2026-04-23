@@ -13,6 +13,7 @@ use crate::{
         render_mesh::MeshVertex,
         render_pass::{RenderPass, RenderPipelineBase},
         render_resource::{GlobalRenderResource, RenderResource},
+        render_scene::RenderScene,
     },
     shader::generated::shader::{MESH_INEFFICIENT_PICK_FRAG, MESH_INEFFICIENT_PICK_VERT},
 };
@@ -83,7 +84,13 @@ impl PickPass {
         Ok(())
     }
 
-    pub fn pick(&self, rhi: &Rc<RefCell<VulkanRHI>>, picked_uv: &Vector2, render_resource: &mut GlobalRenderResource) -> u32 {
+    pub fn pick(
+        &self,
+        rhi: &Rc<RefCell<VulkanRHI>>,
+        picked_uv: &Vector2,
+        render_scene: &RenderScene,
+        render_resource: &mut GlobalRenderResource,
+    ) -> u32 {
         let picked_pixel_index = {
             let rhi = rhi.borrow();
             let swapchain_info = rhi.get_swapchain_info();
@@ -103,8 +110,11 @@ impl PickPass {
         }
         {
             let current_frame_index = rhi.borrow().get_current_frame_index();
-            render_resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
-                render_resource._storage_buffer._global_upload_ringbuffers_begin[current_frame_index];
+            render_resource
+                ._storage_buffer
+                ._global_upload_ringbuffers_end[current_frame_index] = render_resource
+                ._storage_buffer
+                ._global_upload_ringbuffers_begin[current_frame_index];
         }
         {
             let rhi = rhi.borrow();
@@ -206,15 +216,9 @@ impl PickPass {
                 );
             }
 
-            let m_visible_nodes = RenderPass::m_visible_nodes().borrow();
+            let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes().borrow();
 
-            for render_mesh_node in m_visible_nodes
-                .p_main_camera_visible_mesh_nodes
-                .upgrade()
-                .unwrap()
-                .borrow()
-                .iter()
-            {
+            for render_mesh_node in visiable_nodes.iter() {
                 let mut object = MeshInefficientPickPerdrawcallStorageBufferObject::default();
                 object.model_matrix[0] = *render_mesh_node.model_matrix;
                 object.node_ids[0] = render_mesh_node.node_id;
@@ -634,7 +638,11 @@ impl PickPass {
         Ok(())
     }
 
-    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI, render_resource: &GlobalRenderResource) -> Result<()> {
+    fn setup_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_resource: &GlobalRenderResource,
+    ) -> Result<()> {
         let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
@@ -644,31 +652,19 @@ impl PickPass {
             rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
         let perframe_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<MeshInefficientPickPerframeStorageBufferObject>() as u64)
             .build()];
 
         let perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<MeshInefficientPickPerdrawcallStorageBufferObject>() as u64)
             .build()];
 
         let perdrawcall_vertex_blending_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<
                 MeshInefficientPickPerdrawcallVertexBlendingStorageBufferObject,
