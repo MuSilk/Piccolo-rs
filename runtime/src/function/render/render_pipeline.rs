@@ -45,10 +45,7 @@ impl RenderPipeline {
         let mut m_main_camera_pass = MainCameraPass::default();
         let mut m_pick_pass = PickPass::default();
 
-        let global_render_resource = &create_info
-            .render_resource
-            .m_global_render_resource
-            .borrow();
+        let global_render_resource = &create_info.render_resource.m_global_render_resource;
 
         m_directional_light_pass.initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,

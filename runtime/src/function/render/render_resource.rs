@@ -2,8 +2,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use linkme::distributed_slice;
 use std::{
-    cell::RefCell, collections::HashMap, f32::consts::PI, os::raw::c_void,
-    ptr::copy_nonoverlapping, rc::Rc,
+    collections::HashMap, f32::consts::PI, os::raw::c_void, ptr::copy_nonoverlapping, rc::Rc,
 };
 use vulkanalia::prelude::v1_0::*;
 
@@ -97,7 +96,7 @@ struct DeferredVkMeshDestroy {
 pub struct RenderResource {
     pub m_base: RenderResourceBase,
 
-    pub m_global_render_resource: RefCell<GlobalRenderResource>,
+    pub m_global_render_resource: GlobalRenderResource,
 
     pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
     pub m_mesh_point_light_shadow_perframe_storage_buffer_object:
@@ -162,7 +161,7 @@ impl RenderResource {
     }
 
     pub fn reset_ring_buffer_offset(&mut self, current_frame_index: usize) {
-        let mut resource = self.m_global_render_resource.borrow_mut();
+        let resource = &mut self.m_global_render_resource;
         resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
             resource._storage_buffer._global_upload_ringbuffers_begin[current_frame_index];
     }
@@ -285,15 +284,12 @@ impl RenderResource {
 
         (
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._brdf_lut_texture_image,
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._brdf_lut_texture_image_allocation,
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._brdf_lut_texture_image_view,
         ) = rhi
@@ -317,15 +313,12 @@ impl RenderResource {
 
         (
             self.m_global_render_resource
-                .borrow_mut()
                 ._color_grading_resource
                 ._color_grading_lut_texture_image,
             self.m_global_render_resource
-                .borrow_mut()
                 ._color_grading_resource
                 ._color_grading_lut_texture_image_allocation,
             self.m_global_render_resource
-                .borrow_mut()
                 ._color_grading_resource
                 ._color_grading_lut_texture_image_view,
         ) = rhi
@@ -1024,7 +1017,6 @@ impl RenderResource {
                 [vk::DescriptorBufferInfo::builder()
                     .buffer(
                         self.m_global_render_resource
-                            .borrow()
                             ._storage_buffer
                             ._global_null_descriptor_storage_buffer,
                     )
@@ -1154,7 +1146,7 @@ impl RenderResource {
     }
 
     fn create_and_map_storage_buffer(&mut self, rhi: &VulkanRHI) {
-        let _storage_buffer = &mut self.m_global_render_resource.borrow_mut()._storage_buffer;
+        let _storage_buffer = &mut self.m_global_render_resource._storage_buffer;
         let frames_in_flight = vulkan_rhi::K_MAX_FRAMES_IN_FLIGHT;
 
         let properties = rhi.get_physical_device_properties();
@@ -1239,21 +1231,18 @@ impl RenderResource {
 
         if self
             .m_global_render_resource
-            .borrow()
             ._ibl_resource
             ._brdf_lut_texture_sampler
             != vk::Sampler::null()
         {
             rhi.destroy_sampler(
                 self.m_global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._brdf_lut_texture_sampler,
             );
         }
 
         self.m_global_render_resource
-            .borrow_mut()
             ._ibl_resource
             ._brdf_lut_texture_sampler = rhi.create_sampler(&sampler_info).unwrap();
 
@@ -1263,41 +1252,35 @@ impl RenderResource {
 
         if self
             .m_global_render_resource
-            .borrow()
             ._ibl_resource
             ._irradiance_texture_sampler
             != vk::Sampler::null()
         {
             rhi.destroy_sampler(
                 self.m_global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._irradiance_texture_sampler,
             );
         }
 
         self.m_global_render_resource
-            .borrow_mut()
             ._ibl_resource
             ._irradiance_texture_sampler = rhi.create_sampler(&sampler_info).unwrap();
 
         if self
             .m_global_render_resource
-            .borrow()
             ._ibl_resource
             ._specular_texture_sampler
             != vk::Sampler::null()
         {
             rhi.destroy_sampler(
                 self.m_global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._specular_texture_sampler,
             );
         }
 
         self.m_global_render_resource
-            .borrow_mut()
             ._ibl_resource
             ._specular_texture_sampler = rhi.create_sampler(&sampler_info).unwrap();
     }
@@ -1316,15 +1299,12 @@ impl RenderResource {
 
         (
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._irradiance_texture_image,
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._irradiance_texture_image_allocation,
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._irradiance_texture_image_view,
         ) = rhi
@@ -1349,15 +1329,12 @@ impl RenderResource {
 
         (
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._specular_texture_image,
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._specular_texture_image_allocation,
             self.m_global_render_resource
-                .borrow_mut()
                 ._ibl_resource
                 ._specular_texture_image_view,
         ) = rhi
