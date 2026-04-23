@@ -113,9 +113,9 @@ impl Engine {
             .get_window_size();
         self.m_runtime_context
             .render_system()
-            .borrow()
+            .borrow_mut()
             .update_engine_content_viewport(0.0, 0.0, window_size.0 as f32, window_size.1 as f32);
-        self.m_runtime_context.render_system().borrow().tick(
+        self.m_runtime_context.render_system().borrow_mut().tick(
             &self.m_runtime_context.ui_runtime().borrow(),
             &self.m_runtime_context.asset_manager(),
             delta_time,
@@ -125,7 +125,7 @@ impl Engine {
 
     fn logical_tick(&self, delta_time: f32) {
         let render_system = self.m_runtime_context.render_system().borrow();
-        let rhi = render_system.get_rhi().borrow();
+        let rhi = render_system.get_rhi();
         let swapchain_info = rhi.get_swapchain_info();
         let viewport = [
             swapchain_info.extent.width as f32,

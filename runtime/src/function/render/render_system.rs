@@ -39,7 +39,7 @@ pub struct RenderSystemCreateInfo<'a> {
 }
 
 pub struct RenderSystem {
-    m_rhi: RefCell<VulkanRHI>,
+    m_rhi: VulkanRHI,
     m_swap_context: RenderSwapContext,
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
@@ -56,7 +56,6 @@ impl RenderSystem {
             window_system: create_info.window_system,
         };
         let vulkan_rhi = VulkanRHI::create(&rhi_create_info);
-        let vulkan_rhi = RefCell::new(vulkan_rhi);
 
         let asset_manager = create_info.asset_manager;
         let config_manager = create_info.config_manager;
@@ -99,30 +98,30 @@ impl RenderSystem {
         let mut render_resource = RenderResource::default();
         render_resource.upload_global_render_resource(
             asset_manager,
-            &vulkan_rhi.borrow(),
+            &vulkan_rhi,
             &level_resource_desc,
         );
         let render_resource = RefCell::new(render_resource);
 
         let render_pipeline = RenderPipeline::create(&RenderPipelineCreateInfo {
-            rhi: &vulkan_rhi.borrow(),
+            rhi: &vulkan_rhi,
             render_resource: &render_resource.borrow(),
             enable_fxaa: global_rendering_res.enable_fxaa,
         })
         .unwrap();
 
         render_resource.borrow_mut().m_mesh_descriptor_set_layout = render_pipeline
-            .get_descriptor_set_layout::<PerMeshDescriptorLayout>(&vulkan_rhi.borrow())
+            .get_descriptor_set_layout::<PerMeshDescriptorLayout>(&vulkan_rhi)
             .unwrap();
 
         render_resource
             .borrow_mut()
             .m_material_descriptor_set_layout = render_pipeline
-            .get_descriptor_set_layout::<MeshPerMaterialDescriptorLayout>(&vulkan_rhi.borrow())
+            .get_descriptor_set_layout::<MeshPerMaterialDescriptorLayout>(&vulkan_rhi)
             .unwrap();
 
         let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
-            rhi: &vulkan_rhi.borrow(),
+            rhi: &vulkan_rhi,
             font_path: config_manager.get_editor_font_path(),
         })
         .unwrap();
@@ -140,13 +139,13 @@ impl RenderSystem {
     }
 
     pub fn tick(
-        &self,
+        &mut self,
         ui_runtime: &UiRuntime,
         asset_manager: &AssetManager,
         delta_time: f32,
     ) -> Result<()> {
         self.process_swap_data(asset_manager);
-        self.m_rhi.borrow_mut().prepare_context();
+        self.m_rhi.prepare_context();
         self.m_render_resource
             .borrow_mut()
             .update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
@@ -156,13 +155,13 @@ impl RenderSystem {
         );
         self.m_render_pipeline
             .borrow_mut()
-            .prepare_pass_data(&self.m_rhi.borrow(), &self.m_render_resource.borrow());
+            .prepare_pass_data(&self.m_rhi, &self.m_render_resource.borrow());
         self.m_debugdraw_manager
             .borrow_mut()
             .prepare_pass_data(&self.m_render_resource.borrow());
         self.m_debugdraw_manager
             .borrow_mut()
-            .tick(&self.m_rhi.borrow(), delta_time);
+            .tick(&self.m_rhi, delta_time);
         self.render(
             ui_runtime,
             match self.m_render_pipeline_type {
@@ -173,17 +172,17 @@ impl RenderSystem {
         Ok(())
     }
 
-    pub fn destroy(&self) -> Result<()> {
+    pub fn destroy(&mut self) -> Result<()> {
         self.m_debugdraw_manager
             .borrow_mut()
-            .destroy(&self.m_rhi.borrow());
+            .destroy(&self.m_rhi);
         self.m_render_pipeline
             .borrow_mut()
-            .destroy(&self.m_rhi.borrow());
+            .destroy(&self.m_rhi);
         self.m_render_resource
             .borrow_mut()
-            .flush_deferred_mesh_destroys(&self.m_rhi.borrow());
-        self.m_rhi.borrow_mut().destroy();
+            .flush_deferred_mesh_destroys(&self.m_rhi);
+        self.m_rhi.destroy();
         Ok(())
     }
 
@@ -208,13 +207,13 @@ impl RenderSystem {
     }
 
     pub fn update_engine_content_viewport(
-        &self,
+        &mut self,
         offset_x: f32,
         offset_y: f32,
         width: f32,
         height: f32,
     ) {
-        let mut rhi = self.m_rhi.borrow_mut();
+        let rhi = &mut self.m_rhi;
         rhi.m_data.m_viewport.x = offset_x;
         rhi.m_data.m_viewport.y = offset_y;
         rhi.m_data.m_viewport.width = width;
@@ -223,7 +222,7 @@ impl RenderSystem {
         self.m_render_camera.borrow_mut().set_aspect(width / height);
     }
 
-    pub fn get_rhi(&self) -> &RefCell<VulkanRHI> {
+    pub fn get_rhi(&self) -> &VulkanRHI {
         &self.m_rhi
     }
 
@@ -286,7 +285,7 @@ impl RenderSystem {
                                     self.m_render_resource
                                         .borrow_mut()
                                         .upload_game_object_render_resource_mesh(
-                                            &self.m_rhi.borrow(),
+                                            &self.m_rhi,
                                             &render_entity,
                                             &mesh_data,
                                         );
@@ -327,7 +326,7 @@ impl RenderSystem {
                                     self.m_render_resource
                                         .borrow_mut()
                                         .upload_game_object_render_resource_mesh(
-                                            &self.m_rhi.borrow(),
+                                            &self.m_rhi,
                                             &render_entity,
                                             &mesh_data,
                                         );
@@ -362,7 +361,7 @@ impl RenderSystem {
                                     self.m_render_resource
                                         .borrow_mut()
                                         .upload_game_object_render_resource_mesh(
-                                            &self.m_rhi.borrow(),
+                                            &self.m_rhi,
                                             &render_entity,
                                             &mesh_data,
                                         );
@@ -451,7 +450,7 @@ impl RenderSystem {
                             self.m_render_resource
                                 .borrow_mut()
                                 .upload_game_object_render_resource_material(
-                                    &self.m_rhi.borrow(),
+                                    &self.m_rhi,
                                     &render_entity,
                                     &material_data,
                                 );
@@ -522,23 +521,32 @@ impl RenderSystem {
         }
     }
 
-    fn render(&self, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
+    fn render(&mut self, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
+        let render_pipeline = &self.m_render_pipeline;
+        let render_resource = &self.m_render_resource.borrow();
+        let debugdraw_manager = &self.m_debugdraw_manager;
+
         let rhi = &self.m_rhi;
         self.m_render_resource
             .borrow_mut()
-            .reset_ring_buffer_offset(rhi.borrow().get_current_frame_index());
+            .reset_ring_buffer_offset(rhi.get_current_frame_index());
         {
-            let mut rhi = rhi.borrow_mut();
+            let rhi = &mut self.m_rhi;
             rhi.wait_for_fence()?;
             rhi.reset_command_pool()?;
             if rhi.prepare_before_pass(&|rhi: &VulkanRHI| {
-                self.pass_update_after_recreate_swapchain(&rhi)
+                Self::pass_update_after_recreate_swapchain(
+                    rhi,
+                    render_pipeline,
+                    render_resource,
+                    debugdraw_manager,
+                )
             })? {
                 return Ok(());
             }
         }
         {
-            let rhi = rhi.borrow();
+            let rhi = &self.m_rhi;
 
             self.m_render_pipeline.borrow().draw(
                 &rhi,
@@ -551,25 +559,33 @@ impl RenderSystem {
             self.m_debugdraw_manager.borrow_mut().draw(&rhi)?;
         }
         {
-            let mut rhi = rhi.borrow_mut();
+            let rhi = &mut self.m_rhi;
             rhi.submit_rendering(&|rhi: &VulkanRHI| {
-                self.pass_update_after_recreate_swapchain(&rhi)
+                Self::pass_update_after_recreate_swapchain(
+                    rhi,
+                    render_pipeline,
+                    render_resource,
+                    debugdraw_manager,
+                )
             })?;
         }
         self.m_render_resource
             .borrow_mut()
-            .on_main_frame_submit_complete(&self.m_rhi.borrow());
+            .on_main_frame_submit_complete(&self.m_rhi);
         Ok(())
     }
 
-    fn pass_update_after_recreate_swapchain(&self, rhi: &VulkanRHI) {
-        self.m_render_pipeline
-            .borrow_mut()
-            .recreate_after_swapchain(
-                rhi,
-                &self.m_render_resource.borrow().m_global_render_resource,
-            );
-        self.m_debugdraw_manager
+    fn pass_update_after_recreate_swapchain(
+        rhi: &VulkanRHI,
+        render_pipeline: &RefCell<RenderPipeline>,
+        render_resource: &RenderResource,
+        debugdraw_manager: &RefCell<DebugDrawManager>,
+    ) {
+        render_pipeline.borrow_mut().recreate_after_swapchain(
+            rhi,
+            &render_resource.m_global_render_resource,
+        );
+        debugdraw_manager
             .borrow_mut()
             .update_after_recreate_swap_chain(rhi);
     }

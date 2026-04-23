@@ -514,8 +514,7 @@ impl DirectionalLightShadowPass {
         }
 
         let visiable_nodes = render_scene
-            .get_directional_light_visible_mesh_nodes()
-            .borrow();
+            .get_directional_light_visible_mesh_nodes();
 
         let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 

@@ -216,7 +216,7 @@ impl PickPass {
                 );
             }
 
-            let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes().borrow();
+            let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes();
 
             for render_mesh_node in visiable_nodes.iter() {
                 let mut object = MeshInefficientPickPerdrawcallStorageBufferObject::default();

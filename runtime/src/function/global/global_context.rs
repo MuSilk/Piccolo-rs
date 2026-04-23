@@ -101,13 +101,12 @@ impl RuntimeGlobalContext {
             .unwrap()
             .borrow()
             .get_rhi()
-            .borrow()
             .wait_idle()
             .unwrap();
         self.m_render_system
             .as_ref()
             .unwrap()
-            .borrow()
+            .borrow_mut()
             .destroy()
             .unwrap();
     }

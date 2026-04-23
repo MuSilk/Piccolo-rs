@@ -1925,7 +1925,7 @@ impl MainCameraPass {
             model_matrix: &'a Matrix4x4,
         }
 
-        let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes().borrow();
+        let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes();
 
         let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 
@@ -2157,7 +2157,7 @@ impl MainCameraPass {
             model_matrix: &'a Matrix4x4,
         }
 
-        let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes().borrow();
+        let visiable_nodes = render_scene.get_main_camera_visible_mesh_nodes();
 
         let mut main_camera_mesh_drawcall_batch: HashMap<_, HashMap<_, Vec<_>>> = HashMap::new();
 
