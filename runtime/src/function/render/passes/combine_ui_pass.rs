@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{
@@ -21,7 +19,7 @@ use crate::{
 };
 
 pub struct CombineUIPassInitInfo<'a> {
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
@@ -36,7 +34,6 @@ pub struct CombineUIPass {
 
 impl CombineUIPass {
     pub fn initialize(&mut self, info: &CombineUIPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;

@@ -24,7 +24,7 @@ use vulkanalia::prelude::v1_0::*;
 pub struct PickPassInitInfo<'a> {
     pub per_mesh_layout: vk::DescriptorSetLayout,
     pub rhi: &'a VulkanRHI,
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
 }
 
 #[derive(Default)]
@@ -40,7 +40,6 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 
 impl PickPass {
     pub fn initialize(&mut self, info: &PickPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         let rhi = info.rhi;
         self.m_per_mesh_layout = info.per_mesh_layout;
 
@@ -49,7 +48,7 @@ impl PickPass {
         self.setup_framebuffer(&rhi)?;
         self.setup_descriptor_layout(&rhi)?;
         self.setup_pipelines(&rhi)?;
-        self.setup_descriptor_set(&rhi)?;
+        self.setup_descriptor_set(&rhi, info.global_render_resource)?;
 
         Ok(())
     }
@@ -84,7 +83,7 @@ impl PickPass {
         Ok(())
     }
 
-    pub fn pick(&self, rhi: &Rc<RefCell<VulkanRHI>>, picked_uv: &Vector2) -> u32 {
+    pub fn pick(&self, rhi: &Rc<RefCell<VulkanRHI>>, picked_uv: &Vector2, render_resource: &mut GlobalRenderResource) -> u32 {
         let picked_pixel_index = {
             let rhi = rhi.borrow();
             let swapchain_info = rhi.get_swapchain_info();
@@ -103,15 +102,9 @@ impl PickPass {
             rhi.borrow_mut().prepare_context();
         }
         {
-            let resource = self
-                .m_render_pass
-                .m_global_render_resource
-                .upgrade()
-                .unwrap();
-            let mut resource = resource.borrow_mut();
             let current_frame_index = rhi.borrow().get_current_frame_index();
-            resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
-                resource._storage_buffer._global_upload_ringbuffers_begin[current_frame_index];
+            render_resource._storage_buffer._global_upload_ringbuffers_end[current_frame_index] =
+                render_resource._storage_buffer._global_upload_ringbuffers_begin[current_frame_index];
         }
         {
             let rhi = rhi.borrow();
@@ -187,25 +180,16 @@ impl PickPass {
             rhi.cmd_set_viewport(command_buffer, 0, &[*swapchain_info.viewport]);
             rhi.cmd_set_scissor(command_buffer, 0, &[*swapchain_info.scissor]);
 
-            let render_resource = self
-                .m_render_pass
-                .m_global_render_resource
-                .upgrade()
-                .unwrap();
-
             let perframe_dynamic_offset = round_up(
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._min_storage_buffer_offset_alignment,
             );
 
             render_resource
-                .borrow_mut()
                 ._storage_buffer
                 ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
                 perframe_dynamic_offset
@@ -215,7 +199,6 @@ impl PickPass {
                     &self.m_mesh_inefficient_pick_perframe_storage_buffer_object as *const _
                         as *const c_void,
                     render_resource
-                        .borrow()
                         ._storage_buffer
                         ._global_upload_ringbuffer_pointer
                         .add(perframe_dynamic_offset as usize),
@@ -239,16 +222,13 @@ impl PickPass {
 
                 let perdrawcall_dynamic_offset = round_up(
                     render_resource
-                        .borrow()
                         ._storage_buffer
                         ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
                     render_resource
-                        .borrow()
                         ._storage_buffer
                         ._min_storage_buffer_offset_alignment,
                 );
                 render_resource
-                    .borrow_mut()
                     ._storage_buffer
                     ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
                     perdrawcall_dynamic_offset
@@ -259,7 +239,6 @@ impl PickPass {
                     std::ptr::copy_nonoverlapping(
                         &object as *const _ as *const c_void,
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._global_upload_ringbuffer_pointer
                             .add(perdrawcall_dynamic_offset as usize),
@@ -655,7 +634,7 @@ impl PickPass {
         Ok(())
     }
 
-    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI, render_resource: &GlobalRenderResource) -> Result<()> {
         let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
@@ -664,16 +643,9 @@ impl PickPass {
         self.m_render_pass.m_descriptor_infos[0].descriptor_set =
             rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_buffer_info = [vk::DescriptorBufferInfo::builder()
             .buffer(
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer,
             )
@@ -684,7 +656,6 @@ impl PickPass {
         let perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
             .buffer(
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer,
             )
@@ -695,7 +666,6 @@ impl PickPass {
         let perdrawcall_vertex_blending_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
             .buffer(
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer,
             )

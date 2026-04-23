@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc, slice};
+use std::{collections::HashMap, os::raw::c_void, slice};
 
 use crate::{
     core::math::matrix4::Matrix4x4,
@@ -69,7 +69,7 @@ pub enum MainCameraSubPass {
 pub struct MainCameraPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub enable_fxaa: bool,
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
 }
 
@@ -112,7 +112,6 @@ pub struct MainCameraPass {
 
 impl MainCameraPass {
     pub fn initialize(&mut self, info: &MainCameraPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         self.m_enable_fxaa = info.enable_fxaa;
         let rhi = info.rhi;
         let descriptor_layout_manager = info.descriptor_layout_manager;
@@ -120,7 +119,7 @@ impl MainCameraPass {
         self.setup_render_pass(rhi)?;
         self.setup_descriptor_layout(rhi, descriptor_layout_manager)?;
         self.setup_pipelines(rhi)?;
-        self.setup_descriptor_set(rhi)?;
+        self.setup_descriptor_set(rhi, info.global_render_resource)?;
         self.setup_framebuffer_descriptor_set(rhi)?;
         self.setup_framebuffer(rhi)?;
 
@@ -179,7 +178,11 @@ impl MainCameraPass {
             .clone();
     }
 
-    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    pub fn recreate_after_swapchain(
+        &mut self,
+        rhi: &VulkanRHI,
+        resource: &GlobalRenderResource,
+    ) -> Result<()> {
         self.m_render_pass
             .m_framebuffer
             .attachments
@@ -206,6 +209,7 @@ impl MainCameraPass {
         self.m_color_grading_pass
             .update_after_framebuffer_recreate(
                 rhi,
+                resource,
                 image_views[_MAIN_CAMERA_PASS_BACKUP_BUFFER_EVEN],
             )
             .unwrap();
@@ -235,7 +239,13 @@ impl MainCameraPass {
         rhi.destroy_render_pass(self.m_render_pass.m_framebuffer.render_pass);
     }
 
-    pub fn draw(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
+    pub fn draw(
+        &self,
+        rhi: &VulkanRHI,
+        render_resource: &mut GlobalRenderResource,
+        ui_runtime: &UiRuntime,
+        forward_draw: bool,
+    ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let swapchain_info = rhi.get_swapchain_info();
@@ -283,18 +293,18 @@ impl MainCameraPass {
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
             rhi.push_event(command_buffer, "Forward Lighting\0", [1.0; 4]);
-            self.draw_mesh_lighting(rhi)?;
-            self.draw_skybox(rhi)?;
+            self.draw_mesh_lighting(rhi, render_resource)?;
+            self.draw_skybox(rhi, render_resource)?;
             rhi.pop_event(command_buffer);
         } else {
             rhi.push_event(command_buffer, "BasePass\0", [1.0; 4]);
-            self.draw_mesh_gbuffer(rhi)?;
+            self.draw_mesh_gbuffer(rhi, render_resource)?;
             rhi.pop_event(command_buffer);
 
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
 
             rhi.push_event(command_buffer, "DeferredLighting\0", [1.0; 4]);
-            self.draw_deferred_lighting(rhi)?;
+            self.draw_deferred_lighting(rhi, render_resource)?;
             rhi.pop_event(command_buffer);
 
             rhi.cmd_next_subpass(command_buffer, vk::SubpassContents::INLINE);
@@ -1538,14 +1548,22 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
-        self.setup_model_global_descriptor_set(rhi)?;
-        self.setup_skybox_descriptor_set(rhi)?;
+    fn setup_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+        resource: &GlobalRenderResource,
+    ) -> Result<()> {
+        self.setup_model_global_descriptor_set(rhi, resource)?;
+        self.setup_skybox_descriptor_set(rhi, resource)?;
         self.setup_gbuffer_lighting_descriptor_set(rhi)?;
         Ok(())
     }
 
-    fn setup_model_global_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_model_global_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+        global_render_resource: &GlobalRenderResource,
+    ) -> Result<()> {
         let set_layouts =
             [self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].layout];
         let mesh_global_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
@@ -1555,18 +1573,11 @@ impl MainCameraPass {
         self.m_render_pass.m_descriptor_infos[LayoutType::MeshGlobal as usize].descriptor_set =
             rhi.allocate_descriptor_sets(&mesh_global_descriptor_set_alloc_info)?[0];
 
-        let global_render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let mesh_perframe_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
             .offset(0)
             .range(size_of::<MeshPerframeStorageBufferObject>() as u64)
             .buffer(
                 global_render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer,
             )
@@ -1577,7 +1588,6 @@ impl MainCameraPass {
             .range(size_of::<MeshPerdrawcallStorageBufferObject>() as u64)
             .buffer(
                 global_render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer,
             )
@@ -1589,7 +1599,6 @@ impl MainCameraPass {
                 .range(size_of::<MeshPerdrawcallVertexBlendingStorageBufferObject>() as u64)
                 .buffer(
                     global_render_resource
-                        .borrow()
                         ._storage_buffer
                         ._global_upload_ringbuffer,
                 )
@@ -1599,13 +1608,11 @@ impl MainCameraPass {
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .image_view(
                 global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._brdf_lut_texture_image_view,
             )
             .sampler(
                 global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._brdf_lut_texture_sampler,
             )
@@ -1615,13 +1622,11 @@ impl MainCameraPass {
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .image_view(
                 global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._irradiance_texture_image_view,
             )
             .sampler(
                 global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._irradiance_texture_sampler,
             )
@@ -1631,13 +1636,11 @@ impl MainCameraPass {
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .image_view(
                 global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._specular_texture_image_view,
             )
             .sampler(
                 global_render_resource
-                    .borrow()
                     ._ibl_resource
                     ._specular_texture_sampler,
             )
@@ -1735,7 +1738,11 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn setup_skybox_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_skybox_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_resource: &GlobalRenderResource,
+    ) -> Result<()> {
         let set_layouts =
             [self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].layout];
         let skybox_descriptor_set_alloc_info = vk::DescriptorSetAllocateInfo::builder()
@@ -1746,37 +1753,16 @@ impl MainCameraPass {
         self.m_render_pass.m_descriptor_infos[LayoutType::Skybox as usize].descriptor_set =
             rhi.allocate_descriptor_sets(&skybox_descriptor_set_alloc_info)?[0];
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let mesh_perframe_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<MeshPerframeStorageBufferObject>() as u64)
             .build()];
 
         let specular_texture_image_info = [vk::DescriptorImageInfo::builder()
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(
-                render_resource
-                    .borrow()
-                    ._ibl_resource
-                    ._specular_texture_image_view,
-            )
-            .sampler(
-                render_resource
-                    .borrow()
-                    ._ibl_resource
-                    ._specular_texture_sampler,
-            )
+            .image_view(render_resource._ibl_resource._specular_texture_image_view)
+            .sampler(render_resource._ibl_resource._specular_texture_sampler)
             .build()];
 
         let skybox_descriptor_writes_info = [
@@ -1889,7 +1875,11 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_mesh_gbuffer(&self, rhi: &VulkanRHI) -> Result<()> {
+    fn draw_mesh_gbuffer(
+        &self,
+        rhi: &VulkanRHI,
+        render_resource: &mut GlobalRenderResource,
+    ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let info = rhi.get_swapchain_info();
@@ -1904,25 +1894,16 @@ impl MainCameraPass {
             pipeline.pipeline,
         );
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_dynamic_offset = round_up(
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._min_storage_buffer_offset_alignment,
         );
 
         render_resource
-            .borrow_mut()
             ._storage_buffer
             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
             perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
@@ -1930,7 +1911,6 @@ impl MainCameraPass {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer_pointer
                     .add(perframe_dynamic_offset as usize),
@@ -2019,16 +1999,13 @@ impl MainCameraPass {
 
                     let perdrawcall_dynamic_offset = round_up(
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._min_storage_buffer_offset_alignment,
                     );
                     render_resource
-                        .borrow_mut()
                         ._storage_buffer
                         ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
                         perdrawcall_dynamic_offset
@@ -2038,7 +2015,6 @@ impl MainCameraPass {
                         std::ptr::copy_nonoverlapping(
                             &object as *const _ as *const c_void,
                             render_resource
-                                .borrow()
                                 ._storage_buffer
                                 ._global_upload_ringbuffer_pointer
                                 .add(perdrawcall_dynamic_offset as usize),
@@ -2071,7 +2047,11 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_deferred_lighting(&self, rhi: &VulkanRHI) -> Result<()> {
+    fn draw_deferred_lighting(
+        &self,
+        rhi: &VulkanRHI,
+        render_resource: &mut GlobalRenderResource,
+    ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let info = rhi.get_swapchain_info();
@@ -2086,25 +2066,16 @@ impl MainCameraPass {
             pipeline.pipeline,
         );
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_dynamic_offset = round_up(
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._min_storage_buffer_offset_alignment,
         );
 
         render_resource
-            .borrow_mut()
             ._storage_buffer
             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
             perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
@@ -2113,7 +2084,6 @@ impl MainCameraPass {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer_pointer
                     .add(perframe_dynamic_offset as usize),
@@ -2141,7 +2111,11 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_mesh_lighting(&self, rhi: &VulkanRHI) -> Result<()> {
+    fn draw_mesh_lighting(
+        &self,
+        rhi: &VulkanRHI,
+        render_resource: &mut GlobalRenderResource,
+    ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
 
         let info = rhi.get_swapchain_info();
@@ -2156,25 +2130,16 @@ impl MainCameraPass {
             pipeline.pipeline,
         );
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_dynamic_offset = round_up(
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._min_storage_buffer_offset_alignment,
         );
 
         render_resource
-            .borrow_mut()
             ._storage_buffer
             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
             perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
@@ -2182,7 +2147,6 @@ impl MainCameraPass {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer_pointer
                     .add(perframe_dynamic_offset as usize),
@@ -2271,16 +2235,13 @@ impl MainCameraPass {
 
                     let perdrawcall_dynamic_offset = round_up(
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._min_storage_buffer_offset_alignment,
                     );
                     render_resource
-                        .borrow_mut()
                         ._storage_buffer
                         ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
                         perdrawcall_dynamic_offset
@@ -2290,7 +2251,6 @@ impl MainCameraPass {
                         std::ptr::copy_nonoverlapping(
                             &object as *const _ as *const c_void,
                             render_resource
-                                .borrow()
                                 ._storage_buffer
                                 ._global_upload_ringbuffer_pointer
                                 .add(perdrawcall_dynamic_offset as usize),
@@ -2323,28 +2283,23 @@ impl MainCameraPass {
         Ok(())
     }
 
-    fn draw_skybox(&self, rhi: &VulkanRHI) -> Result<()> {
+    fn draw_skybox(
+        &self,
+        rhi: &VulkanRHI,
+        render_resource: &mut GlobalRenderResource,
+    ) -> Result<()> {
         let command_buffer = rhi.get_current_command_buffer();
-
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
 
         let perframe_dynamic_offset = round_up(
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._min_storage_buffer_offset_alignment,
         );
 
         render_resource
-            .borrow_mut()
             ._storage_buffer
             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
             perframe_dynamic_offset + std::mem::size_of::<MeshPerframeStorageBufferObject>() as u32;
@@ -2353,7 +2308,6 @@ impl MainCameraPass {
             std::ptr::copy_nonoverlapping(
                 &self.m_mesh_perframe_storage_buffer_object as *const _ as *const c_void,
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer_pointer
                     .add(perframe_dynamic_offset as usize),

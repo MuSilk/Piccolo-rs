@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{
@@ -24,7 +22,7 @@ use crate::{
 };
 
 pub struct ColorGradingPassInitInfo<'a> {
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
@@ -38,12 +36,11 @@ pub struct ColorGradingPass {
 
 impl ColorGradingPass {
     pub fn initialize(&mut self, info: &ColorGradingPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;
         self.setup_descriptor_set(info.rhi)?;
-        self.update_after_framebuffer_recreate(info.rhi, info.input_attachment)?;
+        self.update_after_framebuffer_recreate(info.rhi, info.global_render_resource, info.input_attachment)?;
         Ok(())
     }
     pub fn draw(&self, rhi: &VulkanRHI) {
@@ -72,6 +69,7 @@ impl ColorGradingPass {
     pub fn update_after_framebuffer_recreate(
         &mut self,
         rhi: &VulkanRHI,
+        resource: &GlobalRenderResource,
         input_attachment: vk::ImageView,
     ) -> Result<()> {
         let post_process_per_frame_input_attachment_info = [vk::DescriptorImageInfo::builder()
@@ -80,17 +78,10 @@ impl ColorGradingPass {
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build()];
 
-        let resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let color_grading_lut_image_info = [vk::DescriptorImageInfo::builder()
             .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Linear)?)
             .image_view(
                 resource
-                    .borrow()
                     ._color_grading_resource
                     ._color_grading_lut_texture_image_view,
             )

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, os::raw::c_void, rc::Rc};
+use std::{collections::HashMap, os::raw::c_void};
 
 use crate::{
     core::math::matrix4::Matrix4x4,
@@ -31,7 +31,7 @@ use vulkanalia::prelude::v1_0::*;
 
 pub struct DirectionalLightShadowPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
     pub descriptor_layout_registry: &'a DescriptorLayoutRegistry,
 }
 
@@ -49,7 +49,6 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 
 impl DirectionalLightShadowPass {
     pub fn initialize(&mut self, info: &DirectionalLightShadowPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         let rhi = info.rhi;
 
         self.setup_attachments(&rhi)?;
@@ -57,7 +56,7 @@ impl DirectionalLightShadowPass {
         self.setup_framebuffer(&rhi)?;
         self.setup_descriptor_layout(&rhi, info.descriptor_layout_registry)?;
         self.setup_pipelines(&rhi)?;
-        self.setup_descriptor_set(&rhi)?;
+        self.setup_descriptor_set(&rhi, info.global_render_resource)?;
 
         Ok(())
     }
@@ -68,8 +67,8 @@ impl DirectionalLightShadowPass {
             .clone();
     }
 
-    pub fn draw(&self, rhi: &VulkanRHI) {
-        self.draw_model(rhi);
+    pub fn draw(&self, rhi: &VulkanRHI, resource: &mut GlobalRenderResource) {
+        self.draw_model(rhi, resource);
     }
 }
 
@@ -377,7 +376,11 @@ impl DirectionalLightShadowPass {
         Ok(())
     }
 
-    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_resource: &GlobalRenderResource,
+    ) -> Result<()> {
         let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
@@ -386,19 +389,8 @@ impl DirectionalLightShadowPass {
         self.m_render_pass.m_descriptor_infos[0].descriptor_set =
             rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(
                 std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u64,
@@ -406,12 +398,7 @@ impl DirectionalLightShadowPass {
             .build()];
 
         let perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(
                 std::mem::size_of::<MeshDirectionalLightShadowPerdrawcallStorageBufferObject>()
@@ -420,12 +407,7 @@ impl DirectionalLightShadowPass {
             .build()];
 
         let perdrawcall_vertex_blending_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<
                 MeshDirectionalLightShadowPerdrawcallVertexBlendingStorageBufferObject,
@@ -457,7 +439,7 @@ impl DirectionalLightShadowPass {
         Ok(())
     }
 
-    fn draw_model(&self, rhi: &VulkanRHI) {
+    fn draw_model(&self, rhi: &VulkanRHI, render_resource: &mut GlobalRenderResource) {
         let command_buffer = rhi.get_current_command_buffer();
 
         let mut clear_values: [vk::ClearValue; 2] = [Default::default(); 2];
@@ -491,25 +473,16 @@ impl DirectionalLightShadowPass {
             pipeline.pipeline,
         );
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_dynamic_offset = round_up(
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
             render_resource
-                .borrow()
                 ._storage_buffer
                 ._min_storage_buffer_offset_alignment,
         );
 
         render_resource
-            .borrow_mut()
             ._storage_buffer
             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] = perframe_dynamic_offset
             + std::mem::size_of::<MeshDirectionalLightShadowPerframeStorageBufferObject>() as u32;
@@ -518,7 +491,6 @@ impl DirectionalLightShadowPass {
                 &self.m_mesh_directional_light_shadow_perframe_storage_buffer_object as *const _
                     as *const c_void,
                 render_resource
-                    .borrow()
                     ._storage_buffer
                     ._global_upload_ringbuffer_pointer
                     .add(perframe_dynamic_offset as usize),
@@ -593,16 +565,13 @@ impl DirectionalLightShadowPass {
 
                     let perdrawcall_dynamic_offset = round_up(
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._global_upload_ringbuffers_end[rhi.get_current_frame_index()],
                         render_resource
-                            .borrow()
                             ._storage_buffer
                             ._min_storage_buffer_offset_alignment,
                     );
                     render_resource
-                        .borrow_mut()
                         ._storage_buffer
                         ._global_upload_ringbuffers_end[rhi.get_current_frame_index()] =
                         perdrawcall_dynamic_offset
@@ -614,7 +583,6 @@ impl DirectionalLightShadowPass {
                         std::ptr::copy_nonoverlapping(
                             &object as *const _ as *const c_void,
                             render_resource
-                                .borrow()
                                 ._storage_buffer
                                 ._global_upload_ringbuffer_pointer
                                 .add(perdrawcall_dynamic_offset as usize),

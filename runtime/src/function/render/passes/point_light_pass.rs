@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use crate::{
     function::render::{
         interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VulkanRHI},
@@ -29,7 +27,7 @@ use vulkanalia::prelude::v1_0::*;
 pub struct PointLightShadowPassInitInfo<'a> {
     pub rhi: &'a VulkanRHI,
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
 }
 
 #[derive(Default)]
@@ -76,7 +74,6 @@ static STORAGE_BUFFER_DYNAMIC_COUNT: u32 = 3;
 
 impl PointLightShadowPass {
     pub fn initialize(&mut self, info: &PointLightShadowPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         let rhi = info.rhi;
 
         self.setup_attachments(&rhi)?;
@@ -84,7 +81,7 @@ impl PointLightShadowPass {
         self.setup_framebuffer(&rhi)?;
         self.setup_descriptor_layout(&rhi, info.descriptor_layout_manager)?;
         self.setup_pipelines(&rhi)?;
-        self.setup_descriptor_set(&rhi)?;
+        self.setup_descriptor_set(&rhi, info.global_render_resource)?;
 
         Ok(())
     }
@@ -379,7 +376,11 @@ impl PointLightShadowPass {
         Ok(())
     }
 
-    fn setup_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
+    fn setup_descriptor_set(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_resource: &GlobalRenderResource,
+    ) -> Result<()> {
         let set_layouts = [self.m_render_pass.m_descriptor_infos[0].layout];
         let alloc_info = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(rhi.get_descriptor_pool())
@@ -388,41 +389,20 @@ impl PointLightShadowPass {
         self.m_render_pass.m_descriptor_infos[0].descriptor_set =
             rhi.allocate_descriptor_sets(&alloc_info)?[0];
 
-        let render_resource = self
-            .m_render_pass
-            .m_global_render_resource
-            .upgrade()
-            .unwrap();
-
         let perframe_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<MeshPointLightShadowPerframeStorageBufferObject>() as u64)
             .build()];
 
         let perdrawcall_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<MeshPointLightShadowPerdrawcallStorageBufferObject>() as u64)
             .build()];
 
         let perdrawcall_vertex_blending_storage_buffer_info = [vk::DescriptorBufferInfo::builder()
-            .buffer(
-                render_resource
-                    .borrow()
-                    ._storage_buffer
-                    ._global_upload_ringbuffer,
-            )
+            .buffer(render_resource._storage_buffer._global_upload_ringbuffer)
             .offset(0)
             .range(std::mem::size_of::<
                 MeshPointLightShadowPerdrawcallVertexBlendingStorageBufferObject,

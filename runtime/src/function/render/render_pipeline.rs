@@ -14,7 +14,7 @@ use crate::{
                 point_light_pass::{PointLightShadowPass, PointLightShadowPassInitInfo},
             },
             render_pass::{DescriptorLayout, DescriptorLayoutRegistry},
-            render_resource::RenderResource,
+            render_resource::{GlobalRenderResource, RenderResource},
         },
         ui::ui2::UiRuntime,
     },
@@ -45,7 +45,10 @@ impl RenderPipeline {
         let mut m_main_camera_pass = MainCameraPass::default();
         let mut m_pick_pass = PickPass::default();
 
-        let global_render_resource = &create_info.render_resource.m_global_render_resource;
+        let global_render_resource = &create_info
+            .render_resource
+            .m_global_render_resource
+            .borrow();
 
         m_directional_light_pass.initialize(&DirectionalLightShadowPassInitInfo {
             rhi: create_info.rhi,
@@ -107,18 +110,28 @@ impl RenderPipeline {
         self.m_main_camera_pass.destroy(rhi);
     }
 
-    pub fn draw(&self, rhi: &VulkanRHI, ui_runtime: &UiRuntime, forward_draw: bool) {
-        self.m_directional_light_pass.draw(rhi);
+    pub fn draw(
+        &self,
+        rhi: &VulkanRHI,
+        render_resource: &mut GlobalRenderResource,
+        ui_runtime: &UiRuntime,
+        forward_draw: bool,
+    ) {
+        self.m_directional_light_pass.draw(rhi, render_resource);
         self.m_point_light_pass.draw(rhi);
 
         self.m_main_camera_pass
-            .draw(rhi, ui_runtime, forward_draw)
+            .draw(rhi, render_resource, ui_runtime, forward_draw)
             .unwrap();
     }
 
-    pub fn recreate_after_swapchain(&mut self, rhi: &VulkanRHI) {
+    pub fn recreate_after_swapchain(
+        &mut self,
+        rhi: &VulkanRHI,
+        render_resource: &GlobalRenderResource,
+    ) {
         self.m_main_camera_pass
-            .recreate_after_swapchain(rhi)
+            .recreate_after_swapchain(rhi, render_resource)
             .unwrap();
     }
 

@@ -2,7 +2,7 @@ use std::{
     any::TypeId,
     cell::{LazyCell, RefCell},
     collections::HashMap,
-    rc::{Rc, Weak},
+    rc::Weak,
 };
 
 use anyhow::Result;
@@ -10,7 +10,6 @@ use vulkanalia::prelude::v1_0::*;
 
 use crate::function::render::{
     interface::vulkan::vulkan_rhi::VulkanRHI, render_common::RenderMeshNode,
-    render_resource::GlobalRenderResource,
 };
 
 #[derive(Default)]
@@ -87,18 +86,12 @@ pub static mut M_VISIABLE_NODES: LazyCell<RefCell<VisiableNodes>> =
 
 #[derive(Default)]
 pub struct RenderPass {
-    pub m_global_render_resource: Weak<RefCell<GlobalRenderResource>>,
-
     pub m_descriptor_infos: Vec<Descriptor>,
     pub m_render_pipeline: Vec<RenderPipelineBase>,
     pub m_framebuffer: Framebuffer,
 }
 
 impl RenderPass {
-    pub fn initialize(&mut self, global_render_resource: &Rc<RefCell<GlobalRenderResource>>) {
-        self.m_global_render_resource = Rc::downgrade(global_render_resource);
-    }
-
     pub fn create() -> Self {
         Self {
             ..Default::default()

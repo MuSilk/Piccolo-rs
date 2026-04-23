@@ -1,6 +1,6 @@
 use anyhow::Result;
 use linkme::distributed_slice;
-use std::{cell::RefCell, mem::offset_of, rc::Rc};
+use std::{cell::RefCell, mem::offset_of};
 use vulkanalia::prelude::v1_0::*;
 
 use crate::{
@@ -26,7 +26,7 @@ pub struct UIPassInitInfo<'a> {
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
 }
 
 #[derive(Default)]
@@ -47,7 +47,6 @@ struct UiTextureGpuResource {
 
 impl UIPass {
     pub fn initialize(&mut self, info: &UIPassInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
 
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;

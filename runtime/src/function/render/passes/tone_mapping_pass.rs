@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use anyhow::Result;
 use linkme::distributed_slice;
 use vulkanalia::{
@@ -25,7 +23,7 @@ pub struct ToneMappingInitInfo<'a> {
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub rhi: &'a VulkanRHI,
     pub input_attachment: vk::ImageView,
-    pub global_render_resource: &'a Rc<RefCell<GlobalRenderResource>>,
+    pub global_render_resource: &'a GlobalRenderResource,
 }
 
 #[derive(Default)]
@@ -35,7 +33,6 @@ pub struct ToneMappingPass {
 
 impl ToneMappingPass {
     pub fn initialize(&mut self, info: &ToneMappingInitInfo) -> Result<()> {
-        self.m_render_pass.initialize(info.global_render_resource);
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;

@@ -97,7 +97,7 @@ struct DeferredVkMeshDestroy {
 pub struct RenderResource {
     pub m_base: RenderResourceBase,
 
-    pub m_global_render_resource: Rc<RefCell<GlobalRenderResource>>,
+    pub m_global_render_resource: RefCell<GlobalRenderResource>,
 
     pub m_mesh_perframe_storage_buffer_object: MeshPerframeStorageBufferObject,
     pub m_mesh_point_light_shadow_perframe_storage_buffer_object:

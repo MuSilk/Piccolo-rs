@@ -539,7 +539,7 @@ impl RenderSystem {
 
             self.m_render_pipeline
                 .borrow()
-                .draw(&rhi, ui_runtime, forward_draw);
+                .draw(&rhi, &mut self.m_render_resource.borrow().m_global_render_resource.borrow_mut(), ui_runtime, forward_draw);
 
             self.m_debugdraw_manager
                 .borrow_mut()
@@ -560,7 +560,7 @@ impl RenderSystem {
     fn pass_update_after_recreate_swapchain(&self, rhi: &VulkanRHI) {
         self.m_render_pipeline
             .borrow_mut()
-            .recreate_after_swapchain(rhi);
+            .recreate_after_swapchain(rhi, &self.m_render_resource.borrow().m_global_render_resource.borrow());
         self.m_debugdraw_manager
             .borrow_mut()
             .update_after_recreate_swap_chain(rhi);
