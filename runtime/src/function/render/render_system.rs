@@ -44,7 +44,7 @@ pub struct RenderSystem {
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RenderScene,
-    m_render_resource: RefCell<RenderResource>,
+    m_render_resource: RenderResource,
     m_render_pipeline: RefCell<RenderPipeline>,
 
     m_debugdraw_manager: RefCell<DebugDrawManager>,
@@ -101,22 +101,19 @@ impl RenderSystem {
             &vulkan_rhi,
             &level_resource_desc,
         );
-        let render_resource = RefCell::new(render_resource);
 
         let render_pipeline = RenderPipeline::create(&RenderPipelineCreateInfo {
             rhi: &vulkan_rhi,
-            render_resource: &render_resource.borrow(),
+            render_resource: &render_resource,
             enable_fxaa: global_rendering_res.enable_fxaa,
         })
         .unwrap();
 
-        render_resource.borrow_mut().m_mesh_descriptor_set_layout = render_pipeline
+        render_resource.m_mesh_descriptor_set_layout = render_pipeline
             .get_descriptor_set_layout::<PerMeshDescriptorLayout>(&vulkan_rhi)
             .unwrap();
 
-        render_resource
-            .borrow_mut()
-            .m_material_descriptor_set_layout = render_pipeline
+        render_resource.m_material_descriptor_set_layout = render_pipeline
             .get_descriptor_set_layout::<MeshPerMaterialDescriptorLayout>(&vulkan_rhi)
             .unwrap();
 
@@ -147,18 +144,15 @@ impl RenderSystem {
         self.process_swap_data(asset_manager);
         self.m_rhi.prepare_context();
         self.m_render_resource
-            .borrow_mut()
             .update_per_frame_buffer(&self.m_render_scene, &self.m_render_camera.borrow());
-        self.m_render_scene.update_visible_objects(
-            &self.m_render_resource.borrow(),
-            &self.m_render_camera.borrow(),
-        );
+        self.m_render_scene
+            .update_visible_objects(&self.m_render_resource, &self.m_render_camera.borrow());
         self.m_render_pipeline
             .borrow_mut()
-            .prepare_pass_data(&self.m_rhi, &self.m_render_resource.borrow());
+            .prepare_pass_data(&self.m_rhi, &self.m_render_resource);
         self.m_debugdraw_manager
             .borrow_mut()
-            .prepare_pass_data(&self.m_render_resource.borrow());
+            .prepare_pass_data(&self.m_render_resource);
         self.m_debugdraw_manager
             .borrow_mut()
             .tick(&self.m_rhi, delta_time);
@@ -173,14 +167,9 @@ impl RenderSystem {
     }
 
     pub fn destroy(&mut self) -> Result<()> {
-        self.m_debugdraw_manager
-            .borrow_mut()
-            .destroy(&self.m_rhi);
-        self.m_render_pipeline
-            .borrow_mut()
-            .destroy(&self.m_rhi);
+        self.m_debugdraw_manager.borrow_mut().destroy(&self.m_rhi);
+        self.m_render_pipeline.borrow_mut().destroy(&self.m_rhi);
         self.m_render_resource
-            .borrow_mut()
             .flush_deferred_mesh_destroys(&self.m_rhi);
         self.m_rhi.destroy();
         Ok(())
@@ -234,7 +223,7 @@ impl RenderSystem {
 }
 
 impl RenderSystem {
-    fn process_swap_data(&self, asset_manager: &AssetManager) {
+    fn process_swap_data(&mut self, asset_manager: &AssetManager) {
         let swap_data = self.m_swap_context.get_render_swap_data();
         if swap_data.borrow().m_game_object_resource_descs.is_some() {
             {
@@ -279,11 +268,9 @@ impl RenderSystem {
                                 if !is_mesh_loaded {
                                     let (mesh_data, bounding_box) = self
                                         .m_render_resource
-                                        .borrow_mut()
                                         .load_mesh_data(asset_manager, &mesh_source);
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource
-                                        .borrow_mut()
                                         .upload_game_object_render_resource_mesh(
                                             &self.m_rhi,
                                             &render_entity,
@@ -293,7 +280,6 @@ impl RenderSystem {
                                 } else {
                                     render_entity.m_bounding_box = self
                                         .m_render_resource
-                                        .borrow_mut()
                                         .get_cached_bounding_box(&mesh_source)
                                         .unwrap()
                                         .clone();
@@ -314,17 +300,14 @@ impl RenderSystem {
                                     .borrow_mut()
                                     .alloc_guid(&mesh_source);
                                 if !is_mesh_loaded {
-                                    let (mesh_data, bounding_box) = self
-                                        .m_render_resource
-                                        .borrow_mut()
-                                        .load_mesh_data_from_raw(
+                                    let (mesh_data, bounding_box) =
+                                        self.m_render_resource.load_mesh_data_from_raw(
                                             &mesh_source,
                                             &mesh_desc.borrow().m_vertices,
                                             &mesh_desc.borrow().m_indices,
                                         );
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource
-                                        .borrow_mut()
                                         .upload_game_object_render_resource_mesh(
                                             &self.m_rhi,
                                             &render_entity,
@@ -333,7 +316,6 @@ impl RenderSystem {
                                 } else {
                                     render_entity.m_bounding_box = self
                                         .m_render_resource
-                                        .borrow_mut()
                                         .get_cached_bounding_box(&mesh_source)
                                         .unwrap()
                                         .clone();
@@ -349,17 +331,14 @@ impl RenderSystem {
                                     .borrow_mut()
                                     .alloc_guid(&mesh_source);
                                 if mesh_desc.borrow().m_is_dirty {
-                                    let (mesh_data, bounding_box) = self
-                                        .m_render_resource
-                                        .borrow_mut()
-                                        .load_mesh_data_from_raw(
+                                    let (mesh_data, bounding_box) =
+                                        self.m_render_resource.load_mesh_data_from_raw(
                                             &mesh_source,
                                             &mesh_desc.borrow().m_vertices,
                                             &mesh_desc.borrow().m_indices,
                                         );
                                     render_entity.m_bounding_box = bounding_box;
                                     self.m_render_resource
-                                        .borrow_mut()
                                         .upload_game_object_render_resource_mesh(
                                             &self.m_rhi,
                                             &render_entity,
@@ -369,7 +348,6 @@ impl RenderSystem {
                                 } else {
                                     render_entity.m_bounding_box = self
                                         .m_render_resource
-                                        .borrow_mut()
                                         .get_cached_bounding_box(&mesh_source)
                                         .unwrap()
                                         .clone();
@@ -448,7 +426,6 @@ impl RenderSystem {
                                 &material_source,
                             );
                             self.m_render_resource
-                                .borrow_mut()
                                 .upload_game_object_render_resource_material(
                                     &self.m_rhi,
                                     &render_entity,
@@ -485,7 +462,6 @@ impl RenderSystem {
                                     .borrow_mut()
                                     .alloc_guid(&mesh_source);
                                 self.m_render_resource
-                                    .borrow_mut()
                                     .destroy_game_object_render_resource(asset_id);
                             }
                             _ => {}
@@ -523,17 +499,16 @@ impl RenderSystem {
 
     fn render(&mut self, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
         let render_pipeline = &self.m_render_pipeline;
-        let render_resource = &self.m_render_resource.borrow();
         let debugdraw_manager = &self.m_debugdraw_manager;
 
         let rhi = &self.m_rhi;
         self.m_render_resource
-            .borrow_mut()
             .reset_ring_buffer_offset(rhi.get_current_frame_index());
         {
             let rhi = &mut self.m_rhi;
             rhi.wait_for_fence()?;
             rhi.reset_command_pool()?;
+            let render_resource = &self.m_render_resource;
             if rhi.prepare_before_pass(&|rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
@@ -551,7 +526,7 @@ impl RenderSystem {
             self.m_render_pipeline.borrow().draw(
                 &rhi,
                 &self.m_render_scene,
-                &mut self.m_render_resource.borrow_mut().m_global_render_resource,
+                &mut self.m_render_resource.m_global_render_resource,
                 ui_runtime,
                 forward_draw,
             );
@@ -560,6 +535,7 @@ impl RenderSystem {
         }
         {
             let rhi = &mut self.m_rhi;
+            let render_resource = &self.m_render_resource;
             rhi.submit_rendering(&|rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
@@ -570,7 +546,6 @@ impl RenderSystem {
             })?;
         }
         self.m_render_resource
-            .borrow_mut()
             .on_main_frame_submit_complete(&self.m_rhi);
         Ok(())
     }
@@ -581,10 +556,9 @@ impl RenderSystem {
         render_resource: &RenderResource,
         debugdraw_manager: &RefCell<DebugDrawManager>,
     ) {
-        render_pipeline.borrow_mut().recreate_after_swapchain(
-            rhi,
-            &render_resource.m_global_render_resource,
-        );
+        render_pipeline
+            .borrow_mut()
+            .recreate_after_swapchain(rhi, &render_resource.m_global_render_resource);
         debugdraw_manager
             .borrow_mut()
             .update_after_recreate_swap_chain(rhi);
