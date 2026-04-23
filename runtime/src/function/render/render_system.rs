@@ -39,7 +39,7 @@ pub struct RenderSystemCreateInfo<'a> {
 }
 
 pub struct RenderSystem {
-    m_rhi: Rc<RefCell<VulkanRHI>>,
+    m_rhi: RefCell<VulkanRHI>,
     m_swap_context: RenderSwapContext,
     m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
@@ -56,7 +56,7 @@ impl RenderSystem {
             window_system: create_info.window_system,
         };
         let vulkan_rhi = VulkanRHI::create(&rhi_create_info);
-        let vulkan_rhi = Rc::new(RefCell::new(vulkan_rhi));
+        let vulkan_rhi = RefCell::new(vulkan_rhi);
 
         let asset_manager = create_info.asset_manager;
         let config_manager = create_info.config_manager;
@@ -123,7 +123,7 @@ impl RenderSystem {
             .unwrap();
 
         let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
-            rhi: &vulkan_rhi,
+            rhi: &vulkan_rhi.borrow(),
             font_path: config_manager.get_editor_font_path(),
         })
         .unwrap();
@@ -161,7 +161,9 @@ impl RenderSystem {
         self.m_debugdraw_manager
             .borrow_mut()
             .prepare_pass_data(&self.m_render_resource.borrow());
-        self.m_debugdraw_manager.borrow_mut().tick(delta_time);
+        self.m_debugdraw_manager
+            .borrow_mut()
+            .tick(&self.m_rhi.borrow(), delta_time);
         self.render(
             ui_runtime,
             match self.m_render_pipeline_type {
@@ -173,7 +175,9 @@ impl RenderSystem {
     }
 
     pub fn destroy(&self) -> Result<()> {
-        self.m_debugdraw_manager.borrow_mut().destroy(&self);
+        self.m_debugdraw_manager
+            .borrow_mut()
+            .destroy(&self.m_rhi.borrow());
         self.m_render_pipeline
             .borrow_mut()
             .destroy(&self.m_rhi.borrow());
@@ -211,7 +215,7 @@ impl RenderSystem {
         width: f32,
         height: f32,
     ) {
-        let mut rhi = self.m_rhi.as_ref().borrow_mut();
+        let mut rhi = self.m_rhi.borrow_mut();
         rhi.m_data.m_viewport.x = offset_x;
         rhi.m_data.m_viewport.y = offset_y;
         rhi.m_data.m_viewport.width = width;
@@ -220,7 +224,7 @@ impl RenderSystem {
         self.m_render_camera.borrow_mut().set_aspect(width / height);
     }
 
-    pub fn get_rhi(&self) -> &Rc<RefCell<VulkanRHI>> {
+    pub fn get_rhi(&self) -> &RefCell<VulkanRHI> {
         &self.m_rhi
     }
 
@@ -544,9 +548,7 @@ impl RenderSystem {
                 forward_draw,
             );
 
-            self.m_debugdraw_manager
-                .borrow_mut()
-                .draw(rhi.get_current_swapchain_image_index())?;
+            self.m_debugdraw_manager.borrow_mut().draw(&rhi)?;
         }
         {
             let mut rhi = rhi.borrow_mut();

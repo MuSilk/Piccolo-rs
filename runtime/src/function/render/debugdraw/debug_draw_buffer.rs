@@ -1,10 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::VecDeque,
-    f32::consts::TAU,
-    ptr::copy_nonoverlapping,
-    rc::{Rc, Weak},
-};
+use std::{collections::VecDeque, f32::consts::TAU, ptr::copy_nonoverlapping};
 
 use anyhow::Result;
 use linkme::distributed_slice;
@@ -61,8 +55,6 @@ struct Descriptor {
 
 #[derive(Default)]
 pub struct DebugDrawAllocator {
-    m_rhi: Weak<RefCell<VulkanRHI>>,
-
     m_descriptor: Descriptor,
 
     m_vertex_resource: Resource,
@@ -95,26 +87,22 @@ static UNIFORM_BUFFER_DYNAMIC_COUNT: u32 = VulkanRHI::get_max_frames_in_flight()
 static COMBINED_IMAGE_SAMPLER_COUNT: u32 = VulkanRHI::get_max_frames_in_flight() as u32;
 
 impl DebugDrawAllocator {
-    pub fn create(rhi: &Rc<RefCell<VulkanRHI>>, font: &DebugDrawFont) -> Result<Self> {
-        let m_rhi = Rc::downgrade(rhi);
-        let descriptor = Self::setup_descriptor_set(&rhi.borrow())?;
+    pub fn create(rhi: &VulkanRHI, font: &DebugDrawFont) -> Result<Self> {
+        let descriptor = Self::setup_descriptor_set(rhi)?;
 
         let mut buffer = Self {
-            m_rhi: m_rhi,
             m_descriptor: descriptor,
             ..Default::default()
         };
 
-        buffer.prepare_descriptor_set(&rhi.borrow(), font)?;
+        buffer.prepare_descriptor_set(rhi, font)?;
 
         Ok(buffer)
     }
 
-    pub fn destroy(&mut self) {
+    pub fn destroy(&mut self, rhi: &VulkanRHI) {
         self.clear();
         self.unload_mesh_buffer();
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         rhi.destroy_descriptor_set_layout(self.m_descriptor.layout);
         for queue in self.m_deffer_delete_queue.iter_mut() {
             while let Some(resource) = queue.pop_front() {
@@ -124,8 +112,8 @@ impl DebugDrawAllocator {
         }
     }
 
-    pub fn tick(&mut self) {
-        self.flush_pending_delete();
+    pub fn tick(&mut self, rhi: &VulkanRHI) {
+        self.flush_pending_delete(rhi);
         self.m_current_frame =
             (self.m_current_frame + 1) % Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT as u32;
     }
@@ -138,13 +126,8 @@ impl DebugDrawAllocator {
         self.m_descriptor.layout
     }
 
-    pub fn get_descriptor_set(&self) -> &vk::DescriptorSet {
-        &self.m_descriptor.descriptor_set[self
-            .m_rhi
-            .upgrade()
-            .unwrap()
-            .borrow()
-            .get_current_frame_index() as usize]
+    pub fn get_descriptor_set(&self, current_frame_index: usize) -> &vk::DescriptorSet {
+        &self.m_descriptor.descriptor_set[current_frame_index]
     }
 
     pub fn cache_vertices(&mut self, vertices: &[DebugDrawVertex]) -> usize {
@@ -179,17 +162,16 @@ impl DebugDrawAllocator {
         self.m_uniform_buffer_dynamic_object_cache.len()
     }
 
-    pub fn allocator(&mut self) -> Result<()> {
+    pub fn allocator(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.clear_buffer();
         let vertex_buffer_size = self.m_vertex_cache.len() * std::mem::size_of::<DebugDrawVertex>();
         if vertex_buffer_size > 0 {
-            let rhi = self.m_rhi.upgrade().unwrap();
-            let (buffer, memory) = rhi.borrow().create_buffer(
+            let (buffer, memory) = rhi.create_buffer(
                 vertex_buffer_size as u64,
                 vk::BufferUsageFlags::VERTEX_BUFFER,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            let data = rhi.borrow().map_memory(
+            let data = rhi.map_memory(
                 memory,
                 0,
                 vertex_buffer_size as u64,
@@ -202,19 +184,18 @@ impl DebugDrawAllocator {
                     vertex_buffer_size,
                 );
             }
-            rhi.borrow().unmap_memory(memory);
+            rhi.unmap_memory(memory);
 
             self.m_vertex_resource = Resource { buffer, memory };
         }
         let uniform_buffer_size = std::mem::size_of::<UniformBufferObject>();
         if uniform_buffer_size > 0 {
-            let rhi = self.m_rhi.upgrade().unwrap();
-            let (buffer, memory) = rhi.borrow().create_buffer(
+            let (buffer, memory) = rhi.create_buffer(
                 uniform_buffer_size as u64,
                 vk::BufferUsageFlags::UNIFORM_BUFFER,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )?;
-            let data = rhi.borrow().map_memory(
+            let data = rhi.map_memory(
                 memory,
                 0,
                 uniform_buffer_size as u64,
@@ -230,15 +211,14 @@ impl DebugDrawAllocator {
                     uniform_buffer_size,
                 );
             }
-            rhi.borrow().unmap_memory(memory);
+            rhi.unmap_memory(memory);
 
             self.m_uniform_resource = Resource { buffer, memory };
         }
         let uniform_dynamic_buffer_size = self.m_uniform_buffer_dynamic_object_cache.len()
             * std::mem::size_of::<UniformBufferDynamicObject>();
         {
-            let rhi = self.m_rhi.upgrade().unwrap();
-            let (buffer, memory) = rhi.borrow().create_buffer(
+            let (buffer, memory) = rhi.create_buffer(
                 (std::mem::size_of::<UniformBufferDynamicObject>() as u64)
                     .max(uniform_dynamic_buffer_size as u64),
                 vk::BufferUsageFlags::UNIFORM_BUFFER,
@@ -246,7 +226,7 @@ impl DebugDrawAllocator {
             )?;
 
             if uniform_dynamic_buffer_size > 0 {
-                let data = rhi.borrow().map_memory(
+                let data = rhi.map_memory(
                     memory,
                     0,
                     uniform_dynamic_buffer_size as u64,
@@ -261,12 +241,12 @@ impl DebugDrawAllocator {
                         uniform_dynamic_buffer_size,
                     );
                 }
-                rhi.borrow().unmap_memory(memory);
+                rhi.unmap_memory(memory);
             }
 
             self.m_uniform_dynamic_resource = Resource { buffer, memory };
         }
-        self.update_descriptor_set()?;
+        self.update_descriptor_set(rhi)?;
         Ok(())
     }
 
@@ -285,23 +265,23 @@ impl DebugDrawAllocator {
         std::mem::size_of::<UniformBufferDynamicObject>()
     }
 
-    pub fn get_sphere_vertex_buffer(&mut self) -> Result<vk::Buffer> {
+    pub fn get_sphere_vertex_buffer(&mut self, rhi: &VulkanRHI) -> Result<vk::Buffer> {
         if self.m_sphere_resource.is_none() {
-            self.load_sphere_mesh_buffer()?;
+            self.load_sphere_mesh_buffer(rhi)?;
         }
         Ok(self.m_sphere_resource.as_ref().unwrap().buffer)
     }
 
-    pub fn get_cylinder_vertex_buffer(&mut self) -> Result<&vk::Buffer> {
+    pub fn get_cylinder_vertex_buffer(&mut self, rhi: &VulkanRHI) -> Result<&vk::Buffer> {
         if self.m_cylinder_resource.is_none() {
-            self.load_cylinder_mesh_buffer()?;
+            self.load_cylinder_mesh_buffer(rhi)?;
         }
         Ok(&self.m_cylinder_resource.as_ref().unwrap().buffer)
     }
 
-    pub fn get_capsule_vertex_buffer(&mut self) -> Result<&vk::Buffer> {
+    pub fn get_capsule_vertex_buffer(&mut self, rhi: &VulkanRHI) -> Result<&vk::Buffer> {
         if self.m_capsule_resource.is_none() {
-            self.load_capsule_mesh_buffer()?;
+            self.load_capsule_mesh_buffer(rhi)?;
         }
         Ok(&self.m_capsule_resource.as_ref().unwrap().buffer)
     }
@@ -350,23 +330,15 @@ impl DebugDrawAllocator {
         }
     }
 
-    fn flush_pending_delete(&mut self) {
+    fn flush_pending_delete(&mut self, rhi: &VulkanRHI) {
         let current_frame_to_delete = ((self.m_current_frame + 1)
             % Self::K_DEFERRED_DELETE_RESOURCE_FRAME_COUNT as u32)
             as usize;
         while let Some(resource_to_delete) =
             self.m_deffer_delete_queue[current_frame_to_delete].pop_front()
         {
-            self.m_rhi
-                .upgrade()
-                .unwrap()
-                .borrow()
-                .free_memory(resource_to_delete.memory);
-            self.m_rhi
-                .upgrade()
-                .unwrap()
-                .borrow()
-                .destroy_buffer(resource_to_delete.buffer);
+            rhi.free_memory(resource_to_delete.memory);
+            rhi.destroy_buffer(resource_to_delete.buffer);
         }
     }
 
@@ -437,7 +409,7 @@ impl DebugDrawAllocator {
         Ok(())
     }
 
-    fn update_descriptor_set(&mut self) -> Result<()> {
+    fn update_descriptor_set(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let buffer_info = [
             vk::DescriptorBufferInfo::builder()
                 .buffer(self.m_uniform_resource.buffer)
@@ -450,9 +422,6 @@ impl DebugDrawAllocator {
                 .range(std::mem::size_of::<UniformBufferDynamicObject>() as u64)
                 .build(),
         ];
-
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
 
         let descriptor_write = [
             vk::WriteDescriptorSet::builder()
@@ -486,7 +455,7 @@ impl DebugDrawAllocator {
         }
     }
 
-    fn load_sphere_mesh_buffer(&mut self) -> Result<()> {
+    fn load_sphere_mesh_buffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let param = Self::M_CIRCLE_SAMPLE_COUNT as i32;
         let vertex_count = (param * 2 + 2) * (param * 2) * 2 + (param * 2 + 1) * (param * 2) * 2;
         let mut vertices = Vec::<DebugDrawVertex>::new();
@@ -545,8 +514,6 @@ impl DebugDrawAllocator {
 
         let buffer_size = vertices.len() * std::mem::size_of::<DebugDrawVertex>();
 
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64,
             vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
@@ -575,7 +542,7 @@ impl DebugDrawAllocator {
         Ok(())
     }
 
-    fn load_cylinder_mesh_buffer(&mut self) -> Result<()> {
+    fn load_cylinder_mesh_buffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let param = Self::M_CIRCLE_SAMPLE_COUNT as i32;
         let vertex_count = 2 * param * 5 * 2;
         let mut vertices = Vec::<DebugDrawVertex>::new();
@@ -623,8 +590,6 @@ impl DebugDrawAllocator {
 
         let buffer_size = vertices.len() * std::mem::size_of::<DebugDrawVertex>();
 
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64,
             vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
@@ -654,7 +619,7 @@ impl DebugDrawAllocator {
         Ok(())
     }
 
-    fn load_capsule_mesh_buffer(&mut self) -> Result<()> {
+    fn load_capsule_mesh_buffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         let param = Self::M_CIRCLE_SAMPLE_COUNT as i32;
         let vertex_count = 2 * param * param * 4 + 2 * param * param * 4 + 2 * param * 2;
         let mut vertices = Vec::<DebugDrawVertex>::new();
@@ -764,8 +729,6 @@ impl DebugDrawAllocator {
 
         let buffer_size = vertices.len() * std::mem::size_of::<DebugDrawVertex>();
 
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let (buffer, memory) = rhi.create_buffer(
             buffer_size as u64,
             vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,

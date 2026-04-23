@@ -7,7 +7,6 @@ use vulkanalia::prelude::v1_0::*;
 use crate::function::render::{
     font_atlas::{create_ascii_font_texture_r32f, get_ascii_character_texture_rect},
     interface::vulkan::vulkan_rhi::VulkanRHI,
-    render_system::RenderSystem,
 };
 
 #[derive(Default)]
@@ -32,11 +31,10 @@ impl DebugDrawFont {
         self.m_font_image_view
     }
 
-    pub fn destroy(&mut self, render_system: &RenderSystem) {
-        let rhi = render_system.get_rhi();
-        rhi.borrow().free_memory(self.m_font_image_memory);
-        rhi.borrow().destroy_image_view(self.m_font_image_view);
-        rhi.borrow().destroy_image(self.m_font_image);
+    pub fn destroy(&mut self, rhi: &VulkanRHI) {
+        rhi.free_memory(self.m_font_image_memory);
+        rhi.destroy_image_view(self.m_font_image_view);
+        rhi.destroy_image(self.m_font_image);
     }
 
     fn load_font(&mut self, rhi: &VulkanRHI, font_path: &Path) -> Result<()> {

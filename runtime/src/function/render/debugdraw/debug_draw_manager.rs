@@ -1,10 +1,4 @@
-use std::{
-    cell::RefCell,
-    path::Path,
-    rc::{Rc, Weak},
-    slice,
-    sync::Mutex,
-};
+use std::{cell::RefCell, path::Path, slice, sync::Mutex};
 
 use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
@@ -21,12 +15,11 @@ use crate::{
         },
         interface::vulkan::vulkan_rhi::VulkanRHI,
         render_resource::RenderResource,
-        render_system::RenderSystem,
     },
 };
 
 pub struct DebugDrawManagerCreateInfo<'a> {
-    pub rhi: &'a Rc<RefCell<VulkanRHI>>,
+    pub rhi: &'a VulkanRHI,
     pub font_path: &'a Path,
 }
 
@@ -50,7 +43,6 @@ pub struct DebugDrawManagerBase {
 
 pub struct DebugDrawManager {
     m_mutex: Mutex<()>,
-    m_rhi: Weak<RefCell<VulkanRHI>>,
 
     m_debug_draw_pipelines: [DebugDrawPipeline; DebugDrawPipelineType::EnumCount as usize],
     m_buffer_allocator: DebugDrawAllocator,
@@ -64,8 +56,7 @@ pub struct DebugDrawManager {
 
 impl DebugDrawManager {
     pub fn create(info: &DebugDrawManagerCreateInfo) -> Result<Self> {
-        let m_rhi = Rc::downgrade(info.rhi);
-        let m_font = DebugDrawFont::create(&info.rhi.borrow(), info.font_path)?;
+        let m_font = DebugDrawFont::create(info.rhi, info.font_path)?;
         let m_buffer_allocator = DebugDrawAllocator::create(info.rhi, &m_font)?;
         let set_layout = m_buffer_allocator.get_descriptor_set_layout();
         let m_debug_draw_pipelines = [
@@ -90,7 +81,6 @@ impl DebugDrawManager {
         ];
         Ok(Self {
             m_mutex: Mutex::new(()),
-            m_rhi: m_rhi,
             m_debug_draw_pipelines,
             m_buffer_allocator,
             m_debug_context: DebugDrawContext::default(),
@@ -107,12 +97,12 @@ impl DebugDrawManager {
             .proj_view_matrix;
     }
 
-    pub fn destroy(&mut self, render_system: &RenderSystem) {
+    pub fn destroy(&mut self, rhi: &VulkanRHI) {
         for pipeline in self.m_debug_draw_pipelines.iter_mut() {
-            pipeline.destroy();
+            pipeline.destroy(rhi);
         }
-        self.m_buffer_allocator.destroy();
-        self.m_font.destroy(render_system);
+        self.m_buffer_allocator.destroy(rhi);
+        self.m_font.destroy(rhi);
     }
 
     pub fn clear(&mut self) {
@@ -120,9 +110,9 @@ impl DebugDrawManager {
         self.m_debug_context.clear();
     }
 
-    pub fn tick(&mut self, delta_time: f32) {
+    pub fn tick(&mut self, rhi: &VulkanRHI, delta_time: f32) {
         let _guard = self.m_mutex.lock().unwrap();
-        self.m_buffer_allocator.tick();
+        self.m_buffer_allocator.tick(rhi);
         self.m_debug_context.tick(delta_time);
     }
 
@@ -138,18 +128,16 @@ impl DebugDrawManager {
             .try_get_or_create_debug_draw_group(name)
     }
 
-    pub fn draw(&mut self, current_swapchain_image_index: usize) -> Result<()> {
+    pub fn draw(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.swap_data_to_render();
         let color = [1.0; 4];
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.push_event(command_buffer, "DebugDrawManager\0", color);
         let info = rhi.get_swapchain_info();
         rhi.cmd_set_viewport(command_buffer, 0, slice::from_ref(info.viewport));
         rhi.cmd_set_scissor(command_buffer, 0, slice::from_ref(info.scissor));
 
-        self.draw_debug_object(current_swapchain_image_index)?;
+        self.draw_debug_object(rhi)?;
 
         rhi.pop_event(command_buffer);
         Ok(())
@@ -170,15 +158,15 @@ impl DebugDrawManager {
             });
     }
 
-    fn draw_debug_object(&mut self, current_swapchain_image_index: usize) -> Result<()> {
-        self.prepare_draw_buffer()?;
+    fn draw_debug_object(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        self.prepare_draw_buffer(rhi)?;
 
-        self.draw_point_line_triangle_box(current_swapchain_image_index);
-        self.draw_wire_frame_object(current_swapchain_image_index)?;
+        self.draw_point_line_triangle_box(rhi);
+        self.draw_wire_frame_object(rhi)?;
         Ok(())
     }
 
-    fn prepare_draw_buffer(&mut self) -> Result<()> {
+    fn prepare_draw_buffer(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.m_buffer_allocator.clear();
 
         let vertices = self.m_debug_draw_group_for_render.write_point_data(false);
@@ -213,8 +201,6 @@ impl DebugDrawManager {
         self.m_base.m_no_depth_test_triangle_end_offset =
             self.m_buffer_allocator.get_vertex_cache_offset();
 
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let swap_chain_desc = rhi.get_swapchain_info();
         let screen_width = swap_chain_desc.viewport.width;
         let screen_height = swap_chain_desc.viewport.height;
@@ -237,17 +223,16 @@ impl DebugDrawManager {
         self.m_buffer_allocator
             .cache_uniform_dynamic_object(&dynamic_objects);
 
-        self.m_buffer_allocator.allocator()?;
+        self.m_buffer_allocator.allocator(rhi)?;
         Ok(())
     }
 
-    fn draw_point_line_triangle_box(&self, current_swapchain_image_index: usize) {
+    fn draw_point_line_triangle_box(&self, rhi: &VulkanRHI) {
         if self.m_buffer_allocator.get_vertex_buffer().is_null() {
             return;
         }
+        let current_swapchain_image_index = rhi.get_current_swapchain_image_index();
         let vertex_buffers = [self.m_buffer_allocator.get_vertex_buffer()];
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
         let swapchain_info = rhi.get_swapchain_info();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &[0]);
@@ -324,7 +309,9 @@ impl DebugDrawManager {
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.get_pipeline().layout,
                 0,
-                &[*self.m_buffer_allocator.get_descriptor_set()],
+                &[*self
+                    .m_buffer_allocator
+                    .get_descriptor_set(rhi.get_current_frame_index() as usize)],
                 &[0],
             );
             rhi.cmd_draw(
@@ -338,10 +325,9 @@ impl DebugDrawManager {
         }
     }
 
-    fn draw_wire_frame_object(&mut self, current_swapchain_image_index: usize) -> Result<()> {
-        let vertex_buffers = [self.m_buffer_allocator.get_sphere_vertex_buffer()?];
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    fn draw_wire_frame_object(&mut self, rhi: &VulkanRHI) -> Result<()> {
+        let current_swapchain_image_index = rhi.get_current_swapchain_image_index();
+        let vertex_buffers = [self.m_buffer_allocator.get_sphere_vertex_buffer(rhi)?];
         let swapchain_info = rhi.get_swapchain_info();
         let command_buffer = rhi.get_current_command_buffer();
         rhi.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &[0]);
@@ -401,7 +387,9 @@ impl DebugDrawManager {
                         vk::PipelineBindPoint::GRAPHICS,
                         pipeline.get_pipeline().layout,
                         0,
-                        &[*self.m_buffer_allocator.get_descriptor_set()],
+                        &[*self
+                            .m_buffer_allocator
+                            .get_descriptor_set(rhi.get_current_frame_index() as usize)],
                         &[dynamic_offset],
                     );
                     dynamic_offset += uniform_dynamic_size;
@@ -424,7 +412,9 @@ impl DebugDrawManager {
                         vk::PipelineBindPoint::GRAPHICS,
                         pipeline.get_pipeline().layout,
                         0,
-                        &[*self.m_buffer_allocator.get_descriptor_set()],
+                        &[*self
+                            .m_buffer_allocator
+                            .get_descriptor_set(rhi.get_current_frame_index() as usize)],
                         &[dynamic_offset],
                     );
                     dynamic_offset += uniform_dynamic_size;
@@ -447,7 +437,9 @@ impl DebugDrawManager {
                         vk::PipelineBindPoint::GRAPHICS,
                         pipeline.get_pipeline().layout,
                         0,
-                        &[*self.m_buffer_allocator.get_descriptor_set()],
+                        &[*self
+                            .m_buffer_allocator
+                            .get_descriptor_set(rhi.get_current_frame_index() as usize)],
                         &[dynamic_offset],
                     );
                     dynamic_offset += uniform_dynamic_size;
@@ -463,7 +455,9 @@ impl DebugDrawManager {
                         vk::PipelineBindPoint::GRAPHICS,
                         pipeline.get_pipeline().layout,
                         0,
-                        &[*self.m_buffer_allocator.get_descriptor_set()],
+                        &[*self
+                            .m_buffer_allocator
+                            .get_descriptor_set(rhi.get_current_frame_index() as usize)],
                         &[dynamic_offset],
                     );
                     dynamic_offset += uniform_dynamic_size;
@@ -479,7 +473,9 @@ impl DebugDrawManager {
                         vk::PipelineBindPoint::GRAPHICS,
                         pipeline.get_pipeline().layout,
                         0,
-                        &[*self.m_buffer_allocator.get_descriptor_set()],
+                        &[*self
+                            .m_buffer_allocator
+                            .get_descriptor_set(rhi.get_current_frame_index() as usize)],
                         &[dynamic_offset],
                     );
                     dynamic_offset += uniform_dynamic_size;

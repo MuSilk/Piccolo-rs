@@ -1,8 +1,3 @@
-use std::{
-    cell::RefCell,
-    rc::{Rc, Weak},
-};
-
 use anyhow::Result;
 use vulkanalia::prelude::v1_0::*;
 
@@ -67,17 +62,14 @@ pub struct DebugDrawPipeline {
     m_pipeline_type: DebugDrawPipelineType,
     m_render_pipelines: Vec<DebugDrawPipelineBase>,
     m_framebuffer: DebugDrawFramebuffer,
-    m_rhi: Weak<RefCell<VulkanRHI>>,
 }
 
 impl DebugDrawPipeline {
     pub fn create(
         pipeline_type: DebugDrawPipelineType,
-        rhi: &Rc<RefCell<VulkanRHI>>,
+        rhi: &VulkanRHI,
         descriptor_set_layout: vk::DescriptorSetLayout,
     ) -> Result<Self> {
-        let m_rhi = Rc::downgrade(rhi);
-        let rhi = rhi.borrow();
         let swapchain_info = rhi.get_swapchain_info();
         setup_attachments();
         let render_pass = setup_render_pass(&rhi)?;
@@ -93,7 +85,6 @@ impl DebugDrawPipeline {
                 framebuffers,
                 attachments: vec![],
             },
-            m_rhi,
         })
     }
 
@@ -105,9 +96,7 @@ impl DebugDrawPipeline {
         Ok(())
     }
 
-    pub fn destroy(&self) {
-        let rhi = self.m_rhi.upgrade().unwrap();
-        let rhi = rhi.borrow();
+    pub fn destroy(&self, rhi: &VulkanRHI) {
         self.m_framebuffer
             .framebuffers
             .iter()
