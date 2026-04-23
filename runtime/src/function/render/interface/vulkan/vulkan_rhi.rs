@@ -927,7 +927,7 @@ impl VulkanRHI {
 
     pub fn prepare_before_pass(
         &mut self,
-        pass_update_after_recreate_swapchain: &dyn Fn(&VulkanRHI),
+        pass_update_after_recreate_swapchain: &mut dyn FnMut(&VulkanRHI),
     ) -> Result<bool> {
         let in_flight_fence = self.m_data.m_is_frame_in_flight_fences[self.m_current_frame_index];
 
@@ -977,7 +977,7 @@ impl VulkanRHI {
 
     pub fn submit_rendering(
         &mut self,
-        pass_update_after_recreate_swapchain: &dyn Fn(&VulkanRHI),
+        pass_update_after_recreate_swapchain: &mut dyn FnMut(&VulkanRHI),
     ) -> Result<()> {
         let command_buffer = self.m_data.m_current_command_buffer;
         unsafe {

@@ -45,7 +45,7 @@ pub struct RenderSystem {
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RenderScene,
     m_render_resource: RenderResource,
-    m_render_pipeline: RefCell<RenderPipeline>,
+    m_render_pipeline: RenderPipeline,
 
     m_debugdraw_manager: RefCell<DebugDrawManager>,
 }
@@ -130,7 +130,7 @@ impl RenderSystem {
             m_render_camera: Rc::new(RefCell::new(render_camera)),
             m_render_scene: render_scene,
             m_render_resource: render_resource,
-            m_render_pipeline: RefCell::new(render_pipeline),
+            m_render_pipeline: render_pipeline,
             m_debugdraw_manager: RefCell::new(debugdraw_manager),
         }
     }
@@ -148,7 +148,6 @@ impl RenderSystem {
         self.m_render_scene
             .update_visible_objects(&self.m_render_resource, &self.m_render_camera.borrow());
         self.m_render_pipeline
-            .borrow_mut()
             .prepare_pass_data(&self.m_rhi, &self.m_render_resource);
         self.m_debugdraw_manager
             .borrow_mut()
@@ -168,7 +167,7 @@ impl RenderSystem {
 
     pub fn destroy(&mut self) -> Result<()> {
         self.m_debugdraw_manager.borrow_mut().destroy(&self.m_rhi);
-        self.m_render_pipeline.borrow_mut().destroy(&self.m_rhi);
+        self.m_render_pipeline.destroy(&self.m_rhi);
         self.m_render_resource
             .flush_deferred_mesh_destroys(&self.m_rhi);
         self.m_rhi.destroy();
@@ -216,9 +215,7 @@ impl RenderSystem {
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        self.m_render_pipeline
-            .borrow()
-            .get_guid_of_picked_mesh(picked_uv)
+        self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
     }
 }
 
@@ -498,9 +495,6 @@ impl RenderSystem {
     }
 
     fn render(&mut self, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
-        let render_pipeline = &self.m_render_pipeline;
-        let debugdraw_manager = &self.m_debugdraw_manager;
-
         let rhi = &self.m_rhi;
         self.m_render_resource
             .reset_ring_buffer_offset(rhi.get_current_frame_index());
@@ -508,22 +502,22 @@ impl RenderSystem {
             let rhi = &mut self.m_rhi;
             rhi.wait_for_fence()?;
             rhi.reset_command_pool()?;
-            let render_resource = &self.m_render_resource;
-            if rhi.prepare_before_pass(&|rhi: &VulkanRHI| {
+            let mut pass_update_after_recreate_swapchain = |rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
-                    render_pipeline,
-                    render_resource,
-                    debugdraw_manager,
+                    &mut self.m_render_pipeline,
+                    &self.m_render_resource,
+                    &self.m_debugdraw_manager,
                 )
-            })? {
+            };
+            if rhi.prepare_before_pass(&mut pass_update_after_recreate_swapchain)? {
                 return Ok(());
             }
         }
         {
             let rhi = &self.m_rhi;
 
-            self.m_render_pipeline.borrow().draw(
+            self.m_render_pipeline.draw(
                 &rhi,
                 &self.m_render_scene,
                 &mut self.m_render_resource.m_global_render_resource,
@@ -535,15 +529,15 @@ impl RenderSystem {
         }
         {
             let rhi = &mut self.m_rhi;
-            let render_resource = &self.m_render_resource;
-            rhi.submit_rendering(&|rhi: &VulkanRHI| {
+            let mut pass_update_after_recreate_swapchain = |rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
-                    render_pipeline,
-                    render_resource,
-                    debugdraw_manager,
+                    &mut self.m_render_pipeline,
+                    &self.m_render_resource,
+                    &self.m_debugdraw_manager,
                 )
-            })?;
+            };
+            rhi.submit_rendering(&mut pass_update_after_recreate_swapchain)?;
         }
         self.m_render_resource
             .on_main_frame_submit_complete(&self.m_rhi);
@@ -552,13 +546,11 @@ impl RenderSystem {
 
     fn pass_update_after_recreate_swapchain(
         rhi: &VulkanRHI,
-        render_pipeline: &RefCell<RenderPipeline>,
+        render_pipeline: &mut RenderPipeline,
         render_resource: &RenderResource,
         debugdraw_manager: &RefCell<DebugDrawManager>,
     ) {
-        render_pipeline
-            .borrow_mut()
-            .recreate_after_swapchain(rhi, &render_resource.m_global_render_resource);
+        render_pipeline.recreate_after_swapchain(rhi, &render_resource.m_global_render_resource);
         debugdraw_manager
             .borrow_mut()
             .update_after_recreate_swap_chain(rhi);
