@@ -10,13 +10,6 @@ use crate::{
                 VULKAN_RHI_DESCRIPTOR_STORAGE_BUFFER_DYNAMIC, VULKAN_RHI_DESCRIPTOR_UNIFORM_BUFFER,
                 VulkanRHI,
             },
-            passes::{
-                color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo},
-                combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo},
-                fxaa_pass::{FXAAPass, FXAAPassInitInfo},
-                tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass},
-                ui_pass::{UIPass, UIPassInitInfo},
-            },
             render_common::{
                 MESH_PER_DRAWCALL_MAX_INSTANCE_COUNT, MeshPerdrawcallStorageBufferObject,
                 MeshPerdrawcallVertexBlendingStorageBufferObject, MeshPerframeStorageBufferObject,
@@ -25,6 +18,13 @@ use crate::{
             render_mesh::MeshVertex,
             render_pass::{
                 DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
+            },
+            render_pipeline::pbr_pipeline::{
+                color_grading_pass::{ColorGradingPass, ColorGradingPassInitInfo},
+                combine_ui_pass::{CombineUIPass, CombineUIPassInitInfo},
+                fxaa_pass::{FXAAPass, FXAAPassInitInfo},
+                tone_mapping_pass::{ToneMappingInitInfo, ToneMappingPass},
+                ui_pass::{UIPass, UIPassInitInfo},
             },
             render_resource::{GlobalRenderResource, RenderResource},
             render_scene::RenderScene,

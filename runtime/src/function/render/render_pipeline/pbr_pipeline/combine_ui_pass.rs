@@ -7,46 +7,48 @@ use vulkanalia::{
 
 use crate::{
     function::render::{
-        interface::vulkan::vulkan_rhi::{
-            VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT,
-            VulkanRHI,
-        },
-        passes::main_camera_pass::MainCameraSubPass,
+        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI},
         render_pass::{
             Descriptor, DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
         },
+        render_pipeline::pbr_pipeline::main_camera_pass::MainCameraSubPass,
         render_resource::GlobalRenderResource,
         render_type::RHISamplerType,
     },
-    shader::generated::shader::{COLOR_GRADING_FRAG, POST_PROCESS_VERT},
+    shader::generated::shader::{COMBINE_UI_FRAG, POST_PROCESS_VERT},
 };
 
-pub struct ColorGradingPassInitInfo<'a> {
+pub struct CombineUIPassInitInfo<'a> {
     pub global_render_resource: &'a GlobalRenderResource,
     pub descriptor_layout_manager: &'a DescriptorLayoutRegistry,
     pub render_pass: vk::RenderPass,
     pub rhi: &'a VulkanRHI,
-    pub input_attachment: vk::ImageView,
+    pub scene_input_attachment: vk::ImageView,
+    pub ui_input_attachment: vk::ImageView,
 }
 
 #[derive(Default)]
-pub struct ColorGradingPass {
+pub struct CombineUIPass {
     pub m_render_pass: RenderPass,
 }
 
-impl ColorGradingPass {
-    pub fn initialize(&mut self, info: &ColorGradingPassInitInfo) -> Result<()> {
+impl CombineUIPass {
+    pub fn initialize(&mut self, info: &CombineUIPassInitInfo) -> Result<()> {
         self.m_render_pass.m_framebuffer.render_pass = info.render_pass;
         self.setup_descriptor_layout(info.rhi, &info.descriptor_layout_manager)?;
         self.setup_pipelines(info.rhi)?;
         self.setup_descriptor_set(info.rhi)?;
-        self.update_after_framebuffer_recreate(info.rhi, info.global_render_resource, info.input_attachment)?;
+        self.update_after_framebuffer_recreate(
+            info.rhi,
+            info.scene_input_attachment,
+            info.ui_input_attachment,
+        )?;
         Ok(())
     }
     pub fn draw(&self, rhi: &VulkanRHI) {
         let color = [1.0; 4];
         let command_buffer = rhi.get_current_command_buffer();
-        rhi.push_event(command_buffer, "Color Grading\0", color);
+        rhi.push_event(command_buffer, "Combine UI\0", color);
         let info = rhi.get_swapchain_info();
         rhi.cmd_bind_pipeline(
             command_buffer,
@@ -69,22 +71,17 @@ impl ColorGradingPass {
     pub fn update_after_framebuffer_recreate(
         &mut self,
         rhi: &VulkanRHI,
-        resource: &GlobalRenderResource,
-        input_attachment: vk::ImageView,
+        scene_input_attachment: vk::ImageView,
+        ui_input_attachment: vk::ImageView,
     ) -> Result<()> {
-        let post_process_per_frame_input_attachment_info = [vk::DescriptorImageInfo::builder()
+        let per_frame_scene_input_attachment_info = [vk::DescriptorImageInfo::builder()
             .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
-            .image_view(input_attachment)
+            .image_view(scene_input_attachment)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build()];
-
-        let color_grading_lut_image_info = [vk::DescriptorImageInfo::builder()
-            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Linear)?)
-            .image_view(
-                resource
-                    ._color_grading_resource
-                    ._color_grading_lut_texture_image_view,
-            )
+        let per_frame_ui_input_attachment_info = [vk::DescriptorImageInfo::builder()
+            .sampler(*rhi.get_or_create_default_sampler(RHISamplerType::Nearest)?)
+            .image_view(ui_input_attachment)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .build()];
 
@@ -93,13 +90,13 @@ impl ColorGradingPass {
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
-                .image_info(&post_process_per_frame_input_attachment_info)
+                .image_info(&per_frame_scene_input_attachment_info)
                 .build(),
             vk::WriteDescriptorSet::builder()
                 .dst_set(self.m_render_pass.m_descriptor_infos[0].descriptor_set)
                 .dst_binding(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&color_grading_lut_image_info)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
+                .image_info(&per_frame_ui_input_attachment_info)
                 .build(),
         ];
         rhi.update_descriptor_sets(&post_process_descriptor_writes_info)?;
@@ -107,10 +104,10 @@ impl ColorGradingPass {
     }
 }
 
-pub struct ColorGradingDescriptorLayout;
-impl DescriptorLayout for ColorGradingDescriptorLayout {
+pub struct CombineUIDescriptorLayout;
+impl DescriptorLayout for CombineUIDescriptorLayout {
     fn new(rhi: &VulkanRHI) -> Result<vk::DescriptorSetLayout> {
-        let post_process_global_layout_in_color = [
+        let post_process_global_layout_bindings = [
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
@@ -119,31 +116,29 @@ impl DescriptorLayout for ColorGradingDescriptorLayout {
                 .build(),
             vk::DescriptorSetLayoutBinding::builder()
                 .binding(1)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_type(vk::DescriptorType::INPUT_ATTACHMENT)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT)
                 .build(),
         ];
         let post_process_global_layout_create_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&post_process_global_layout_in_color);
+            .bindings(&post_process_global_layout_bindings);
         let layout = rhi.create_descriptor_set_layout(&post_process_global_layout_create_info)?;
         Ok(layout)
     }
 }
 
-#[distributed_slice(VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER)]
-static COMBINED_IMAGE_SAMPLER_COUNT: u32 = 1;
 #[distributed_slice(VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT)]
-static INPUT_ATTACHMENT_COUNT: u32 = 1;
+static INPUT_ATTACHMENT_COUNT: u32 = 2;
 
-impl ColorGradingPass {
+impl CombineUIPass {
     fn setup_descriptor_layout(
         &mut self,
         rhi: &VulkanRHI,
         descriptor_layout_manager: &DescriptorLayoutRegistry,
     ) -> Result<()> {
         self.m_render_pass.m_descriptor_infos.clear();
-        let layout = descriptor_layout_manager.acquire::<ColorGradingDescriptorLayout>(rhi)?;
+        let layout = descriptor_layout_manager.acquire::<CombineUIDescriptorLayout>(rhi)?;
         self.m_render_pass.m_descriptor_infos.push(Descriptor {
             layout,
             descriptor_set: Default::default(),
@@ -154,7 +149,7 @@ impl ColorGradingPass {
     fn setup_pipelines(&mut self, rhi: &VulkanRHI) -> Result<()> {
         self.m_render_pass.m_render_pipeline.clear();
         let vert_shader_module = rhi.create_shader_module(&POST_PROCESS_VERT)?;
-        let frag_shader_module = rhi.create_shader_module(&COLOR_GRADING_FRAG)?;
+        let frag_shader_module = rhi.create_shader_module(&COMBINE_UI_FRAG)?;
 
         let vert_stage = vk::PipelineShaderStageCreateInfo::builder()
             .stage(vk::ShaderStageFlags::VERTEX)
@@ -174,9 +169,11 @@ impl ColorGradingPass {
             .topology(vk::PrimitiveTopology::TRIANGLE_STRIP)
             .primitive_restart_enable(false);
 
+        let swapchain_info = rhi.get_swapchain_info();
+
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
-            .viewport_count(1)
-            .scissor_count(1);
+            .viewports(std::slice::from_ref(swapchain_info.viewport))
+            .scissors(std::slice::from_ref(swapchain_info.scissor));
 
         let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false)
@@ -190,6 +187,13 @@ impl ColorGradingPass {
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::_1);
+
+        let depth_stencil_state: vk::PipelineDepthStencilStateCreateInfoBuilder =
+            vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS)
+                .stencil_test_enable(false);
 
         let attachment = vk::PipelineColorBlendAttachmentState::builder()
             .color_write_mask(vk::ColorComponentFlags::all())
@@ -218,11 +222,12 @@ impl ColorGradingPass {
             .viewport_state(&viewport_state)
             .rasterization_state(&rasterization_state)
             .multisample_state(&multisample_state)
+            .depth_stencil_state(&depth_stencil_state)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state)
             .layout(pipeline_layout)
             .render_pass(self.m_render_pass.m_framebuffer.render_pass)
-            .subpass(MainCameraSubPass::ColorGrading as u32)
+            .subpass(MainCameraSubPass::CombineUI as u32)
             .build();
 
         let pipeline = rhi.create_graphics_pipelines(vk::PipelineCache::null(), &[info])?[0];

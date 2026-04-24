@@ -7,13 +7,9 @@ use vulkanalia::{
 
 use crate::{
     function::render::{
-        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI},
-        passes::main_camera_pass::MainCameraSubPass,
-        render_pass::{
+        interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_INPUT_ATTACHMENT, VulkanRHI}, render_pass::{
             Descriptor, DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
-        },
-        render_resource::GlobalRenderResource,
-        render_type::RHISamplerType,
+        }, render_pipeline::pbr_pipeline::main_camera_pass::MainCameraSubPass, render_resource::GlobalRenderResource, render_type::RHISamplerType
     },
     shader::generated::shader::{POST_PROCESS_VERT, TONE_MAPPING_FRAG},
 };

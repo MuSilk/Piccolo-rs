@@ -8,14 +8,10 @@ use crate::{
         render::{
             interface::vulkan::vulkan_rhi::{
                 K_MAX_FRAMES_IN_FLIGHT, VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI,
-            },
-            passes::main_camera_pass::MainCameraSubPass,
-            render_pass::{
+            }, render_pass::{
                 Descriptor, DescriptorLayout, DescriptorLayoutRegistry, RenderPass,
                 RenderPipelineBase,
-            },
-            render_resource::GlobalRenderResource,
-            render_type::RHISamplerType,
+            }, render_pipeline::pbr_pipeline::main_camera_pass::MainCameraSubPass, render_resource::GlobalRenderResource, render_type::RHISamplerType
         },
         ui::ui2::{UiDrawCmd, UiRuntime, UiVertex},
     },

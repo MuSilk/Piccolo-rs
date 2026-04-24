@@ -8,10 +8,10 @@ use vulkanalia::{
 use crate::{
     function::render::{
         interface::vulkan::vulkan_rhi::{VULKAN_RHI_DESCRIPTOR_COMBINED_IMAGE_SAMPLER, VulkanRHI},
-        passes::main_camera_pass::MainCameraSubPass,
         render_pass::{
             Descriptor, DescriptorLayout, DescriptorLayoutRegistry, RenderPass, RenderPipelineBase,
         },
+        render_pipeline::pbr_pipeline::main_camera_pass::MainCameraSubPass,
         render_resource::GlobalRenderResource,
         render_type::RHISamplerType,
     },

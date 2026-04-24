@@ -9,12 +9,17 @@ use crate::{
             debugdraw::debug_draw_manager::{DebugDrawManager, DebugDrawManagerCreateInfo},
             interface::{rhi::RHICreateInfo, vulkan::vulkan_rhi::VulkanRHI},
             light::{AmbientLight, DirectionalLight},
-            passes::main_camera_pass::{MeshPerMaterialDescriptorLayout, PerMeshDescriptorLayout},
             render_camera::RenderCamera,
             render_entity::RenderEntity,
             render_object::{GameObjectMeshDesc, GameObjectPartId},
             render_pass::DescriptorLayoutRegistry,
-            render_pipeline::{RenderPipeline, RenderPipelineCreateInfo},
+            render_pipeline::{
+                RenderPipelineTrait,
+                pbr_pipeline::{
+                    PBRRenderPipeline, PBRRenderPipelineCreateInfo,
+                    main_camera_pass::{MeshPerMaterialDescriptorLayout, PerMeshDescriptorLayout},
+                },
+            },
             render_resource::RenderResource,
             render_resource_base::RenderResourceBase,
             render_scene::RenderScene,
@@ -45,7 +50,7 @@ pub struct RenderSystem {
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RenderScene,
     m_render_resource: RenderResource,
-    m_render_pipeline: RenderPipeline,
+    m_render_pipeline: Box<dyn RenderPipelineTrait>,
     m_descriptor_layout_registry: DescriptorLayoutRegistry,
 
     m_debugdraw_manager: RefCell<DebugDrawManager>,
@@ -105,7 +110,7 @@ impl RenderSystem {
 
         let descriptor_layout_registry = DescriptorLayoutRegistry::default();
 
-        let render_pipeline = RenderPipeline::create(&RenderPipelineCreateInfo {
+        let render_pipeline = PBRRenderPipeline::create(&PBRRenderPipelineCreateInfo {
             rhi: &vulkan_rhi,
             render_resource: &render_resource,
             descriptor_layout_registry: &descriptor_layout_registry,
@@ -133,7 +138,7 @@ impl RenderSystem {
             m_render_camera: Rc::new(RefCell::new(render_camera)),
             m_render_scene: render_scene,
             m_render_resource: render_resource,
-            m_render_pipeline: render_pipeline,
+            m_render_pipeline: Box::new(render_pipeline),
             m_debugdraw_manager: RefCell::new(debugdraw_manager),
             m_descriptor_layout_registry: descriptor_layout_registry,
         }
@@ -504,7 +509,7 @@ impl RenderSystem {
             let mut pass_update_after_recreate_swapchain = |rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
-                    &mut self.m_render_pipeline,
+                    self.m_render_pipeline.as_mut(),
                     &self.m_render_resource,
                     &self.m_debugdraw_manager,
                 )
@@ -526,16 +531,16 @@ impl RenderSystem {
             self.m_debugdraw_manager.borrow_mut().draw(&rhi)?;
         }
         {
-            
             let mut pass_update_after_recreate_swapchain = |rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
-                    &mut self.m_render_pipeline,
+                    self.m_render_pipeline.as_mut(),
                     &self.m_render_resource,
                     &self.m_debugdraw_manager,
                 )
             };
-            self.m_rhi.submit_rendering(&mut pass_update_after_recreate_swapchain)?;
+            self.m_rhi
+                .submit_rendering(&mut pass_update_after_recreate_swapchain)?;
         }
         self.m_render_resource
             .on_main_frame_submit_complete(&self.m_rhi);
@@ -544,7 +549,7 @@ impl RenderSystem {
 
     fn pass_update_after_recreate_swapchain(
         rhi: &VulkanRHI,
-        render_pipeline: &mut RenderPipeline,
+        render_pipeline: &mut dyn RenderPipelineTrait,
         render_resource: &RenderResource,
         debugdraw_manager: &RefCell<DebugDrawManager>,
     ) {
