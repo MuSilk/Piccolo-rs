@@ -46,10 +46,14 @@ impl RuntimeGlobalContext {
         ctx
     }
 
-    pub fn resumed_instance(&mut self, event_loop: &ActiveEventLoop) {
+    pub fn resumed_instance(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_create_info: WindowCreateInfo,
+    ) {
         self.m_window_system
             .borrow_mut()
-            .initialize(event_loop, WindowCreateInfo::default())
+            .initialize(event_loop, window_create_info)
             .unwrap();
 
         self.register_input_system();

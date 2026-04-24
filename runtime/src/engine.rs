@@ -8,7 +8,10 @@ use crate::{
         framework::world::world_manager::WorldManager,
         global::global_context::RuntimeGlobalContext,
         input::{game_command_system::GameCommandInputSystem, input_system::InputSystem},
-        render::{render_system::RenderSystem, window_system::WindowSystem},
+        render::{
+            render_system::RenderSystem,
+            window_system::{WindowCreateInfo, WindowSystem},
+        },
         ui::ui2::UiRuntime,
     },
     resource::{asset_manager::AssetManager, config_manager::ConfigManager},
@@ -34,6 +37,7 @@ struct EngineState {
     m_average_duration: f32,
     m_fps: u32,
     m_is_editor_mode: bool,
+    m_window_create_info: WindowCreateInfo,
 }
 
 impl Engine {
@@ -46,13 +50,21 @@ impl Engine {
                 m_average_duration: 0.0,
                 m_fps: 0,
                 m_is_editor_mode: false,
+                m_window_create_info: WindowCreateInfo::default(),
             }),
             systems: Default::default(),
         }
     }
 
+    pub fn set_window_create_info(&mut self, window_create_info: WindowCreateInfo) {
+        self.m_state.borrow_mut().m_window_create_info = window_create_info;
+    }
+
     pub fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.m_runtime_context.resumed_instance(event_loop);
+        self.m_runtime_context.resumed_instance(
+            event_loop,
+            self.m_state.borrow().m_window_create_info.clone(),
+        );
     }
     pub fn initialize(engine: &Engine) {
         engine.m_state.borrow_mut().m_last_tick_time_point = Instant::now();

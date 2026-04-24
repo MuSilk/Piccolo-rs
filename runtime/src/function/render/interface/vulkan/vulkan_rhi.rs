@@ -1647,6 +1647,21 @@ fn choose_swapchain_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::Pr
         .unwrap_or(vk::PresentModeKHR::FIFO)
 }
 
+fn choose_swapchain_composite_alpha(
+    capabilities: vk::SurfaceCapabilitiesKHR,
+) -> vk::CompositeAlphaFlagsKHR {
+    let supported = capabilities.supported_composite_alpha;
+    if supported.contains(vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED) {
+        vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED
+    } else if supported.contains(vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED) {
+        vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED
+    } else if supported.contains(vk::CompositeAlphaFlagsKHR::INHERIT) {
+        vk::CompositeAlphaFlagsKHR::INHERIT
+    } else {
+        vk::CompositeAlphaFlagsKHR::OPAQUE
+    }
+}
+
 fn choose_swapchain_extent(
     window: &Window,
     capabilities: vk::SurfaceCapabilitiesKHR,
@@ -1679,6 +1694,8 @@ fn create_swapchain(
     let chosen_surface_format = choose_swapchain_surface_format(&swapchain_support_details.formats);
     let chosen_present_mode =
         choose_swapchain_present_mode(&swapchain_support_details.present_modes);
+    let chosen_composite_alpha =
+        choose_swapchain_composite_alpha(swapchain_support_details.capabilities);
     let chosen_extent = choose_swapchain_extent(window, swapchain_support_details.capabilities);
 
     let mut image_count = swapchain_support_details.capabilities.min_image_count + 1;
@@ -1710,7 +1727,7 @@ fn create_swapchain(
         .image_sharing_mode(image_sharing_mode)
         .queue_family_indices(&queue_family_indices)
         .pre_transform(swapchain_support_details.capabilities.current_transform)
-        .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+        .composite_alpha(chosen_composite_alpha)
         .present_mode(chosen_present_mode)
         .clipped(true)
         .old_swapchain(vk::SwapchainKHR::null());

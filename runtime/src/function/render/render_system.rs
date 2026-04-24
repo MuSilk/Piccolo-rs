@@ -13,6 +13,7 @@ use crate::{
             render_camera::RenderCamera,
             render_entity::RenderEntity,
             render_object::{GameObjectMeshDesc, GameObjectPartId},
+            render_pass::DescriptorLayoutRegistry,
             render_pipeline::{RenderPipeline, RenderPipelineCreateInfo},
             render_resource::RenderResource,
             render_resource_base::RenderResourceBase,
@@ -21,7 +22,7 @@ use crate::{
                 LevelColorGradingResourceDesc, LevelIBLResourceDesc, LevelResourceDesc,
                 RenderSwapContext, RenderSwapData,
             },
-            render_type::{MaterialSourceDesc, MeshSourceDesc, RenderPipelineType},
+            render_type::{MaterialSourceDesc, MeshSourceDesc},
             window_system::WindowSystem,
         },
         ui::ui2::UiRuntime,
@@ -41,11 +42,11 @@ pub struct RenderSystemCreateInfo<'a> {
 pub struct RenderSystem {
     m_rhi: VulkanRHI,
     m_swap_context: RenderSwapContext,
-    m_render_pipeline_type: RenderPipelineType,
     m_render_camera: Rc<RefCell<RenderCamera>>,
     m_render_scene: RenderScene,
     m_render_resource: RenderResource,
     m_render_pipeline: RenderPipeline,
+    m_descriptor_layout_registry: DescriptorLayoutRegistry,
 
     m_debugdraw_manager: RefCell<DebugDrawManager>,
 }
@@ -102,19 +103,22 @@ impl RenderSystem {
             &level_resource_desc,
         );
 
+        let descriptor_layout_registry = DescriptorLayoutRegistry::default();
+
         let render_pipeline = RenderPipeline::create(&RenderPipelineCreateInfo {
             rhi: &vulkan_rhi,
             render_resource: &render_resource,
+            descriptor_layout_registry: &descriptor_layout_registry,
             enable_fxaa: global_rendering_res.enable_fxaa,
         })
         .unwrap();
 
-        render_resource.m_mesh_descriptor_set_layout = render_pipeline
-            .get_descriptor_set_layout::<PerMeshDescriptorLayout>(&vulkan_rhi)
+        render_resource.m_mesh_descriptor_set_layout = descriptor_layout_registry
+            .acquire::<PerMeshDescriptorLayout>(&vulkan_rhi)
             .unwrap();
 
-        render_resource.m_material_descriptor_set_layout = render_pipeline
-            .get_descriptor_set_layout::<MeshPerMaterialDescriptorLayout>(&vulkan_rhi)
+        render_resource.m_material_descriptor_set_layout = descriptor_layout_registry
+            .acquire::<MeshPerMaterialDescriptorLayout>(&vulkan_rhi)
             .unwrap();
 
         let debugdraw_manager = DebugDrawManager::create(&DebugDrawManagerCreateInfo {
@@ -126,12 +130,12 @@ impl RenderSystem {
         Self {
             m_rhi: vulkan_rhi,
             m_swap_context: swap_context,
-            m_render_pipeline_type: RenderPipelineType::DeferredPipeline,
             m_render_camera: Rc::new(RefCell::new(render_camera)),
             m_render_scene: render_scene,
             m_render_resource: render_resource,
             m_render_pipeline: render_pipeline,
             m_debugdraw_manager: RefCell::new(debugdraw_manager),
+            m_descriptor_layout_registry: descriptor_layout_registry,
         }
     }
 
@@ -155,13 +159,7 @@ impl RenderSystem {
         self.m_debugdraw_manager
             .borrow_mut()
             .tick(&self.m_rhi, delta_time);
-        self.render(
-            ui_runtime,
-            match self.m_render_pipeline_type {
-                RenderPipelineType::ForwardPipeline => true,
-                RenderPipelineType::DeferredPipeline => false,
-            },
-        )?;
+        self.render(ui_runtime)?;
         Ok(())
     }
 
@@ -215,7 +213,8 @@ impl RenderSystem {
     }
 
     pub fn get_guid_of_picked_mesh(&self, picked_uv: &Vector2) -> u32 {
-        self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
+        0
+        // self.m_render_pipeline.get_guid_of_picked_mesh(picked_uv)
     }
 }
 
@@ -494,7 +493,7 @@ impl RenderSystem {
         }
     }
 
-    fn render(&mut self, ui_runtime: &UiRuntime, forward_draw: bool) -> Result<()> {
+    fn render(&mut self, ui_runtime: &UiRuntime) -> Result<()> {
         let rhi = &self.m_rhi;
         self.m_render_resource
             .reset_ring_buffer_offset(rhi.get_current_frame_index());
@@ -522,13 +521,12 @@ impl RenderSystem {
                 &self.m_render_scene,
                 &mut self.m_render_resource.m_global_render_resource,
                 ui_runtime,
-                forward_draw,
             );
 
             self.m_debugdraw_manager.borrow_mut().draw(&rhi)?;
         }
         {
-            let rhi = &mut self.m_rhi;
+            
             let mut pass_update_after_recreate_swapchain = |rhi: &VulkanRHI| {
                 Self::pass_update_after_recreate_swapchain(
                     rhi,
@@ -537,7 +535,7 @@ impl RenderSystem {
                     &self.m_debugdraw_manager,
                 )
             };
-            rhi.submit_rendering(&mut pass_update_after_recreate_swapchain)?;
+            self.m_rhi.submit_rendering(&mut pass_update_after_recreate_swapchain)?;
         }
         self.m_render_resource
             .on_main_frame_submit_complete(&self.m_rhi);

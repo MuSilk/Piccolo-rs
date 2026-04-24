@@ -3,14 +3,14 @@ use std::env;
 use anyhow::anyhow;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, KeyEvent, WindowEvent},
+    event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     window::WindowId,
 };
 
 use crate::{
     engine::{Engine, System},
-    function::framework::scene::scene::SceneTrait,
+    function::{framework::scene::scene::SceneTrait, render::window_system::WindowCreateInfo},
 };
 
 pub struct App {
@@ -30,6 +30,11 @@ impl App {
             engine: Engine::new(&config_file_path),
         }
     }
+
+    pub fn set_window_create_info(&mut self, window_create_info: WindowCreateInfo) {
+        self.engine.set_window_create_info(window_create_info);
+    }
+
     pub fn run(&mut self) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -59,6 +64,14 @@ impl App {
     {
         let mut window_system = self.engine.window_system().borrow_mut();
         window_system.register_on_key_func(f);
+    }
+
+    pub fn register_on_mouse_button_func<F>(&mut self, f: F)
+    where
+        F: 'static + Fn(&Engine, DeviceId, ElementState, MouseButton),
+    {
+        let mut window_system = self.engine.window_system().borrow_mut();
+        window_system.register_on_mouse_button_func(f);
     }
 }
 

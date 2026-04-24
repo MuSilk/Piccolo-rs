@@ -36,7 +36,11 @@ pub struct RenderScene {
 }
 
 impl RenderScene {
-    pub fn update_visible_objects(&mut self, render_resource: &RenderResource, camera: &RenderCamera) {
+    pub fn update_visible_objects(
+        &mut self,
+        render_resource: &RenderResource,
+        camera: &RenderCamera,
+    ) {
         self.update_visible_objects_main_camera(render_resource, camera);
         self.update_visible_objects_directional_light(render_resource, camera);
     }
@@ -114,11 +118,11 @@ impl RenderScene {
         }
     }
 
-    pub fn get_main_camera_visible_mesh_nodes(&self) -> &Vec<RenderMeshNode> {
+    pub fn get_main_camera_visible_mesh_nodes(&self) -> &[RenderMeshNode] {
         &self.m_main_camera_visible_mesh_nodes
     }
 
-    pub fn get_directional_light_visible_mesh_nodes(&self) -> &Vec<RenderMeshNode> {
+    pub fn get_directional_light_visible_mesh_nodes(&self) -> &[RenderMeshNode] {
         &self.m_directional_light_visible_mesh_nodes
     }
 }
@@ -153,8 +157,7 @@ impl RenderScene {
         render_resource: &RenderResource,
         _camera: &RenderCamera,
     ) {
-        let directional_light_visible_mesh_nodes =
-            &mut self.m_directional_light_visible_mesh_nodes;
+        let directional_light_visible_mesh_nodes = &mut self.m_directional_light_visible_mesh_nodes;
         directional_light_visible_mesh_nodes.clear();
 
         for (_instance_id, entity) in self.m_render_entities.borrow().iter() {

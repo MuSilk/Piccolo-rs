@@ -277,7 +277,7 @@ impl MainCameraPass {
         };
         clear_values[_MAIN_CAMERA_PASS_SWAPCHAIN_IMAGE]
             .color
-            .float32 = [0.0, 0.0, 0.0, 1.0];
+            .float32 = [0.0, 0.0, 0.0, 0.0];
 
         let current_swapchain_image_index = rhi.get_current_swapchain_image_index();
 

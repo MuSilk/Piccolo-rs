@@ -1,24 +1,34 @@
 use std::{cell::Cell, collections::HashMap, rc::Rc};
 
 use anyhow::Result;
-use winit::{dpi::{LogicalSize, PhysicalPosition, PhysicalSize}, event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase}, event_loop::ActiveEventLoop, window::{CursorGrabMode, Window}};
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase},
+    event_loop::ActiveEventLoop,
+    window::{CursorGrabMode, Window},
+};
 
 use crate::engine::Engine;
 
-pub struct WindowCreateInfo{
+#[derive(Clone)]
+pub struct WindowCreateInfo {
     pub width: u32,
     pub height: u32,
     pub title: &'static str,
     pub is_fullscreen: bool,
+    pub transparent: bool,
+    pub decorations: bool,
 }
 
-impl Default for WindowCreateInfo{
+impl Default for WindowCreateInfo {
     fn default() -> Self {
         Self {
             width: 800,
             height: 600,
             title: "Example Window",
             is_fullscreen: false,
+            transparent: false,
+            decorations: true,
         }
     }
 }
@@ -31,7 +41,7 @@ type OnWindowSizeFunc = dyn Fn(&Engine, PhysicalSize<u32>);
 type OnMouseMotionFunc = dyn Fn(&Engine, DeviceId, (f64, f64));
 
 #[derive(Default)]
-pub struct WindowSystem{
+pub struct WindowSystem {
     pub m_window: Option<Rc<Window>>,
     m_width: u32,
     m_height: u32,
@@ -49,13 +59,19 @@ pub struct WindowSystem{
 }
 
 impl WindowSystem {
-    pub fn initialize(&mut self, event_loop: &ActiveEventLoop, window_create_info: WindowCreateInfo) -> Result<()> {
+    pub fn initialize(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_create_info: WindowCreateInfo,
+    ) -> Result<()> {
         self.m_width = window_create_info.width;
         self.m_height = window_create_info.height;
 
         let attr = Window::default_attributes()
             .with_title(window_create_info.title)
-            .with_inner_size(LogicalSize::new(self.m_width,self.m_height));
+            .with_inner_size(PhysicalSize::new(self.m_width, self.m_height))
+            .with_transparent(window_create_info.transparent)
+            .with_decorations(window_create_info.decorations);
 
         let window = event_loop.create_window(attr)?;
         self.m_window = Some(Rc::new(window));
@@ -64,7 +80,7 @@ impl WindowSystem {
 
     pub fn set_title(&self, title: &str) {
         self.m_window.as_ref().unwrap().set_title(title);
-    }   
+    }
 
     pub fn get_window(&self) -> &Rc<Window> {
         &self.m_window.as_ref().unwrap()
@@ -78,7 +94,7 @@ impl WindowSystem {
         let physical_size = self.m_window.as_ref().unwrap().inner_size();
         (physical_size.width, physical_size.height)
     }
-    
+
     pub fn request_redraw(&self) {
         self.m_window.as_ref().unwrap().request_redraw();
     }
@@ -91,35 +107,35 @@ impl WindowSystem {
         self.m_should_close.get()
     }
 
-    pub fn register_on_key_func<F>(&mut self, f: F) 
+    pub fn register_on_key_func<F>(&mut self, f: F)
     where
         F: 'static + Fn(&Engine, DeviceId, &KeyEvent, bool),
     {
         self.m_on_key_func.push(Box::new(f));
     }
 
-    pub fn register_on_mouse_button_func<F>(&mut self, f: F) 
+    pub fn register_on_mouse_button_func<F>(&mut self, f: F)
     where
         F: 'static + Fn(&Engine, DeviceId, ElementState, MouseButton),
     {
         self.m_on_mouse_button_func.push(Box::new(f));
     }
 
-    pub fn register_on_cursor_pos_func<F>(&mut self, f: F) 
+    pub fn register_on_cursor_pos_func<F>(&mut self, f: F)
     where
         F: 'static + Fn(&Engine, DeviceId, PhysicalPosition<f64>),
     {
         self.m_on_cursor_pos_func.push(Box::new(f));
     }
 
-    pub fn register_on_mouse_wheel_func<F>(&mut self, f: F) 
+    pub fn register_on_mouse_wheel_func<F>(&mut self, f: F)
     where
         F: 'static + Fn(&Engine, DeviceId, MouseScrollDelta, TouchPhase),
     {
         self.m_on_mouse_wheel_func.push(Box::new(f));
     }
 
-    pub fn register_on_mouse_motion<F>(&mut self, f: F) 
+    pub fn register_on_mouse_motion<F>(&mut self, f: F)
     where
         F: 'static + Fn(&Engine, DeviceId, (f64, f64)),
     {
@@ -134,29 +150,66 @@ impl WindowSystem {
         }
     }
 
-    pub fn on_key(&self, engine: &Engine, device_id: DeviceId, event: &KeyEvent, is_synthetic: bool) {
-        self.m_on_key_func.iter().for_each(|f| f(engine, device_id, event, is_synthetic));
+    pub fn on_key(
+        &self,
+        engine: &Engine,
+        device_id: DeviceId,
+        event: &KeyEvent,
+        is_synthetic: bool,
+    ) {
+        self.m_on_key_func
+            .iter()
+            .for_each(|f| f(engine, device_id, event, is_synthetic));
     }
 
-    pub fn on_mouse_button(&mut self, engine: &Engine, device_id: DeviceId, state: ElementState, button: MouseButton) {
-        self.m_is_mouse_button_down.insert(button, state == ElementState::Pressed);
-        self.m_on_mouse_button_func.iter().for_each(|f| f(engine, device_id, state, button));
+    pub fn on_mouse_button(
+        &mut self,
+        engine: &Engine,
+        device_id: DeviceId,
+        state: ElementState,
+        button: MouseButton,
+    ) {
+        self.m_is_mouse_button_down
+            .insert(button, state == ElementState::Pressed);
+        self.m_on_mouse_button_func
+            .iter()
+            .for_each(|f| f(engine, device_id, state, button));
     }
 
-    pub fn on_mouse_wheel(&self, engine: &Engine, device_id: DeviceId, delta: MouseScrollDelta, phase: TouchPhase) {
-        self.m_on_mouse_wheel_func.iter().for_each(|f| f(engine, device_id, delta, phase));
+    pub fn on_mouse_wheel(
+        &self,
+        engine: &Engine,
+        device_id: DeviceId,
+        delta: MouseScrollDelta,
+        phase: TouchPhase,
+    ) {
+        self.m_on_mouse_wheel_func
+            .iter()
+            .for_each(|f| f(engine, device_id, delta, phase));
     }
 
     pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
-        *self.m_is_mouse_button_down.get(&button).unwrap_or_else(|| &false)
+        *self
+            .m_is_mouse_button_down
+            .get(&button)
+            .unwrap_or_else(|| &false)
     }
 
-    pub fn on_cursor_pos(&self, engine: &Engine, device_id: DeviceId, physical_position: PhysicalPosition<f64>) {
-        self.m_on_cursor_pos_func.iter().for_each(|f| f(engine, device_id, physical_position));
+    pub fn on_cursor_pos(
+        &self,
+        engine: &Engine,
+        device_id: DeviceId,
+        physical_position: PhysicalPosition<f64>,
+    ) {
+        self.m_on_cursor_pos_func
+            .iter()
+            .for_each(|f| f(engine, device_id, physical_position));
     }
 
     pub fn on_mouse_motion(&self, engine: &Engine, device_id: DeviceId, mouse_motion: (f64, f64)) {
-        self.m_on_mouse_motion_func.iter().for_each(|f| f(engine, device_id, mouse_motion));
+        self.m_on_mouse_motion_func
+            .iter()
+            .for_each(|f| f(engine, device_id, mouse_motion));
     }
 
     pub fn get_focus_mode(&self) -> bool {
@@ -166,13 +219,24 @@ impl WindowSystem {
     pub fn set_focus_mode(&self, mode: bool) {
         self.m_is_focus_mode.set(mode);
         if mode {
-            self.m_window.as_ref().unwrap().set_cursor_grab(CursorGrabMode::Locked).unwrap();
+            self.m_window
+                .as_ref()
+                .unwrap()
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .unwrap();
             self.m_window.as_ref().unwrap().set_cursor_visible(false);
-        }
-        else{
-            self.m_window.as_ref().unwrap().set_cursor_grab(CursorGrabMode::None).unwrap();
+        } else {
+            self.m_window
+                .as_ref()
+                .unwrap()
+                .set_cursor_grab(CursorGrabMode::None)
+                .unwrap();
             self.m_window.as_ref().unwrap().set_cursor_visible(true);
         }
     }
 
+    pub fn drag_window(&self) -> Result<()> {
+        self.m_window.as_ref().unwrap().drag_window()?;
+        Ok(())
+    }
 }
