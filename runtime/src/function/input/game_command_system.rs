@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use winit::{
     dpi::PhysicalPosition,
-    event::{DeviceId, ElementState, KeyEvent, MouseButton},
+    event::{DeviceId, ElementState, Ime, KeyEvent, MouseButton},
     keyboard::{KeyCode, PhysicalKey},
 };
 
@@ -45,6 +45,10 @@ pub struct GameCommandInputSystem {
     m_selected_block_slot: u8,
     m_cursor_pos: [f32; 2],
     m_mouse_down: [bool; 3],
+    m_committed_text: String,
+    m_ime_preedit: String,
+    m_key_backspace_pressed: bool,
+    m_key_enter_pressed: bool,
 }
 
 impl GameCommandInputSystem {
@@ -210,6 +214,22 @@ impl InputSystem for GameCommandInputSystem {
             let window_system = engine.window_system().borrow();
             self.on_key_in_game_mode(&window_system, device_id, event, is_synthetic);
         }
+        if event.state == ElementState::Pressed {
+            if let Some(text) = event.text.as_ref() {
+                for ch in text.chars() {
+                    if !ch.is_control() && ch != '\n' && ch != '\r' {
+                        self.m_committed_text.push(ch);
+                    }
+                }
+            }
+            if let PhysicalKey::Code(code) = event.physical_key {
+                match code {
+                    KeyCode::Backspace => self.m_key_backspace_pressed = true,
+                    KeyCode::Enter | KeyCode::NumpadEnter => self.m_key_enter_pressed = true,
+                    _ => {}
+                }
+            }
+        }
     }
 
     fn on_mouse_motion(&mut self, engine: &Engine, _device_id: DeviceId, delta: (f64, f64)) {
@@ -236,6 +256,21 @@ impl InputSystem for GameCommandInputSystem {
         }
     }
 
+    fn on_ime(&mut self, ime: &Ime) {
+        match ime {
+            Ime::Preedit(text, _cursor) => {
+                self.m_ime_preedit = text.clone();
+            }
+            Ime::Commit(text) => {
+                self.m_committed_text.push_str(text);
+                self.m_ime_preedit.clear();
+            }
+            Ime::Enabled | Ime::Disabled => {
+                self.m_ime_preedit.clear();
+            }
+        }
+    }
+
     fn tick(&mut self, engine: &Engine, _delta_time: f32) {
         let ui_runtime = engine.ui_runtime();
         let window_system = &engine.window_system().borrow();
@@ -244,7 +279,14 @@ impl InputSystem for GameCommandInputSystem {
             mouse_pos: self.m_cursor_pos,
             mouse_down: self.m_mouse_down,
             mouse_wheel: 0.0,
+            text_input: self.m_committed_text.clone(),
+            ime_preedit: self.m_ime_preedit.clone(),
+            key_backspace_pressed: self.m_key_backspace_pressed,
+            key_enter_pressed: self.m_key_enter_pressed,
         });
+        self.m_committed_text.clear();
+        self.m_key_backspace_pressed = false;
+        self.m_key_enter_pressed = false;
         self.calculate_cursor_delta_angles(window_system, render_system);
         self.clear();
 

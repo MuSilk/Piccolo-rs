@@ -10,7 +10,7 @@ use winit::{
 
 use crate::{
     engine::{Engine, System},
-    function::{framework::scene::scene::SceneTrait, render::window_system::WindowCreateInfo},
+    function::{framework::scene::scene::SceneTrait, render::{render_system::RenderPipelineType, window_system::WindowCreateInfo}},
 };
 
 pub struct App {
@@ -33,6 +33,10 @@ impl App {
 
     pub fn set_window_create_info(&mut self, window_create_info: WindowCreateInfo) {
         self.engine.set_window_create_info(window_create_info);
+    }
+
+    pub fn set_render_pipeline_type(&mut self, render_pipeline_type: RenderPipelineType) {
+        self.engine.set_render_pipeline_type(render_pipeline_type);
     }
 
     pub fn run(&mut self) {
@@ -139,6 +143,10 @@ impl ApplicationHandler for App {
             } => {
                 let window_system = self.engine.window_system().borrow();
                 window_system.on_mouse_wheel(&self.engine, device_id, delta, phase);
+            }
+            WindowEvent::Ime(ime) => {
+                let window_system = self.engine.window_system().borrow();
+                window_system.on_ime(&self.engine, ime);
             }
             _ => {}
         }

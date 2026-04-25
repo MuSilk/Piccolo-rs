@@ -9,7 +9,7 @@ use crate::{
         global::global_context::RuntimeGlobalContext,
         input::{game_command_system::GameCommandInputSystem, input_system::InputSystem},
         render::{
-            render_system::RenderSystem,
+            render_system::{RenderPipelineType, RenderSystem},
             window_system::{WindowCreateInfo, WindowSystem},
         },
         ui::ui2::UiRuntime,
@@ -38,6 +38,7 @@ struct EngineState {
     m_fps: u32,
     m_is_editor_mode: bool,
     m_window_create_info: WindowCreateInfo,
+    m_render_pipeline_type: RenderPipelineType,
 }
 
 impl Engine {
@@ -51,6 +52,7 @@ impl Engine {
                 m_fps: 0,
                 m_is_editor_mode: false,
                 m_window_create_info: WindowCreateInfo::default(),
+                m_render_pipeline_type: RenderPipelineType::PBR,
             }),
             systems: Default::default(),
         }
@@ -60,10 +62,15 @@ impl Engine {
         self.m_state.borrow_mut().m_window_create_info = window_create_info;
     }
 
+    pub fn set_render_pipeline_type(&mut self, render_pipeline_type: RenderPipelineType) {
+        self.m_state.borrow_mut().m_render_pipeline_type = render_pipeline_type;
+    }
+
     pub fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.m_runtime_context.resumed_instance(
             event_loop,
             self.m_state.borrow().m_window_create_info.clone(),
+            self.m_state.borrow().m_render_pipeline_type.clone(),
         );
     }
     pub fn initialize(engine: &Engine) {

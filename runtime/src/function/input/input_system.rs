@@ -1,6 +1,6 @@
 use winit::{
     dpi::PhysicalPosition,
-    event::{DeviceId, ElementState, KeyEvent, MouseButton},
+    event::{DeviceId, ElementState, Ime, KeyEvent, MouseButton},
 };
 
 use crate::engine::Engine;
@@ -23,5 +23,6 @@ pub trait InputSystem {
         _button: MouseButton,
     ) {
     }
+    fn on_ime(&mut self, _ime: &Ime) {}
     fn tick(&mut self, _engine: &Engine, _delta_time: f32) {}
 }

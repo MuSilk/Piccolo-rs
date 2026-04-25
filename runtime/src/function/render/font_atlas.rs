@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use ab_glyph::{Font, ScaleFont};
 use anyhow::Result;
@@ -91,32 +94,145 @@ pub fn create_ascii_font_texture_r32f(
     )
 }
 
-pub fn create_ascii_font_texture_rgba(
-    rhi: &VulkanRHI,
-    font_path: &Path,
-) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView)> {
-    let image_data = rasterize_ascii_coverage(font_path)?;
-    let mut rgba = vec![0_u8; image_data.len() * 4];
-    for (i, v) in image_data.iter().enumerate() {
-        let alpha = (v.clamp(0.0, 1.0) * 255.0) as u8;
-        rgba[i * 4] = 255;
-        rgba[i * 4 + 1] = 255;
-        rgba[i * 4 + 2] = 255;
-        rgba[i * 4 + 3] = alpha;
+#[derive(Clone, Debug)]
+pub struct FontAtlasGlyph {
+    pub x0_px: f32,
+    pub x1_px: f32,
+    pub y0_px: f32,
+    pub y1_px: f32,
+    pub advance_px: f32,
+    pub side_bearing_px: f32,
+}
+
+pub struct FontAtlas {
+    font_path: PathBuf,
+    glyph_width: i32,
+    glyph_height: i32,
+    glyph_per_line: i32,
+    bitmap_w: i32,
+    bitmap_h: i32,
+    glyph_map: HashMap<char, FontAtlasGlyph>,
+    data: Vec<f32>,
+    next_slot: i32,
+    font: Option<ab_glyph::FontArc>,
+    is_dirty: bool,
+}
+
+impl FontAtlas {
+    pub fn new(font_path: &Path, glyph_width: i32, glyph_height: i32) -> Self {
+        let glyph_per_line = 16;
+        let bitmap_w = glyph_width * glyph_per_line;
+        let bitmap_h = glyph_height.max(1);
+        Self {
+            font_path: font_path.to_path_buf(),
+            glyph_width,
+            glyph_height,
+            glyph_per_line,
+            bitmap_w,
+            bitmap_h,
+            glyph_map: HashMap::new(),
+            data: vec![0.0; (bitmap_w * bitmap_h) as usize],
+            next_slot: 0,
+            font: None,
+            is_dirty: false,
+        }
     }
-    // Reserve a guaranteed white texel at (0,0) for solid-color quads
-    // that multiply vertex color by sampled texture color (e.g. ui2 debug rect).
-    if !rgba.is_empty() {
-        rgba[0] = 255;
-        rgba[1] = 255;
-        rgba[2] = 255;
-        rgba[3] = 255;
+
+    fn get_or_load_font(&mut self) -> Result<ab_glyph::FontArc> {
+        if let Some(font) = &self.font {
+            return Ok(font.clone());
+        }
+        let font_buffer = std::fs::read(&self.font_path)?;
+        let font = ab_glyph::FontArc::try_from_vec(font_buffer).map_err(|e| {
+            anyhow::anyhow!("Failed to load font '{}': {e}", self.font_path.display())
+        })?;
+        self.font = Some(font.clone());
+        Ok(font)
     }
-    rhi.create_texture_image(
-        ASCII_BITMAP_W as u32,
-        ASCII_BITMAP_H as u32,
-        &rgba,
-        vk::Format::R8G8B8A8_UNORM,
-        0,
-    )
+
+    fn ensure_capacity_for_slot(&mut self, slot: i32) {
+        let row = slot / self.glyph_per_line;
+        let required_h = (row + 1) * self.glyph_height;
+        if required_h <= self.bitmap_h {
+            return;
+        }
+        self.bitmap_h = required_h;
+        self.data
+            .resize((self.bitmap_w * self.bitmap_h) as usize, 0.0);
+    }
+
+    pub fn get_character_texture_rect(&mut self, character: char) -> Result<FontAtlasGlyph> {
+        if !self.glyph_map.contains_key(&character) {
+            let face = self.get_or_load_font()?;
+            let scale = ab_glyph::PxScale::from(self.glyph_height as f32);
+            let font = face.as_scaled(scale);
+            let ascent = font.ascent();
+            let id = font.glyph_id(character);
+            let left_side_bearing = font.h_side_bearing(id);
+            let glyph = id.with_scale(scale);
+            let glyph = match font.outline_glyph(glyph) {
+                None => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to get character glyph: {}",
+                        character
+                    ));
+                }
+                Some(glyph) => glyph,
+            };
+            let bitmap_box = glyph.px_bounds();
+            let baseline_y = (ascent + bitmap_box.min.y).floor() as i32;
+
+            let slot = self.next_slot;
+            self.next_slot += 1;
+            self.ensure_capacity_for_slot(slot);
+
+            let col = slot % self.glyph_per_line;
+            let row = slot / self.glyph_per_line;
+            let cell_x = col * self.glyph_width;
+            let cell_y = row * self.glyph_height;
+            let glyph_origin_x = cell_x + left_side_bearing.floor() as i32;
+            let glyph_origin_y = cell_y + baseline_y;
+            let advance_px = font.h_advance(id).floor() as f32;
+            let side_bearing_px = font.h_side_bearing(id).floor() as f32;
+
+            glyph.draw(|gx, gy, v| {
+                let px = glyph_origin_x + gx as i32;
+                let py = glyph_origin_y + gy as i32;
+                if px < 0 || py < 0 || px >= self.bitmap_w || py >= self.bitmap_h {
+                    return;
+                }
+                let index = (py * self.bitmap_w + px) as usize;
+                self.data[index] = v;
+            });
+            self.glyph_map.insert(
+                character,
+                FontAtlasGlyph {
+                    x0_px: cell_x as f32,
+                    x1_px: (cell_x + self.glyph_width) as f32,
+                    y0_px: cell_y as f32,
+                    y1_px: (cell_y + self.glyph_height) as f32,
+                    advance_px,
+                    side_bearing_px,
+                },
+            );
+            self.is_dirty = true;
+        }
+        Ok(self.glyph_map.get(&character).unwrap().clone())
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.is_dirty
+    }
+
+    pub fn bitmap_size(&self) -> (i32, i32) {
+        (self.bitmap_w, self.bitmap_h)
+    }
+
+    pub fn data(&self) -> &[f32] {
+        &self.data
+    }
+
+    pub fn mark_clean(&mut self) {
+        self.is_dirty = false;
+    }
 }

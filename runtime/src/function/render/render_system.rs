@@ -18,7 +18,7 @@ use crate::{
                 pbr_pipeline::{
                     PBRRenderPipeline, PBRRenderPipelineCreateInfo,
                     main_camera_pass::{MeshPerMaterialDescriptorLayout, PerMeshDescriptorLayout},
-                },
+                }, ui_pipeline::{UIRenderPipeline, UIRenderPipelineCreateInfo},
             },
             render_resource::RenderResource,
             render_resource_base::RenderResourceBase,
@@ -38,7 +38,14 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
+pub enum RenderPipelineType {
+    PBR,
+    UI,
+}
+
 pub struct RenderSystemCreateInfo<'a> {
+    pub render_pipeline_type: RenderPipelineType,
     pub window_system: &'a WindowSystem,
     pub asset_manager: &'a AssetManager,
     pub config_manager: &'a ConfigManager,
@@ -110,13 +117,22 @@ impl RenderSystem {
 
         let descriptor_layout_registry = DescriptorLayoutRegistry::default();
 
-        let render_pipeline = PBRRenderPipeline::create(&PBRRenderPipelineCreateInfo {
-            rhi: &vulkan_rhi,
-            render_resource: &render_resource,
-            descriptor_layout_registry: &descriptor_layout_registry,
-            enable_fxaa: global_rendering_res.enable_fxaa,
-        })
-        .unwrap();
+        let render_pipeline: Box<dyn RenderPipelineTrait> = match create_info.render_pipeline_type {
+            RenderPipelineType::PBR => {
+                Box::new(PBRRenderPipeline::create(&PBRRenderPipelineCreateInfo {
+                    rhi: &vulkan_rhi,
+                    render_resource: &render_resource,
+                    descriptor_layout_registry: &descriptor_layout_registry,
+                    enable_fxaa: global_rendering_res.enable_fxaa,
+                }).unwrap())
+            }
+            RenderPipelineType::UI => {
+                Box::new(UIRenderPipeline::create(&UIRenderPipelineCreateInfo {
+                    rhi: &vulkan_rhi,
+                    descriptor_layout_registry: &descriptor_layout_registry,
+                }).unwrap())
+            }
+        };
 
         render_resource.m_mesh_descriptor_set_layout = descriptor_layout_registry
             .acquire::<PerMeshDescriptorLayout>(&vulkan_rhi)
@@ -138,7 +154,7 @@ impl RenderSystem {
             m_render_camera: Rc::new(RefCell::new(render_camera)),
             m_render_scene: render_scene,
             m_render_resource: render_resource,
-            m_render_pipeline: Box::new(render_pipeline),
+            m_render_pipeline: render_pipeline,
             m_debugdraw_manager: RefCell::new(debugdraw_manager),
             m_descriptor_layout_registry: descriptor_layout_registry,
         }
@@ -158,12 +174,14 @@ impl RenderSystem {
             .update_visible_objects(&self.m_render_resource, &self.m_render_camera.borrow());
         self.m_render_pipeline
             .prepare_pass_data(&self.m_rhi, &self.m_render_resource);
-        self.m_debugdraw_manager
-            .borrow_mut()
-            .prepare_pass_data(&self.m_render_resource);
-        self.m_debugdraw_manager
-            .borrow_mut()
-            .tick(&self.m_rhi, delta_time);
+        if self.m_render_pipeline.supports_debugdraw() {
+            self.m_debugdraw_manager
+                .borrow_mut()
+                .prepare_pass_data(&self.m_render_resource);
+            self.m_debugdraw_manager
+                .borrow_mut()
+                .tick(&self.m_rhi, delta_time);
+        }
         self.render(ui_runtime)?;
         Ok(())
     }
@@ -528,7 +546,9 @@ impl RenderSystem {
                 ui_runtime,
             );
 
-            self.m_debugdraw_manager.borrow_mut().draw(&rhi)?;
+            if self.m_render_pipeline.supports_debugdraw() {
+                self.m_debugdraw_manager.borrow_mut().draw(&rhi)?;
+            }
         }
         {
             let mut pass_update_after_recreate_swapchain = |rhi: &VulkanRHI| {

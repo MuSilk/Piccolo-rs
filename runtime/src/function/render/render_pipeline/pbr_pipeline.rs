@@ -113,6 +113,9 @@ impl RenderPipelineTrait for PBRRenderPipeline {
         self.m_main_camera_pass.prepare_pass_data(render_resource);
         self.m_pick_pass.prepare_pass_data(rhi, render_resource);
     }
+    fn supports_debugdraw(&self) -> bool {
+        true
+    }
     fn destroy(&self, rhi: &VulkanRHI) {
         self.m_main_camera_pass.destroy(rhi);
     }

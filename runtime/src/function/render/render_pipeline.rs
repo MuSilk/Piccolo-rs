@@ -1,4 +1,5 @@
 pub mod pbr_pipeline;
+pub mod ui_pipeline;
 
 use crate::function::{
     render::{
@@ -12,6 +13,7 @@ use crate::function::{
 
 pub trait RenderPipelineTrait {
     fn prepare_pass_data(&mut self, rhi: &VulkanRHI, render_resource: &RenderResource);
+    fn supports_debugdraw(&self) -> bool;
     fn destroy(&self, rhi: &VulkanRHI);
     fn draw(
         &self,

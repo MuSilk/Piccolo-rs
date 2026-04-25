@@ -7,7 +7,7 @@ use crate::{
         framework::world::world_manager::WorldManager,
         input::{game_command_system::GameCommandInputSystem, input_system::InputSystem},
         render::{
-            render_system::{RenderSystem, RenderSystemCreateInfo},
+            render_system::{RenderPipelineType, RenderSystem, RenderSystemCreateInfo},
             window_system::{WindowCreateInfo, WindowSystem},
         },
         ui::ui2::UiRuntime,
@@ -50,6 +50,7 @@ impl RuntimeGlobalContext {
         &mut self,
         event_loop: &ActiveEventLoop,
         window_create_info: WindowCreateInfo,
+        render_pipeline_type: RenderPipelineType,
     ) {
         self.m_window_system
             .borrow_mut()
@@ -62,6 +63,7 @@ impl RuntimeGlobalContext {
             window_system: &self.m_window_system.borrow(),
             asset_manager: &self.m_asset_manager,
             config_manager: &self.m_config_manager,
+            render_pipeline_type: render_pipeline_type,
         });
         self.m_ui_runtime
             .borrow_mut()
@@ -146,6 +148,10 @@ impl RuntimeGlobalContext {
                 .input_system()
                 .borrow_mut()
                 .on_mouse_button(device_id, state, button);
+        });
+
+        window_system.register_on_ime_func(move |engine, ime| {
+            engine.input_system().borrow_mut().on_ime(ime);
         });
     }
 }

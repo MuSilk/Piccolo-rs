@@ -1,18 +1,23 @@
 use crate::{
     function::render::font_atlas::{
-        ASCII_BITMAP_H, ASCII_BITMAP_W, get_ascii_character_texture_rect, rasterize_ascii_coverage,
+        ASCII_BITMAP_H, ASCII_BITMAP_W, FontAtlas, FontAtlasGlyph, get_ascii_character_texture_rect, rasterize_ascii_coverage
     },
     resource::config_manager::ConfigManager,
 };
+use ab_glyph::{Font, FontArc, FontVec, PxScale, ScaleFont};
 use anyhow::Result;
 use bitflags::bitflags;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Default)]
 pub struct UiInputSnapshot {
     pub mouse_pos: [f32; 2],
     pub mouse_down: [bool; 3],
     pub mouse_wheel: f32,
+    pub text_input: String,
+    pub ime_preedit: String,
+    pub key_backspace_pressed: bool,
+    pub key_enter_pressed: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -67,6 +72,7 @@ pub struct UiRuntime {
     active_id: Option<u64>,
     hover_id: Option<u64>,
     prev_hover_id: Option<u64>,
+    focused_text_input_id: Option<u64>,
     menu_bar_active: bool,
     menu_cursor_x: f32,
     menu_popup_open: Option<String>,
@@ -76,12 +82,21 @@ pub struct UiRuntime {
     current_menu_item_cursor_y: f32,
     textures: Vec<Option<UiTextureData>>,
     textures_version: u64,
+    unicode_font_atlas: Option<FontAtlas>,
+    unicode_atlas_texture_id: Option<u32>,
 }
 
 pub struct UiButtonResult {
     pub hovered: bool,
     pub pressed: bool,
     pub clicked: bool,
+}
+
+pub struct UiTextInputResult {
+    pub hovered: bool,
+    pub focused: bool,
+    pub changed: bool,
+    pub submitted: bool,
 }
 
 pub struct UiPanel {
@@ -129,6 +144,9 @@ impl UiRuntime {
 
     pub fn load_font_texture(&mut self, config_manager: &ConfigManager) -> Result<u32> {
         let font_path = config_manager.get_editor_font_path().to_path_buf();
+        let unicode_font_path =
+            load_unicode_fallback_font_path(&font_path).unwrap_or_else(|| font_path.clone());
+        self.unicode_font_atlas = Some(FontAtlas::new(&unicode_font_path, 22, 22));
         let image_data = rasterize_ascii_coverage(font_path.as_path())?;
         let mut rgba = vec![0_u8; image_data.len() * 4];
         for (i, v) in image_data.iter().enumerate() {
@@ -150,6 +168,16 @@ impl UiRuntime {
                 width: ASCII_BITMAP_W as u32,
                 height: ASCII_BITMAP_H as u32,
                 pixels_rgba8: rgba,
+            },
+        );
+        let texture_id = self.textures.len() as u32;
+        self.unicode_atlas_texture_id = Some(texture_id);
+        self.set_texture(
+            texture_id,
+            UiTextureData {
+                width: 1,
+                height: 1,
+                pixels_rgba8: vec![255, 255, 255, 0],
             },
         );
         Ok(UI_TEXTURE_ID_FONT_ATLAS)
@@ -300,7 +328,185 @@ impl UiRuntime {
         color: [u8; 4],
         clip_rect: [f32; 4],
     ) {
-        push_text_ascii(&mut self.draw_list, text, pos, glyph_size, color, clip_rect)
+        let start_index = self.draw_list.indices.len() as u32;
+        let mut pen_x = pos[0];
+        let pen_y = pos[1];
+        let w = glyph_size[0];
+        let h = glyph_size[1];
+
+        for ch in text.bytes() {
+            if ch == b' ' {
+                pen_x += w;
+                continue;
+            }
+
+            let (u0, u1, v0, v1) = get_ascii_character_texture_rect(ch);
+            if u0 == 0.0 && u1 == 0.0 && v0 == 0.0 && v1 == 0.0 {
+                pen_x += w;
+                continue;
+            }
+
+            let base = self.draw_list.vertices.len() as u32;
+            self.draw_list.vertices.extend_from_slice(&[
+                UiVertex {
+                    pos: [pen_x, pen_y],
+                    uv: [u0, v0],
+                    col: color,
+                },
+                UiVertex {
+                    pos: [pen_x + w, pen_y],
+                    uv: [u1, v0],
+                    col: color,
+                },
+                UiVertex {
+                    pos: [pen_x + w, pen_y + h],
+                    uv: [u1, v1],
+                    col: color,
+                },
+                UiVertex {
+                    pos: [pen_x, pen_y + h],
+                    uv: [u0, v1],
+                    col: color,
+                },
+            ]);
+            self.draw_list.indices.extend_from_slice(&[
+                base,
+                base + 1,
+                base + 2,
+                base,
+                base + 2,
+                base + 3,
+            ]);
+            pen_x += w;
+        }
+
+        let index_count = self.draw_list.indices.len() as u32 - start_index;
+        if index_count > 0 {
+            self.draw_list.commands.push(UiDrawCmd::DrawIndexed {
+                first_index: start_index,
+                index_count,
+                vertex_offset: 0,
+                clip_rect,
+                texture_id: UI_TEXTURE_ID_FONT_ATLAS,
+            });
+        }
+    }
+
+    pub fn push_text_utf8(
+        &mut self,
+        text: &str,
+        pos: [f32; 2],
+        glyph_size: [f32; 2],
+        color: [u8; 4],
+        clip_rect: [f32; 4],
+    ) -> f32 {
+        let (line_width, _) = self.push_text_utf8_internal(
+            text,
+            pos,
+            glyph_size,
+            color,
+            clip_rect,
+            None,
+            glyph_size[1] * 1.2,
+        );
+        line_width
+    }
+
+    pub fn push_text_multiline_utf8(
+        &mut self,
+        text: &str,
+        pos: [f32; 2],
+        max_width: f32,
+        glyph_size: [f32; 2],
+        line_height: f32,
+        color: [u8; 4],
+        clip_rect: [f32; 4],
+    ) -> [f32; 2] {
+        let (used_width, used_height) = self.push_text_utf8_internal(
+            text,
+            pos,
+            glyph_size,
+            color,
+            clip_rect,
+            if max_width > 0.0 { Some(max_width) } else { None },
+            line_height.max(glyph_size[1]),
+        );
+        [used_width, used_height]
+    }
+
+    fn push_text_utf8_internal(
+        &mut self,
+        text: &str,
+        pos: [f32; 2],
+        glyph_size: [f32; 2],
+        color: [u8; 4],
+        clip_rect: [f32; 4],
+        max_width: Option<f32>,
+        line_height: f32,
+    ) -> (f32, f32) {
+        let mut pen_x = pos[0];
+        let mut pen_y = pos[1];
+        let mut max_line_width = 0.0_f32;
+        let mut line_count = 1_u32;
+        let w = glyph_size[0];
+        let h = glyph_size[1];
+        let fallback_advance = w * 0.9;
+
+        for ch in text.chars() {
+            if ch == '\n' {
+                max_line_width = max_line_width.max(pen_x - pos[0]);
+                pen_x = pos[0];
+                pen_y += line_height;
+                line_count += 1;
+                continue;
+            }
+
+            let mut glyph_info = None;
+            let advance = if ch == ' ' {
+                w * 0.4
+            } else if let Some((glyph, texture_id)) = self.ensure_unicode_glyph(ch) {
+                let adv = glyph.advance_px as f32;
+                glyph_info = Some((glyph, texture_id));
+                if adv > 0.0 { adv } else { fallback_advance }
+            } else {
+                fallback_advance
+            };
+
+            if let Some(limit) = max_width {
+                if pen_x > pos[0] && (pen_x - pos[0] + advance) > limit {
+                    max_line_width = max_line_width.max(pen_x - pos[0]);
+                    pen_x = pos[0];
+                    pen_y += line_height;
+                    line_count += 1;
+                }
+            }
+
+            if let Some((glyph, texture_id)) = glyph_info {
+                if let Some(atlas) = self.unicode_font_atlas.as_ref() {
+                    let bitmap_size = atlas.bitmap_size();
+                    push_textured_rect(
+                        &mut self.draw_list,
+                        [pen_x, pen_y],
+                        [w, h],
+                        [
+                            glyph.x0_px / bitmap_size.0 as f32,
+                            glyph.y0_px / bitmap_size.1 as f32,
+                            glyph.x1_px / bitmap_size.0 as f32,
+                            glyph.y1_px / bitmap_size.1 as f32,
+                        ],
+                        color,
+                        clip_rect,
+                        texture_id,
+                    );
+                }
+            }
+
+            pen_x += advance;
+        }
+
+        max_line_width = max_line_width.max(pen_x - pos[0]);
+        let used_height = line_height * line_count as f32;
+        (max_line_width, used_height)
     }
 
     pub fn button(
@@ -323,6 +529,143 @@ impl UiRuntime {
         clip_rect: [f32; 4],
     ) -> UiButtonResult {
         self.button_with_clip(id, text, pos, size, clip_rect)
+    }
+
+    pub fn text_input(
+        &mut self,
+        id: &str,
+        value: &mut String,
+        pos: [f32; 2],
+        size: [f32; 2],
+    ) -> UiTextInputResult {
+        let clip = [0.0, 0.0, self.viewport[0], self.viewport[1]];
+        self.text_input_with_clip(id, value, pos, size, clip)
+    }
+
+    pub fn text_input_with_clip(
+        &mut self,
+        id: &str,
+        value: &mut String,
+        pos: [f32; 2],
+        size: [f32; 2],
+        clip: [f32; 4],
+    ) -> UiTextInputResult {
+        let widget_id = hash_widget_id(id);
+        let mouse = self.current_input.mouse_pos;
+        let hovered = point_in_rect(mouse, pos, size);
+        let left_pressed = self.mouse_pressed(0);
+
+        if hovered && left_pressed {
+            self.focused_text_input_id = Some(widget_id);
+        } else if left_pressed && !hovered && self.focused_text_input_id == Some(widget_id) {
+            self.focused_text_input_id = None;
+        }
+
+        let focused = self.focused_text_input_id == Some(widget_id);
+        let mut changed = false;
+        let mut submitted = false;
+        if focused {
+            if !self.current_input.text_input.is_empty() {
+                for ch in self.current_input.text_input.chars() {
+                    if !ch.is_control() && ch != '\n' && ch != '\r' {
+                        value.push(ch);
+                        changed = true;
+                    }
+                }
+            }
+            if self.current_input.key_backspace_pressed && !value.is_empty() {
+                value.pop();
+                changed = true;
+            }
+            if self.current_input.key_enter_pressed {
+                submitted = true;
+            }
+        }
+
+        let bg = if focused {
+            [44, 52, 66, 245]
+        } else if hovered {
+            [38, 45, 56, 235]
+        } else {
+            [30, 36, 45, 225]
+        };
+        push_colored_rect(&mut self.draw_list, pos, size, bg, clip);
+        push_rect_border(
+            &mut self.draw_list,
+            pos,
+            size,
+            1.0,
+            if focused {
+                [120, 170, 255, 255]
+            } else {
+                [85, 100, 122, 220]
+            },
+            clip,
+        );
+
+        let glyph = [22.0, 22.0];
+        let text_pos = [pos[0] + 8.0, pos[1] + ((size[1] - glyph[1]) * 0.5).max(0.0)];
+        let text_width =
+            self.push_text_utf8(value.as_str(), text_pos, glyph, [236, 241, 250, 255], clip);
+        if focused && !self.current_input.ime_preedit.is_empty() {
+            let ime_preedit = self.current_input.ime_preedit.clone();
+            let preedit_pos = [text_pos[0] + text_width, text_pos[1]];
+            self.push_text_utf8(&ime_preedit, preedit_pos, glyph, [170, 220, 190, 255], clip);
+        }
+
+        if focused && (self.frame_counter / 30) % 2 == 0 {
+            let cursor_x = text_pos[0] + text_width;
+            push_colored_rect(
+                &mut self.draw_list,
+                [cursor_x, text_pos[1]],
+                [1.5, glyph[1]],
+                [210, 220, 255, 255],
+                clip,
+            );
+        }
+
+        UiTextInputResult {
+            hovered,
+            focused,
+            changed,
+            submitted,
+        }
+    }
+
+    fn ensure_unicode_glyph(&mut self, ch: char) -> Option<(FontAtlasGlyph, u32)> {
+        let texture_id = self.unicode_atlas_texture_id?;
+        let (uv, atlas_upload) = {
+            let atlas = self.unicode_font_atlas.as_mut()?;
+            let uv_t = atlas.get_character_texture_rect(ch).ok()?;
+            let atlas_upload = if atlas.is_dirty() {
+                let (atlas_w, atlas_h) = atlas.bitmap_size();
+                let mut rgba = vec![0_u8; (atlas_w * atlas_h * 4) as usize];
+                for (i, v) in atlas.data().iter().enumerate() {
+                    let alpha = (v.clamp(0.0, 1.0) * 255.0) as u8;
+                    let base = i * 4;
+                    rgba[base] = 255;
+                    rgba[base + 1] = 255;
+                    rgba[base + 2] = 255;
+                    rgba[base + 3] = alpha;
+                }
+                atlas.mark_clean();
+                Some((atlas_w, atlas_h, rgba))
+            } else {
+                None
+            };
+            (uv_t, atlas_upload)
+        };
+        if let Some((atlas_w, atlas_h, rgba)) = atlas_upload {
+            self.set_texture(
+                texture_id,
+                UiTextureData {
+                    width: atlas_w as u32,
+                    height: atlas_h as u32,
+                    pixels_rgba8: rgba,
+                },
+            );
+        }
+        Some((uv, texture_id))
     }
 
     pub fn panel(
@@ -354,8 +697,7 @@ impl UiRuntime {
         if flags.contains(UiPanelFlags::BORDER) {
             push_rect_border(&mut self.draw_list, pos, size, 1.0, border, clip);
         }
-        push_text_ascii(
-            &mut self.draw_list,
+        self.push_text_ascii(
             title,
             [pos[0] + 8.0, pos[1] + 5.0],
             [8.0, 14.0],
@@ -421,8 +763,7 @@ impl UiRuntime {
         let glyph = [8.0, 14.0];
         let text_x = pos[0] + 8.0;
         let text_y = pos[1] + ((size[1] - glyph[1]) * 0.5).max(0.0);
-        push_text_ascii(
-            &mut self.draw_list,
+        self.push_text_ascii(
             text,
             [text_x, text_y],
             glyph,
@@ -643,6 +984,54 @@ fn push_textured_rect(
     });
 }
 
+fn has_visible_glyph(font: &FontArc, ch: char) -> bool {
+    let scale = PxScale::from(26.0);
+    let scaled = font.as_scaled(scale);
+    let id = scaled.glyph_id(ch);
+    id.0 != 0 && scaled.outline_glyph(id.with_scale(scale)).is_some()
+}
+
+fn load_unicode_fallback_font_path(default_font_path: &Path) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = vec![default_font_path.to_path_buf()];
+    #[cfg(target_os = "windows")]
+    {
+        candidates.extend([
+            PathBuf::from("C:/Windows/Fonts/msyh.ttc"),
+            PathBuf::from("C:/Windows/Fonts/msyhbd.ttc"),
+            PathBuf::from("C:/Windows/Fonts/simhei.ttf"),
+            PathBuf::from("C:/Windows/Fonts/simsun.ttc"),
+            PathBuf::from("C:/Windows/Fonts/NotoSansCJK-Regular.ttc"),
+        ]);
+    }
+
+    for path in candidates {
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+
+        for face_index in 0..8_u32 {
+            let try_font = FontVec::try_from_vec_and_index(bytes.clone(), face_index);
+            let Ok(font_vec) = try_font else {
+                if face_index > 0 {
+                    break;
+                }
+                continue;
+            };
+            let font = FontArc::new(font_vec);
+            if has_visible_glyph(&font, '你') || has_visible_glyph(&font, '中') {
+                log::info!(
+                    "UI unicode font selected path='{}' face_index={}",
+                    path.display(),
+                    face_index
+                );
+                return Some(path);
+            }
+        }
+    }
+
+    None
+}
+
 fn push_rect_border(
     draw_list: &mut UiDrawList,
     pos: [f32; 2],
@@ -688,69 +1077,3 @@ fn push_rect_border(
     );
 }
 
-fn push_text_ascii(
-    draw_list: &mut UiDrawList,
-    text: &str,
-    pos: [f32; 2],
-    glyph_size: [f32; 2],
-    color: [u8; 4],
-    clip_rect: [f32; 4],
-) {
-    let start_index = draw_list.indices.len() as u32;
-    let mut pen_x = pos[0];
-    let pen_y = pos[1];
-    let w = glyph_size[0];
-    let h = glyph_size[1];
-
-    for ch in text.bytes() {
-        if ch == b' ' {
-            pen_x += w;
-            continue;
-        }
-
-        let (u0, u1, v0, v1) = get_ascii_character_texture_rect(ch);
-        if u0 == 0.0 && u1 == 0.0 && v0 == 0.0 && v1 == 0.0 {
-            pen_x += w;
-            continue;
-        }
-
-        let base = draw_list.vertices.len() as u32;
-        draw_list.vertices.extend_from_slice(&[
-            UiVertex {
-                pos: [pen_x, pen_y],
-                uv: [u0, v0],
-                col: color,
-            },
-            UiVertex {
-                pos: [pen_x + w, pen_y],
-                uv: [u1, v0],
-                col: color,
-            },
-            UiVertex {
-                pos: [pen_x + w, pen_y + h],
-                uv: [u1, v1],
-                col: color,
-            },
-            UiVertex {
-                pos: [pen_x, pen_y + h],
-                uv: [u0, v1],
-                col: color,
-            },
-        ]);
-        draw_list
-            .indices
-            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
-        pen_x += w;
-    }
-
-    let index_count = draw_list.indices.len() as u32 - start_index;
-    if index_count > 0 {
-        draw_list.commands.push(UiDrawCmd::DrawIndexed {
-            first_index: start_index,
-            index_count,
-            vertex_offset: 0,
-            clip_rect,
-            texture_id: UI_TEXTURE_ID_FONT_ATLAS,
-        });
-    }
-}

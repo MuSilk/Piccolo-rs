@@ -3,9 +3,9 @@ use std::{cell::Cell, collections::HashMap, rc::Rc};
 use anyhow::Result;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{DeviceId, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase},
+    event::{DeviceId, ElementState, Ime, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase},
     event_loop::ActiveEventLoop,
-    window::{CursorGrabMode, Window},
+    window::{CursorGrabMode, Window, WindowLevel},
 };
 
 use crate::engine::Engine;
@@ -18,6 +18,8 @@ pub struct WindowCreateInfo {
     pub is_fullscreen: bool,
     pub transparent: bool,
     pub decorations: bool,
+    pub always_on_top: bool,
+    pub ime_allowed: bool,
 }
 
 impl Default for WindowCreateInfo {
@@ -29,6 +31,8 @@ impl Default for WindowCreateInfo {
             is_fullscreen: false,
             transparent: false,
             decorations: true,
+            always_on_top: false,
+            ime_allowed: false,
         }
     }
 }
@@ -37,6 +41,7 @@ type OnKeyFunc = dyn Fn(&Engine, DeviceId, &KeyEvent, bool);
 type OnMouseButtonFunc = dyn Fn(&Engine, DeviceId, ElementState, MouseButton);
 type OnCursorPosFunc = dyn Fn(&Engine, DeviceId, PhysicalPosition<f64>);
 type OnMouseWheelFunc = dyn Fn(&Engine, DeviceId, MouseScrollDelta, TouchPhase);
+type OnImeFunc = dyn Fn(&Engine, &Ime);
 type OnWindowSizeFunc = dyn Fn(&Engine, PhysicalSize<u32>);
 type OnMouseMotionFunc = dyn Fn(&Engine, DeviceId, (f64, f64));
 
@@ -53,6 +58,7 @@ pub struct WindowSystem {
     m_on_mouse_button_func: Vec<Box<OnMouseButtonFunc>>,
     m_on_cursor_pos_func: Vec<Box<OnCursorPosFunc>>,
     m_on_mouse_wheel_func: Vec<Box<OnMouseWheelFunc>>,
+    m_on_ime_func: Vec<Box<OnImeFunc>>,
     m_on_mouse_motion_func: Vec<Box<OnMouseMotionFunc>>,
 
     m_is_mouse_button_down: HashMap<MouseButton, bool>,
@@ -71,9 +77,21 @@ impl WindowSystem {
             .with_title(window_create_info.title)
             .with_inner_size(PhysicalSize::new(self.m_width, self.m_height))
             .with_transparent(window_create_info.transparent)
-            .with_decorations(window_create_info.decorations);
+            .with_decorations(window_create_info.decorations)
+            .with_window_level(if window_create_info.always_on_top {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            });
 
         let window = event_loop.create_window(attr)?;
+        window.set_ime_allowed(window_create_info.ime_allowed);
+        if window_create_info.ime_allowed {
+            window.set_ime_cursor_area(
+                PhysicalPosition::new(16.0, 16.0),
+                PhysicalSize::new(self.m_width.max(1), self.m_height.max(1)),
+            );
+        }
         self.m_window = Some(Rc::new(window));
         Ok(())
     }
@@ -135,6 +153,13 @@ impl WindowSystem {
         self.m_on_mouse_wheel_func.push(Box::new(f));
     }
 
+    pub fn register_on_ime_func<F>(&mut self, f: F)
+    where
+        F: 'static + Fn(&Engine, &Ime),
+    {
+        self.m_on_ime_func.push(Box::new(f));
+    }
+
     pub fn register_on_mouse_motion<F>(&mut self, f: F)
     where
         F: 'static + Fn(&Engine, DeviceId, (f64, f64)),
@@ -186,6 +211,12 @@ impl WindowSystem {
         self.m_on_mouse_wheel_func
             .iter()
             .for_each(|f| f(engine, device_id, delta, phase));
+    }
+
+    pub fn on_ime(&self, engine: &Engine, ime: Ime) {
+        self.m_on_ime_func
+            .iter()
+            .for_each(|f| f(engine, &ime));
     }
 
     pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
